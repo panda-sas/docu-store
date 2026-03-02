@@ -13,6 +13,7 @@ from application.ports.cser_service import CserService
 from application.ports.embedding_generator import EmbeddingGenerator
 from application.ports.external_event_publisher import ExternalEventPublisher
 from application.ports.llm_client import LLMClientPort
+from application.ports.ner_extractor import NERExtractorPort
 from application.ports.pdf_service import PDFService
 from application.ports.prompt_repository import PromptRepositoryPort
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
@@ -25,6 +26,7 @@ from application.ports.text_chunker import TextChunker
 from application.ports.vector_store import VectorStore
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
 from application.sagas.artifact_upload_saga import ArtifactUploadSaga
+from application.use_cases.aggregate_artifact_tags_use_case import AggregateArtifactTagsUseCase
 from application.use_cases.artifact_use_cases import (
     AddPagesUseCase,
     CreateArtifactUseCase,
@@ -42,6 +44,7 @@ from application.use_cases.embedding_use_cases import (
     GeneratePageEmbeddingUseCase,
     SearchSimilarPagesUseCase,
 )
+from application.use_cases.extract_page_entities_use_case import ExtractPageEntitiesUseCase
 from application.use_cases.page_use_cases import (
     AddCompoundMentionsUseCase,
     CreatePageUseCase,
@@ -70,10 +73,16 @@ from application.workflow_use_cases.trigger_artifact_summarization_use_case impo
 from application.workflow_use_cases.trigger_artifact_summary_embedding_use_case import (
     TriggerArtifactSummaryEmbeddingUseCase,
 )
+from application.workflow_use_cases.trigger_artifact_tag_aggregation_use_case import (
+    TriggerArtifactTagAggregationUseCase,
+)
 from application.workflow_use_cases.trigger_compound_extraction_use_case import (
     TriggerCompoundExtractionUseCase,
 )
 from application.workflow_use_cases.trigger_embedding_use_case import TriggerEmbeddingUseCase
+from application.workflow_use_cases.trigger_ner_extraction_use_case import (
+    TriggerNERExtractionUseCase,
+)
 from application.workflow_use_cases.trigger_page_summarization_use_case import (
     TriggerPageSummarizationUseCase,
 )
@@ -106,6 +115,7 @@ from infrastructure.file_services.py_mu_pfd_service import PyMuPDFService
 from infrastructure.kafka.kafka_external_event_streamer import KafkaExternalEventPublisher
 from infrastructure.kafka.kafka_publisher import KafkaPublisher
 from infrastructure.llm.factory import create_llm_client, create_prompt_repository
+from infrastructure.ner.structflo_ner_extractor import StructfloNERExtractor
 from infrastructure.read_repositories.mongo_read_model_materializer import (
     MongoReadModelMaterializer,
 )
@@ -217,6 +227,12 @@ def create_container() -> Container:  # noqa: PLR0915
 
     # Register CSER Service
     container[CserService] = lambda c: CserPipelineService(blob_store=c[BlobStore])
+
+    # Register NER Extractor (dual-mode: fast + LLM, reuses configured LLM settings)
+    container[NERExtractorPort] = lambda _: StructfloNERExtractor(
+        model_id=settings.llm_model_name,
+        model_url=settings.llm_base_url,
+    )
 
     # Register SMILES Validator
     container[SmilesValidator] = lambda _: RdkitSmilesValidator()
@@ -356,6 +372,28 @@ def create_container() -> Container:  # noqa: PLR0915
         update_text_mention_use_case=c[UpdateTextMentionUseCase],
         pdf_service=c[PDFService],
         blob_store=c[BlobStore],
+    )
+
+    # NER Extraction Use Cases
+    container[ExtractPageEntitiesUseCase] = lambda c: ExtractPageEntitiesUseCase(
+        page_repository=c[PageRepository],
+        artifact_repository=c[ArtifactRepository],
+        ner_extractor=c[NERExtractorPort],
+        external_event_publisher=c[ExternalEventPublisher],
+    )
+    container[AggregateArtifactTagsUseCase] = lambda c: AggregateArtifactTagsUseCase(
+        artifact_repository=c[ArtifactRepository],
+        page_repository=c[PageRepository],
+        external_event_publisher=c[ExternalEventPublisher],
+    )
+    container[TriggerNERExtractionUseCase] = lambda c: TriggerNERExtractionUseCase(
+        workflow_orchestrator=c[WorkflowOrchestrator],
+    )
+    container[TriggerArtifactTagAggregationUseCase] = (
+        lambda c: TriggerArtifactTagAggregationUseCase(
+            page_repository=c[PageRepository],
+            workflow_orchestrator=c[WorkflowOrchestrator],
+        )
     )
 
     # Compound Extraction Use Case
