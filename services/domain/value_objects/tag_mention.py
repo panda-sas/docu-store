@@ -14,6 +14,10 @@ class TagMention(ExtractionMetadata):
     tag: str
     """Extracted tag content (required, cannot be blank)."""
 
+    entity_type: str | None = None
+    """NER entity type (e.g. 'compound_name', 'target', 'gene_name', 'disease').
+    None for generic tags not produced by a typed NER extractor."""
+
     @field_validator("tag")
     @classmethod
     def validate_tag(cls, v: str) -> str:

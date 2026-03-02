@@ -14,8 +14,10 @@ import structlog
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from application.use_cases.aggregate_artifact_tags_use_case import AggregateArtifactTagsUseCase
 from application.use_cases.compound_use_cases import ExtractCompoundMentionsUseCase
 from application.use_cases.embedding_use_cases import GeneratePageEmbeddingUseCase
+from application.use_cases.extract_page_entities_use_case import ExtractPageEntitiesUseCase
 from application.use_cases.smiles_embedding_use_cases import EmbedCompoundSmilesUseCase
 from application.use_cases.summarization_use_cases import (
     SummarizeArtifactUseCase,
@@ -42,6 +44,10 @@ from infrastructure.temporal.activities.embedding_activities import (
     create_generate_page_embedding_activity,
     log_embedding_generated_activity,
 )
+from infrastructure.temporal.activities.ner_activities import (
+    create_aggregate_artifact_tags_activity,
+    create_extract_page_entities_activity,
+)
 from infrastructure.temporal.activities.smiles_embedding_activities import (
     create_embed_compound_smiles_activity,
 )
@@ -58,6 +64,10 @@ from infrastructure.temporal.workflows.artifact_summarization_workflow import (
 )
 from infrastructure.temporal.workflows.compound_workflow import ExtractCompoundMentionsWorkflow
 from infrastructure.temporal.workflows.embedding_workflow import GeneratePageEmbeddingWorkflow
+from infrastructure.temporal.workflows.ner_workflow import (
+    ArtifactTagAggregationWorkflow,
+    NERExtractionWorkflow,
+)
 from infrastructure.temporal.workflows.smiles_embedding_workflow import EmbedCompoundSmilesWorkflow
 from infrastructure.temporal.workflows.summarization_workflow import PageSummarizationWorkflow
 from infrastructure.temporal.workflows.summary_embedding_workflow import (
@@ -101,6 +111,8 @@ async def run() -> None:
     summarize_artifact_use_case = container[SummarizeArtifactUseCase]
     embed_page_summary_use_case = container[EmbedPageSummaryUseCase]
     embed_artifact_summary_use_case = container[EmbedArtifactSummaryUseCase]
+    extract_page_entities_use_case = container[ExtractPageEntitiesUseCase]
+    aggregate_artifact_tags_use_case = container[AggregateArtifactTagsUseCase]
 
     # Create activities with dependencies injected
     generate_page_embedding_activity = create_generate_page_embedding_activity(
@@ -124,6 +136,12 @@ async def run() -> None:
     embed_artifact_summary_activity = create_embed_artifact_summary_activity(
         use_case=embed_artifact_summary_use_case,
     )
+    extract_page_entities_activity = create_extract_page_entities_activity(
+        use_case=extract_page_entities_use_case,
+    )
+    aggregate_artifact_tags_activity = create_aggregate_artifact_tags_activity(
+        use_case=aggregate_artifact_tags_use_case,
+    )
 
     client = await Client.connect(settings.temporal_address)
 
@@ -139,6 +157,8 @@ async def run() -> None:
             ArtifactSummarizationWorkflow,
             PageSummaryEmbeddingWorkflow,
             ArtifactSummaryEmbeddingWorkflow,
+            NERExtractionWorkflow,
+            ArtifactTagAggregationWorkflow,
         ],
         activities=[
             log_mime_type_activity,
@@ -151,6 +171,8 @@ async def run() -> None:
             summarize_artifact_activity,
             embed_page_summary_activity,
             embed_artifact_summary_activity,
+            extract_page_entities_activity,
+            aggregate_artifact_tags_activity,
         ],
         max_concurrent_activities=settings.temporal_max_concurrent_activities,
     )

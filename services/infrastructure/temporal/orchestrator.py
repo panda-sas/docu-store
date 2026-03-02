@@ -295,6 +295,54 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 error=str(e),
             )
 
+    async def start_ner_extraction_workflow(self, page_id: UUID) -> None:
+        """Start the NER entity extraction workflow for a page."""
+        await self._ensure_client()
+
+        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+
+        workflow_id = f"ner-extraction-{page_id}"
+
+        try:
+            await self._client.start_workflow(
+                "NERExtractionWorkflow",
+                str(page_id),
+                id=workflow_id,
+                task_queue="artifact_processing",
+                id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+            )
+            logger.info("ner_extraction_workflow_started", page_id=str(page_id))
+        except Exception as e:
+            logger.exception(
+                "failed_to_start_ner_extraction_workflow",
+                page_id=str(page_id),
+                error=str(e),
+            )
+
+    async def start_artifact_tag_aggregation_workflow(self, artifact_id: UUID) -> None:
+        """Aggregate NER tags from all pages of an artifact."""
+        await self._ensure_client()
+
+        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+
+        workflow_id = f"artifact-tag-aggregation-{artifact_id}"
+
+        try:
+            await self._client.start_workflow(
+                "ArtifactTagAggregationWorkflow",
+                str(artifact_id),
+                id=workflow_id,
+                task_queue="artifact_processing",
+                id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+            )
+            logger.info("artifact_tag_aggregation_workflow_started", artifact_id=str(artifact_id))
+        except Exception as e:
+            logger.exception(
+                "failed_to_start_artifact_tag_aggregation_workflow",
+                artifact_id=str(artifact_id),
+                error=str(e),
+            )
+
     async def get_page_workflow_statuses(
         self,
         page_id: UUID,
@@ -307,6 +355,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
             "smiles_embedding": f"smiles-embedding-{page_id}",
             "page_summarization": f"page-summarization-{page_id}",
             "page_summary_embedding": f"page-summary-embedding-{page_id}",
+            "ner_extraction": f"ner-extraction-{page_id}",
         }
         return await self._query_workflow_statuses(workflow_ids)
 

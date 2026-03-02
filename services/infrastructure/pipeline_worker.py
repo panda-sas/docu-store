@@ -27,10 +27,16 @@ from application.workflow_use_cases.trigger_artifact_summarization_use_case impo
 from application.workflow_use_cases.trigger_artifact_summary_embedding_use_case import (
     TriggerArtifactSummaryEmbeddingUseCase,
 )
+from application.workflow_use_cases.trigger_artifact_tag_aggregation_use_case import (
+    TriggerArtifactTagAggregationUseCase,
+)
 from application.workflow_use_cases.trigger_compound_extraction_use_case import (
     TriggerCompoundExtractionUseCase,
 )
 from application.workflow_use_cases.trigger_embedding_use_case import TriggerEmbeddingUseCase
+from application.workflow_use_cases.trigger_ner_extraction_use_case import (
+    TriggerNERExtractionUseCase,
+)
 from application.workflow_use_cases.trigger_page_summarization_use_case import (
     TriggerPageSummarizationUseCase,
 )
@@ -77,6 +83,8 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     trigger_artifact_summarization_use_case = container[TriggerArtifactSummarizationUseCase]
     trigger_page_summary_embedding_use_case = container[TriggerPageSummaryEmbeddingUseCase]
     trigger_artifact_summary_embedding_use_case = container[TriggerArtifactSummaryEmbeddingUseCase]
+    trigger_ner_extraction_use_case = container[TriggerNERExtractionUseCase]
+    trigger_artifact_tag_aggregation_use_case = container[TriggerArtifactTagAggregationUseCase]
 
     # Setup signal handlers
     def handle_signal(signum: int, _frame: object) -> None:
@@ -95,6 +103,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
         f"{Page.CompoundMentionsUpdated.__module__}:{Page.CompoundMentionsUpdated.__qualname__}",
         f"{Page.TextEmbeddingGenerated.__module__}:{Page.TextEmbeddingGenerated.__qualname__}",
         f"{Page.SummaryCandidateUpdated.__module__}:{Page.SummaryCandidateUpdated.__qualname__}",
+        f"{Page.TagMentionsUpdated.__module__}:{Page.TagMentionsUpdated.__qualname__}",
     ]
 
     logger.info("pipeline_worker_started", worker_name=worker_name, topics=topics)
@@ -172,8 +181,13 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                     text_mention=domain_event.text_mention,
                                 )
 
+                                # NER runs in parallel with embedding — independent, no sequencing needed
+                                await trigger_ner_extraction_use_case.execute(
+                                    page_id=domain_event.originator_id,
+                                )
+
                                 logger.info(
-                                    "pipeline_embedding_workflow_triggered",
+                                    "pipeline_embedding_and_ner_workflows_triggered",
                                     page_id=str(domain_event.originator_id),
                                     tracking_id=tracking.notification_id,
                                 )
@@ -248,6 +262,23 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
 
                                 logger.info(
                                     "pipeline_smiles_embedding_workflow_triggered",
+                                    page_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                            case Page.TagMentionsUpdated():
+                                logger.info(
+                                    "pipeline_tag_mentions_updated",
+                                    page_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                                await trigger_artifact_tag_aggregation_use_case.execute(
+                                    page_id=domain_event.originator_id,
+                                )
+
+                                logger.info(
+                                    "pipeline_artifact_tag_aggregation_triggered",
                                     page_id=str(domain_event.originator_id),
                                     tracking_id=tracking.notification_id,
                                 )

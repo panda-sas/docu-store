@@ -148,6 +148,38 @@ class WorkflowOrchestrator(Protocol):
         ...
 
     @abstractmethod
+    async def start_ner_extraction_workflow(
+        self,
+        page_id: UUID,
+    ) -> None:
+        """Start the NER entity extraction workflow for a page.
+
+        Runs fast + LLM NER in parallel and persists TagMentions.
+        Uses ALLOW_DUPLICATE so re-triggering after text update replaces prior results.
+
+        Args:
+            page_id: Unique identifier of the page to extract entities from.
+
+        """
+        ...
+
+    @abstractmethod
+    async def start_artifact_tag_aggregation_workflow(
+        self,
+        artifact_id: UUID,
+    ) -> None:
+        """Aggregate NER tags from all pages into artifact-level tags.
+
+        Workflow ID is keyed on artifact_id to prevent duplicate concurrent runs
+        when multiple pages finish NER simultaneously.
+
+        Args:
+            artifact_id: Unique identifier of the artifact to aggregate tags for.
+
+        """
+        ...
+
+    @abstractmethod
     async def get_page_workflow_statuses(
         self,
         page_id: UUID,
