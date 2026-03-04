@@ -39,12 +39,12 @@
   --ds-text-muted: #94a3b8;
   --ds-text-inverse: #ffffff;
 
-  /* Accent — Teal */
-  --ds-accent: #0d9488;
-  --ds-accent-hover: #0f766e;
-  --ds-accent-light: #f0fdfa;
-  --ds-accent-muted: #ccfbf1;
-  --ds-accent-text: #0d9488;
+  /* Accent — Blue */
+  --ds-accent: #3b82f6;
+  --ds-accent-hover: #2563eb;
+  --ds-accent-light: #eff6ff;
+  --ds-accent-muted: #dbeafe;
+  --ds-accent-text: #2563eb;
 
   /* Sidebar (always dark) */
   --ds-sidebar: #0f172a;
@@ -58,7 +58,7 @@
   --ds-success: #16a34a;
   --ds-warning: #d97706;
   --ds-error: #dc2626;
-  --ds-info: #0d9488;
+  --ds-info: #3b82f6;
 
   /* Shadows */
   --ds-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -83,18 +83,18 @@
   --ds-text-muted: #64748b;
   --ds-text-inverse: #0f172a;
 
-  /* Accent — Teal */
-  --ds-accent: #2dd4bf;
-  --ds-accent-hover: #5eead4;
-  --ds-accent-light: rgba(13, 148, 136, 0.15);
-  --ds-accent-muted: rgba(13, 148, 136, 0.1);
-  --ds-accent-text: #2dd4bf;
+  /* Accent — Blue */
+  --ds-accent: #60a5fa;
+  --ds-accent-hover: #93bbfd;
+  --ds-accent-light: rgba(59, 130, 246, 0.15);
+  --ds-accent-muted: rgba(59, 130, 246, 0.1);
+  --ds-accent-text: #60a5fa;
 
   /* Semantic */
   --ds-success: #22c55e;
   --ds-warning: #f59e0b;
   --ds-error: #ef4444;
-  --ds-info: #2dd4bf;
+  --ds-info: #60a5fa;
 
   /* Shadows */
   --ds-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
@@ -158,7 +158,7 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  /* Focus ring — teal accent */
+  /* Focus ring — blue accent */
   *:focus-visible {
     outline: 2px solid var(--ds-accent);
     outline-offset: 2px;
@@ -279,3 +279,4 @@
     animation: fade-in 0.2s ease-out;
   }
 }
+

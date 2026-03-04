@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Copies PrimeReact lara-light-teal and lara-dark-teal themes to public/
+ * Copies PrimeReact lara-light-blue and lara-dark-blue themes to public/
  * so they can be loaded dynamically at runtime by ThemeProvider.
  */
 import { cpSync, mkdirSync } from "fs";
@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-const themes = ["lara-light-teal", "lara-dark-teal"];
+const themes = ["lara-light-blue", "lara-dark-blue"];
 const destDir = join(__dirname, "..", "public", "primereact-themes");
 
 mkdirSync(destDir, { recursive: true });

@@ -5,8 +5,8 @@ import { useEffect, type ReactNode } from "react";
 import { useThemeStore } from "@/lib/stores/theme-store";
 
 const THEME_CSS_MAP = {
-  light: "/primereact-themes/lara-light-teal/theme.css",
-  dark: "/primereact-themes/lara-dark-teal/theme.css",
+  light: "/primereact-themes/lara-light-blue/theme.css",
+  dark: "/primereact-themes/lara-dark-blue/theme.css",
 } as const;
 
 const LINK_ID = "primereact-theme";
