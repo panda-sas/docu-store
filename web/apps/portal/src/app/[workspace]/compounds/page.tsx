@@ -6,10 +6,10 @@ import { useState } from "react";
 import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { DataTable } from "primereact/datatable";
-import { InputText } from "primereact/inputtext";
 import { ProgressSpinner } from "primereact/progressspinner";
 import { Tag } from "primereact/tag";
 
+import { MoleculeStructure, StructureInput } from "@docu-store/ui";
 import { useSearchCompounds } from "@/hooks/use-search";
 
 export default function CompoundsPage() {
@@ -23,35 +23,26 @@ export default function CompoundsPage() {
     search.mutate({ query_smiles: trimmed });
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
-  };
-
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold text-gray-900">Compounds</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Search for structurally similar compounds by SMILES notation.
+        Search for structurally similar compounds by SMILES notation or draw a
+        structure.
       </p>
 
-      {/* Search bar */}
-      <div className="mt-6 flex gap-3">
-        <div className="flex-1">
-          <InputText
-            value={smiles}
-            onChange={(e) => setSmiles(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter SMILES string, e.g. CC(=O)Oc1ccccc1C(=O)O"
-            className="w-full font-mono"
+      {/* Search input — text or draw toggle */}
+      <div className="mt-6">
+        <StructureInput value={smiles} onChange={setSmiles} />
+        <div className="mt-3">
+          <Button
+            label="Search"
+            icon="pi pi-search"
+            onClick={handleSearch}
+            loading={search.isPending}
+            disabled={!smiles.trim()}
           />
         </div>
-        <Button
-          label="Search"
-          icon="pi pi-search"
-          onClick={handleSearch}
-          loading={search.isPending}
-          disabled={!smiles.trim()}
-        />
       </div>
 
       {/* Loading */}
@@ -101,24 +92,22 @@ export default function CompoundsPage() {
             emptyMessage="No matching compounds found."
           >
             <Column
+              header="Structure"
+              body={(row: { smiles: string }) => (
+                <MoleculeStructure
+                  smiles={row.smiles}
+                  width={120}
+                  height={80}
+                />
+              )}
+              style={{ width: "140px" }}
+            />
+            <Column
               field="smiles"
               header="SMILES"
               body={(row: { smiles: string }) => (
-                <span className="font-mono text-xs">{row.smiles}</span>
+                <span className="font-mono text-xs break-all">{row.smiles}</span>
               )}
-            />
-            <Column
-              field="canonical_smiles"
-              header="Canonical"
-              body={(row: { canonical_smiles?: string | null }) =>
-                row.canonical_smiles ? (
-                  <span className="font-mono text-xs">
-                    {row.canonical_smiles}
-                  </span>
-                ) : (
-                  <span className="text-gray-400">—</span>
-                )
-              }
             />
             <Column field="extracted_id" header="Extracted ID" />
             <Column

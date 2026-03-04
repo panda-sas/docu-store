@@ -8,6 +8,7 @@ import { DataTable } from "primereact/datatable";
 import { ProgressSpinner } from "primereact/progressspinner";
 import { Tag } from "primereact/tag";
 
+import { MoleculeStructure } from "@docu-store/ui";
 import { WorkflowStatusBadge } from "@/components/WorkflowStatusBadge";
 import { usePage, usePageWorkflows } from "@/hooks/use-pages";
 
@@ -157,13 +158,23 @@ export default function PageViewerPage() {
             rows={10}
           >
             <Column
+              header="Structure"
+              body={(row: { smiles: string }) => (
+                <MoleculeStructure
+                  smiles={row.smiles}
+                  width={120}
+                  height={80}
+                />
+              )}
+              style={{ width: "140px" }}
+            />
+            <Column
               field="smiles"
               header="SMILES"
               body={(row: { smiles: string }) => (
-                <span className="font-mono text-xs">{row.smiles}</span>
+                <span className="font-mono text-xs break-all">{row.smiles}</span>
               )}
             />
-            <Column field="canonical_smiles" header="Canonical" />
             <Column
               field="is_smiles_valid"
               header="Valid"
