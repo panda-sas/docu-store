@@ -103,6 +103,7 @@ class EmbedCompoundSmilesUseCase:
                 page_index=page.index,
                 compounds=compound_dicts,
                 embeddings=embeddings,
+                workspace_id=page.workspace_id,
             )
 
             logger.info(

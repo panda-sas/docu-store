@@ -7,11 +7,12 @@ import structlog
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from returns.result import Success
+from sentinel_auth import RequestAuth
 
 from application.dtos.artifact_dtos import ArtifactResponse, CreateArtifactRequest
 from application.dtos.blob_dtos import UploadBlobRequest
-from application.ports.blob_store import BlobStore
 from application.dtos.workflow_dtos import WorkflowStartedResponse
+from application.ports.blob_store import BlobStore
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
 from application.sagas.artifact_upload_saga import ArtifactUploadSaga
@@ -28,7 +29,7 @@ from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.summary_candidate import SummaryCandidate
 from domain.value_objects.title_mention import TitleMention
 from interfaces.api.middleware import handle_use_case_errors
-from interfaces.dependencies import get_container
+from interfaces.dependencies import get_auth, get_container
 
 logger = structlog.get_logger()
 
@@ -38,24 +39,30 @@ router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 @router.get("", status_code=status.HTTP_200_OK)
 async def list_artifacts(
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
     skip: Annotated[int, Query(...)] = 0,
     limit: Annotated[int, Query(...)] = 100,
 ) -> list[ArtifactResponse]:
     """List all artifacts with pagination."""
     read_repository = container[ArtifactReadModel]
-    return await read_repository.list_artifacts(skip=skip, limit=limit)
+    return await read_repository.list_artifacts(
+        workspace_id=auth.workspace_id, skip=skip, limit=limit
+    )
 
 
 @router.get("/{artifact_id}", status_code=status.HTTP_200_OK)
 async def get_artifact(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Retrieve an artifact by ID from the read model."""
     read_repository = container[ArtifactReadModel]
     artifact = await read_repository.get_artifact_by_id(artifact_id)
 
-    if artifact is None:
+    if artifact is None or (
+        artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found",
@@ -69,6 +76,7 @@ async def get_artifact(
 async def create_artifact(
     request: CreateArtifactRequest,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Create a new artifact.
 
@@ -79,13 +87,14 @@ async def create_artifact(
 
     """
     use_case = container[CreateArtifactUseCase]
-    return await use_case.execute(request=request)
+    return await use_case.execute(request=request, auth=auth)
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 @handle_use_case_errors
 async def upload_blob(
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
     file: Annotated[UploadFile, File()],
     artifact_type: Annotated[ArtifactType, Form()],
     source_uri: Annotated[str | None, Form()] = None,
@@ -100,6 +109,7 @@ async def upload_blob(
             artifact_type=artifact_type,
             source_uri=source_uri,
         ),
+        auth=auth,
     )
 
 
@@ -109,10 +119,11 @@ async def add_pages(
     artifact_id: UUID,
     page_ids: list[UUID],
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Add pages to an artifact."""
     use_case = container[AddPagesUseCase]
-    return await use_case.execute(artifact_id=artifact_id, page_ids=page_ids)
+    return await use_case.execute(artifact_id=artifact_id, page_ids=page_ids, auth=auth)
 
 
 @router.delete("/{artifact_id}/pages", status_code=status.HTTP_200_OK)
@@ -121,10 +132,11 @@ async def remove_pages(
     artifact_id: UUID,
     page_ids: list[UUID],
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Remove pages from an artifact."""
     use_case = container[RemovePagesUseCase]
-    return await use_case.execute(artifact_id=artifact_id, page_ids=page_ids)
+    return await use_case.execute(artifact_id=artifact_id, page_ids=page_ids, auth=auth)
 
 
 @router.patch("/{artifact_id}/title_mention", status_code=status.HTTP_200_OK)
@@ -133,6 +145,7 @@ async def update_title_mention(
     artifact_id: UUID,
     title_mention: Annotated[TitleMention | None, Body(...)],
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Update title mention for an artifact."""
     logger.info(
@@ -148,7 +161,7 @@ async def update_title_mention(
         artifact_id=str(artifact_id),
         title_mention=title_mention,
     )
-    result = await use_case.execute(artifact_id=artifact_id, title_mention=title_mention)
+    result = await use_case.execute(artifact_id=artifact_id, title_mention=title_mention, auth=auth)
     logger.info(
         "use_case_result",
         result_type=type(result).__name__,
@@ -164,12 +177,14 @@ async def update_summary_candidate(
     artifact_id: UUID,
     summary_candidate: Annotated[SummaryCandidate | None, Body(...)],
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Update summary candidate for an artifact."""
     use_case = container[UpdateSummaryCandidateUseCase]
     return await use_case.execute(
         artifact_id=artifact_id,
         summary_candidate=summary_candidate,
+        auth=auth,
     )
 
 
@@ -179,10 +194,11 @@ async def update_tags(
     artifact_id: UUID,
     tags: Annotated[list[str], Body(...)],
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Update tags for an artifact."""
     use_case = container[UpdateTagsUseCase]
-    return await use_case.execute(artifact_id=artifact_id, tags=tags)
+    return await use_case.execute(artifact_id=artifact_id, tags=tags, auth=auth)
 
 
 @router.delete("/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -190,16 +206,18 @@ async def update_tags(
 async def delete_artifact(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> None:
     """Delete an artifact and all its associated pages."""
     use_case = container[DeleteArtifactUseCase]
-    await use_case.execute(artifact_id=artifact_id)
+    await use_case.execute(artifact_id=artifact_id, auth=auth)
 
 
 @router.post("/{artifact_id}/summarize", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_artifact_summarization(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> WorkflowStartedResponse:
     """Trigger LLM summarization for an artifact (non-blocking).
 
@@ -219,6 +237,7 @@ async def trigger_artifact_summarization(
 async def get_artifact_summary(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> dict:
     """Get the current summary for an artifact from the read model.
 
@@ -254,6 +273,7 @@ async def get_artifact_summary(
 async def get_artifact_workflows(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> dict:
     """Get Temporal workflow statuses for an artifact.
 
@@ -269,6 +289,7 @@ async def get_artifact_workflows(
 async def stream_artifact_pdf(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> StreamingResponse:
     """Stream the source PDF for an artifact.
 
@@ -309,6 +330,7 @@ async def stream_page_image(
     artifact_id: UUID,
     page_index: int,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> StreamingResponse:
     """Stream the rendered PNG image for a specific page of an artifact.
 

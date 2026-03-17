@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from application.dtos.artifact_dtos import ArtifactResponse
     from application.dtos.blob_dtos import UploadBlobRequest, UploadBlobResponse
     from application.dtos.pdf_dtos import PDFContent
+    from application.ports.auth import AuthContext
     from application.ports.blob_store import BlobStore
     from application.ports.pdf_service import PDFService
     from application.use_cases.artifact_use_cases import (
@@ -72,6 +73,7 @@ class ArtifactUploadSaga:
         self,
         stream: BinaryIO,
         upload_req: UploadBlobRequest,
+        auth: AuthContext | None = None,
     ) -> Result[ArtifactResponse, AppError]:
         now = datetime.now(tz=UTC)
         # Step 1: Upload blob
@@ -99,7 +101,7 @@ class ArtifactUploadSaga:
             storage_location=blob_response.storage_key,
         )
 
-        artifact_result = await self.create_artifact.execute(create_artifact_request)
+        artifact_result = await self.create_artifact.execute(create_artifact_request, auth=auth)
         if isinstance(artifact_result, Failure):
             return artifact_result
 
@@ -111,6 +113,7 @@ class ArtifactUploadSaga:
             pdf_content=pdf_content,
             artifact_id=artifact_id,
             now=now,
+            auth=auth,
         )
         if isinstance(pages_result, Failure):
             return pages_result
@@ -125,6 +128,7 @@ class ArtifactUploadSaga:
         pdf_content: PDFContent,
         artifact_id: UUID,
         now: datetime,
+        auth: AuthContext | None = None,
     ) -> Result[list[UUID], AppError]:
         """Process PDF pages: create pages, persist images, and update text mentions.
 
@@ -151,7 +155,7 @@ class ArtifactUploadSaga:
                 index=index,
             )
 
-            create_page_result = await self.create_page.execute(create_page_req)
+            create_page_result = await self.create_page.execute(create_page_req, auth=auth)
             if isinstance(create_page_result, Failure):
                 return Failure(
                     AppError(
@@ -190,6 +194,7 @@ class ArtifactUploadSaga:
                 update_mention_result = await self.update_text_mention.execute(
                     page_id=page_response.page_id,
                     text_mention=text_mention,
+                    auth=auth,
                 )
                 if isinstance(update_mention_result, Failure):
                     return Failure(
@@ -203,6 +208,7 @@ class ArtifactUploadSaga:
             add_pages_result = await self.add_pages.execute(
                 artifact_id=artifact_id,
                 page_ids=page_ids,
+                auth=auth,
             )
             if isinstance(add_pages_result, Failure):
                 return Failure(

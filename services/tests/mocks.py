@@ -192,8 +192,9 @@ class MockVectorStore:
         limit: int = 10,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[PageSearchResult]:
-        self.search_calls.append({"limit": limit, "filter": artifact_id_filter})
+        self.search_calls.append({"limit": limit, "filter": artifact_id_filter, "workspace_id": workspace_id})
         return self._search_results
 
     async def get_collection_info(self) -> dict:
@@ -216,8 +217,9 @@ class MockCompoundVectorStore:
         page_index: int,
         compounds: list[dict],
         embeddings: list[TextEmbedding],
+        workspace_id: UUID | None = None,
     ) -> None:
-        self.upsert_calls.append({"page_id": page_id, "count": len(embeddings)})
+        self.upsert_calls.append({"page_id": page_id, "count": len(embeddings), "workspace_id": workspace_id})
 
     async def delete_compound_embeddings_for_page(self, page_id: UUID) -> None:
         pass

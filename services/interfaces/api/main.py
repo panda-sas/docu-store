@@ -7,6 +7,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from infrastructure.auth import sentinel
 from infrastructure.config import settings
 from infrastructure.logging import setup_logging
 from interfaces.api.routes.artifact_routes import router as artifact_router
@@ -20,44 +21,45 @@ logger = structlog.get_logger()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown."""
-    logger.info("app_starting", env=settings.app_env)
+    async with sentinel.lifespan(app):
+        logger.info("app_starting", env=settings.app_env)
 
-    # Initialize Qdrant collections on startup
-    try:
-        from infrastructure.di.container import create_container  # noqa: PLC0415
+        # Initialize Qdrant collections on startup
+        try:
+            from infrastructure.di.container import create_container  # noqa: PLC0415
 
-        container = create_container()
+            container = create_container()
 
-        from application.ports.vector_store import VectorStore  # noqa: PLC0415
+            from application.ports.vector_store import VectorStore  # noqa: PLC0415
 
-        vector_store = container[VectorStore]
-        await vector_store.ensure_collection_exists()
-        logger.info("qdrant_page_collection_initialized")
+            vector_store = container[VectorStore]
+            await vector_store.ensure_collection_exists()
+            logger.info("qdrant_page_collection_initialized")
 
-        from application.ports.compound_vector_store import CompoundVectorStore  # noqa: PLC0415
+            from application.ports.compound_vector_store import CompoundVectorStore  # noqa: PLC0415
 
-        compound_vector_store = container[CompoundVectorStore]
-        await compound_vector_store.ensure_compound_collection_exists()
-        logger.info("qdrant_compound_collection_initialized")
+            compound_vector_store = container[CompoundVectorStore]
+            await compound_vector_store.ensure_compound_collection_exists()
+            logger.info("qdrant_compound_collection_initialized")
 
-        from application.ports.summary_vector_store import SummaryVectorStore  # noqa: PLC0415
+            from application.ports.summary_vector_store import SummaryVectorStore  # noqa: PLC0415
 
-        summary_vector_store = container[SummaryVectorStore]
-        await summary_vector_store.ensure_collection_exists()
-        logger.info("qdrant_summary_collection_initialized")
-    except Exception as e:  # noqa: BLE001
-        logger.warning("qdrant_initialization_failed", error=str(e))
-        # Don't fail startup - embedding features will just be unavailable
+            summary_vector_store = container[SummaryVectorStore]
+            await summary_vector_store.ensure_collection_exists()
+            logger.info("qdrant_summary_collection_initialized")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("qdrant_initialization_failed", error=str(e))
+            # Don't fail startup - embedding features will just be unavailable
 
-    logger.info("app_ready")
+        logger.info("app_ready")
 
-    yield
+        yield
 
-    # Cleanup
-    logger.info("app_shutting_down")
-    logger.info("app_stopped")
+        # Cleanup
+        logger.info("app_shutting_down")
+        logger.info("app_stopped")
 
 
 def create_app() -> FastAPI:
@@ -77,6 +79,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Sentinel auth middleware — protects all routes except excluded paths
+    sentinel.protect(app, exclude_paths=["/health", "/docs", "/openapi.json", "/search/health"])
 
     # Include routers
     app.include_router(artifact_router)

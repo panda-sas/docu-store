@@ -28,3 +28,5 @@ class PageResponse(BaseModel):
     tag_mentions: list[TagMention] = []
     text_mention: TextMention | None = None
     summary_candidate: SummaryCandidate | None = None
+    workspace_id: UUID | None = None
+    owner_id: UUID | None = None

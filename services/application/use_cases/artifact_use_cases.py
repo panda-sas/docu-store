@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
@@ -19,6 +22,9 @@ from domain.services.artifact_deletion_service import ArtifactDeletionService
 from domain.value_objects.summary_candidate import SummaryCandidate
 from domain.value_objects.title_mention import TitleMention
 
+if TYPE_CHECKING:
+    from application.ports.auth import AuthContext
+
 logger = structlog.get_logger()
 
 
@@ -33,8 +39,13 @@ class CreateArtifactUseCase:
         self.artifact_repository = artifact_repository
         self.external_event_publisher = external_event_publisher
 
-    async def execute(self, request: CreateArtifactRequest) -> Result[ArtifactResponse, AppError]:
+    async def execute(
+        self, request: CreateArtifactRequest, auth: AuthContext | None = None
+    ) -> Result[ArtifactResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Create a new Artifact aggregate
             artifact = Artifact.create(
                 source_uri=request.source_uri,
@@ -42,6 +53,8 @@ class CreateArtifactUseCase:
                 artifact_type=request.artifact_type,
                 mime_type=request.mime_type,
                 storage_location=request.storage_location,
+                workspace_id=auth.workspace_id if auth else None,
+                owner_id=auth.user_id if auth else None,
             )
 
             # Save the Artifact using the repository
@@ -81,10 +94,17 @@ class AddPagesUseCase:
         self,
         artifact_id: UUID,
         page_ids: list[UUID],
+        auth: AuthContext | None = None,
     ) -> Result[ArtifactResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the artifact by ID
             artifact = self.artifact_repository.get_by_id(artifact_id)
+
+            if auth and artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Artifact not found"))
 
             # Validate that all page IDs exist and their artifact_id matches
             for page_id in page_ids:
@@ -137,10 +157,17 @@ class RemovePagesUseCase:
         self,
         artifact_id: UUID,
         page_ids: list[UUID],
+        auth: AuthContext | None = None,
     ) -> Result[ArtifactResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the artifact by ID
             artifact = self.artifact_repository.get_by_id(artifact_id)
+
+            if auth and artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Artifact not found"))
 
             # Remove pages from the artifact
             artifact.remove_pages(page_ids)
@@ -182,8 +209,12 @@ class UpdateTitleMentionUseCase:
         self,
         artifact_id: UUID,
         title_mention: TitleMention | None,
+        auth: AuthContext | None = None,
     ) -> Result[ArtifactResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             logger.info(
                 "update_title_mention_use_case_start",
                 artifact_id=str(artifact_id),
@@ -193,6 +224,10 @@ class UpdateTitleMentionUseCase:
             # Retrieve the artifact by ID
             logger.info("retrieving_artifact", artifact_id=str(artifact_id))
             artifact = self.artifact_repository.get_by_id(artifact_id)
+
+            if auth and artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Artifact not found"))
+
             logger.info("artifact_retrieved", artifact_id=str(artifact_id))
 
             # Update title mention
@@ -260,10 +295,17 @@ class UpdateSummaryCandidateUseCase:
         self,
         artifact_id: UUID,
         summary_candidate: SummaryCandidate | None,
+        auth: AuthContext | None = None,
     ) -> Result[ArtifactResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the artifact by ID
             artifact = self.artifact_repository.get_by_id(artifact_id)
+
+            if auth and artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Artifact not found"))
 
             # Update summary candidate
             artifact.update_summary_candidate(summary_candidate)
@@ -305,10 +347,17 @@ class UpdateTagsUseCase:
         self,
         artifact_id: UUID,
         tags: list[str],
+        auth: AuthContext | None = None,
     ) -> Result[ArtifactResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the artifact by ID
             artifact = self.artifact_repository.get_by_id(artifact_id)
+
+            if auth and artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Artifact not found"))
 
             # Update tags
             artifact.update_tags(tags)
@@ -348,10 +397,18 @@ class DeleteArtifactUseCase:
         self.page_repository = page_repository
         self.external_event_publisher = external_event_publisher
 
-    async def execute(self, artifact_id: UUID) -> Result[None, AppError]:
+    async def execute(
+        self, artifact_id: UUID, auth: AuthContext | None = None
+    ) -> Result[None, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the artifact and its pages
             artifact = self.artifact_repository.get_by_id(artifact_id)
+
+            if auth and artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Artifact not found"))
             pages = [self.page_repository.get_by_id(page_id) for page_id in artifact.pages]
 
             # Use the domain service to delete artifact and all its pages

@@ -22,7 +22,9 @@ from application.use_cases.page_use_cases import CreatePageUseCase, DeletePageUs
 from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.mime_type import MimeType
 from interfaces.api.main import app
-from interfaces.dependencies import get_container
+from interfaces.dependencies import get_auth, get_container
+from sentinel_auth.authz_middleware import AuthzMiddleware
+from tests.fakes.fake_auth import FakeAuth
 
 
 class FakeContainer:
@@ -40,7 +42,7 @@ class FakeArtifactReadModel(ArtifactReadModel):
     async def get_artifact_by_id(self, artifact_id: UUID) -> ArtifactResponse | None:
         return self._artifacts.get(artifact_id)
 
-    async def list_artifacts(self, skip: int = 0, limit: int = 100) -> list[ArtifactResponse]:
+    async def list_artifacts(self, workspace_id: UUID | None = None, skip: int = 0, limit: int = 100) -> list[ArtifactResponse]:
         artifacts = list(self._artifacts.values())
         return artifacts[skip : skip + limit]
 
@@ -61,11 +63,21 @@ class FakeUseCase:
         return self._result
 
 
+def _strip_authz_middleware() -> None:
+    """Remove AuthzMiddleware from the app so tests can run without tokens."""
+    app.user_middleware = [m for m in app.user_middleware if m.cls is not AuthzMiddleware]
+    app.middleware_stack = app.build_middleware_stack()
+
+
 @pytest.fixture
 def make_client() -> Callable[[dict[type, object]], TestClient]:
+    _strip_authz_middleware()
+    fake_auth = FakeAuth(role="editor")
+
     def _make_client(overrides: dict[type, object]) -> TestClient:
         container = FakeContainer(overrides)
         app.dependency_overrides[get_container] = lambda: container
+        app.dependency_overrides[get_auth] = lambda: fake_auth
         return TestClient(app)
 
     yield _make_client

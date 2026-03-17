@@ -24,9 +24,22 @@ class Page(Aggregate):
     INITIAL_VERSION = 0
 
     @classmethod
-    def create(cls, name: str, artifact_id: UUID, index: int = 0) -> Page:
+    def create(  # noqa: PLR0913
+        cls,
+        name: str,
+        artifact_id: UUID,
+        index: int = 0,
+        workspace_id: UUID | None = None,
+        owner_id: UUID | None = None,
+    ) -> Page:
         """Create a new Page aggregate (Factory Method)."""
-        return cls(name=name, artifact_id=artifact_id, index=index)
+        return cls(
+            name=name,
+            artifact_id=artifact_id,
+            index=index,
+            workspace_id=workspace_id,
+            owner_id=owner_id,
+        )
 
     class Created(Aggregate.Created):
         """Defines the structure of the Page Created event."""
@@ -34,9 +47,18 @@ class Page(Aggregate):
         name: str
         artifact_id: UUID
         index: int
+        workspace_id: UUID | None = None
+        owner_id: UUID | None = None
 
     @event(Created)  # Links this handler to the Created event class above
-    def __init__(self, name: str, artifact_id: UUID, index: int) -> None:
+    def __init__(  # noqa: PLR0913
+        self,
+        name: str,
+        artifact_id: UUID,
+        index: int,
+        workspace_id: UUID | None = None,
+        owner_id: UUID | None = None,
+    ) -> None:
         # Validate required fields (following same pattern as Artifact)
         if not name or not name.strip():
             msg = "name must be provided"
@@ -51,6 +73,8 @@ class Page(Aggregate):
         self.name = name.strip()
         self.artifact_id = artifact_id
         self.index = index
+        self.workspace_id = workspace_id
+        self.owner_id = owner_id
         self.compound_mentions: list[CompoundMention] = []
         self.tag_mentions: list[TagMention] = []
         self.text_mention: TextMention | None = None

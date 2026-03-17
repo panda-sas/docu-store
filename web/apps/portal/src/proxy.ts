@@ -2,12 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Proxy stub — passes all requests through.
+ * Edge proxy — lightweight request processing.
  *
- * Phase 6 will add:
- *   - Auth check (redirect unauthenticated users to /login)
- *   - Workspace membership validation
- *   - Token refresh
+ * Auth tokens live in localStorage (AuthZ mode), so Edge middleware
+ * cannot validate them. Route protection is handled client-side via
+ * AuthzGuard. This proxy only forwards the workspace slug header.
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -17,7 +16,6 @@ export function proxy(request: NextRequest) {
   const workspaceSlug = segments[0];
 
   if (workspaceSlug && workspaceSlug !== "(auth)") {
-    // Future: validate workspace membership here
     const response = NextResponse.next();
     response.headers.set("x-workspace-slug", workspaceSlug);
     return response;

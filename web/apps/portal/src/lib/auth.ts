@@ -1,33 +1,58 @@
 /**
- * Auth stub — library-agnostic.
+ * Auth — backed by Sentinel AuthZ SDK.
  *
- * Returns mock session data. No real auth dependency.
- * Will be replaced with Better Auth or Auth.js in Phase 6.
+ * Provides a `useSession()` hook with the same interface components already consume.
  */
 
+import { useAuthz } from "@sentinel-auth/react";
 import type { User, Workspace } from "@docu-store/types";
 
 interface Session {
   user: User;
   workspace: Workspace;
   isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
-const STUB_SESSION: Session = {
-  user: {
-    id: "stub-user-id",
-    name: "Developer",
-    email: "dev@localhost",
-    avatar_url: null,
-  },
-  workspace: {
-    id: "default",
-    slug: "default",
-    name: "Default Workspace",
-  },
-  isAuthenticated: true,
+const EMPTY_USER: User = {
+  id: "",
+  name: "",
+  email: "",
+  avatar_url: null,
+};
+
+const EMPTY_WORKSPACE: Workspace = {
+  id: "",
+  slug: "",
+  name: "",
 };
 
 export function useSession(): Session {
-  return STUB_SESSION;
+  const { user, isAuthenticated, isLoading } = useAuthz();
+
+  if (!user) {
+    return {
+      user: EMPTY_USER,
+      workspace: EMPTY_WORKSPACE,
+      isAuthenticated: false,
+      isLoading,
+    };
+  }
+
+  return {
+    user: {
+      id: user.userId,
+      name: user.name,
+      email: user.email,
+      avatar_url: null,
+    },
+    workspace: {
+      id: user.workspaceId,
+      slug: user.workspaceSlug,
+      // SDK JWT doesn't carry workspace name — slug is the best available
+      name: user.workspaceSlug,
+    },
+    isAuthenticated,
+    isLoading,
+  };
 }

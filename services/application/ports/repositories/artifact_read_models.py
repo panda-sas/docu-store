@@ -10,5 +10,7 @@ class ArtifactReadModel(ABC):
         pass
 
     @abstractmethod
-    async def list_artifacts(self, skip: int = 0, limit: int = 100) -> list[ArtifactResponse]:
+    async def list_artifacts(
+        self, workspace_id: UUID | None = None, skip: int = 0, limit: int = 100
+    ) -> list[ArtifactResponse]:
         pass

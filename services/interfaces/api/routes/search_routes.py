@@ -6,6 +6,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from lagom import Container
+from sentinel_auth import RequestAuth
 
 from application.dtos.embedding_dtos import SearchRequest, SearchResponse
 from application.dtos.search_dtos import (
@@ -25,7 +26,7 @@ from application.use_cases.search_use_cases import HierarchicalSearchUseCase, Se
 from application.use_cases.smiles_search_use_cases import SearchSimilarCompoundsUseCase
 from infrastructure.embeddings.chemberta_generator import ChemBertaEmbeddingGenerator
 from interfaces.api.middleware import handle_use_case_errors
-from interfaces.dependencies import get_container
+from interfaces.dependencies import get_auth, get_container
 
 logger = structlog.get_logger()
 
@@ -37,6 +38,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 async def search_pages(
     request: SearchRequest,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> SearchResponse:
     """Search for similar pages using vector similarity.
 
@@ -63,13 +65,14 @@ async def search_pages(
 
     use_case = container[SearchSimilarPagesUseCase]
     # The @handle_use_case_errors decorator will handle unwrapping the result
-    return await use_case.execute(request)
+    return await use_case.execute(request, workspace_id=auth.workspace_id)
 
 
 @router.post("/pages/{page_id}/generate-embedding", status_code=status.HTTP_202_ACCEPTED)
 async def generate_embedding_for_page(
     page_id: UUID,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
     force_regenerate: bool = False,  # noqa: FBT001, FBT002
 ) -> dict[str, str]:
     """Manually trigger embedding generation for a specific page.
@@ -112,6 +115,7 @@ async def generate_embedding_for_page(
 async def search_compounds(
     request: CompoundSearchRequest,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> CompoundSearchResponse:
     """Search for structurally similar compounds using SMILES vector similarity.
 
@@ -131,7 +135,7 @@ async def search_compounds(
     """
     logger.info("compound_search_request", query_smiles=request.query_smiles[:80])
     use_case = container[SearchSimilarCompoundsUseCase]
-    return await use_case.execute(request)
+    return await use_case.execute(request, workspace_id=auth.workspace_id)
 
 
 @router.post("/summaries", status_code=status.HTTP_200_OK)
@@ -139,6 +143,7 @@ async def search_compounds(
 async def search_summaries(
     request: SummarySearchRequest,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> SummarySearchResponse:
     """Search page and artifact summaries by semantic similarity.
 
@@ -160,13 +165,14 @@ async def search_summaries(
 
     """
     use_case = container[SearchSummariesUseCase]
-    return await use_case.execute(request=request)
+    return await use_case.execute(request=request, workspace_id=auth.workspace_id)
 
 
 @router.post("/hierarchical", status_code=status.HTTP_200_OK)
 async def hierarchical_search(
     request: HierarchicalSearchRequest,
     container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> HierarchicalSearchResponse:
     """Hierarchical cross-collection semantic search.
 
@@ -196,7 +202,7 @@ async def hierarchical_search(
 
     """
     use_case = container[HierarchicalSearchUseCase]
-    result = await use_case.execute(request=request)
+    result = await use_case.execute(request=request, workspace_id=auth.workspace_id)
 
     return result.unwrap()
 

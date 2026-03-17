@@ -15,6 +15,16 @@ def _map_app_error_to_http_exception(error: AppError) -> HTTPException:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error.message,
         )
+    if error.category == "forbidden":
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error.message,
+        )
+    if error.category == "unauthorized":
+        return HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=error.message,
+        )
     if error.category == "concurrency":
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -16,7 +16,9 @@ from application.use_cases.page_use_cases import AddCompoundMentionsUseCase, Cre
 from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.mime_type import MimeType
 from interfaces.api.main import app
-from interfaces.dependencies import get_container
+from interfaces.dependencies import get_auth, get_container
+from sentinel_auth.authz_middleware import AuthzMiddleware
+from tests.fakes.fake_auth import FakeAuth
 from tests.mocks import MockArtifactRepository, MockPageRepository
 
 
@@ -28,11 +30,22 @@ class SimpleContainer:
         return self._mapping[key]
 
 
+def _strip_authz_middleware() -> None:
+    """Remove AuthzMiddleware from the app so tests can run without tokens."""
+    app.user_middleware = [m for m in app.user_middleware if m.cls is not AuthzMiddleware]
+    # Rebuild the middleware stack
+    app.middleware_stack = app.build_middleware_stack()
+
+
 @pytest.fixture
 def client() -> Callable[[dict[type, object]], TestClient]:
+    _strip_authz_middleware()
+    fake_auth = FakeAuth(role="editor")
+
     def _client(overrides: dict[type, object]) -> TestClient:
         container = SimpleContainer(overrides)
         app.dependency_overrides[get_container] = lambda: container
+        app.dependency_overrides[get_auth] = lambda: fake_auth
         return TestClient(app)
 
     yield _client

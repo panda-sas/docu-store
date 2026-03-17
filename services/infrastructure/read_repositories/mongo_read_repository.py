@@ -52,9 +52,14 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel):
             doc["pages"] = []
         return ArtifactResponse(**doc)
 
-    async def list_artifacts(self, skip: int = 0, limit: int = 100) -> list[ArtifactResponse]:
-        """List all artifacts with pagination."""
-        cursor = self.artifacts.find().skip(skip).limit(limit)
+    async def list_artifacts(
+        self, workspace_id: UUID | None = None, skip: int = 0, limit: int = 100
+    ) -> list[ArtifactResponse]:
+        """List all artifacts with pagination, scoped by workspace."""
+        query = {}
+        if workspace_id is not None:
+            query["workspace_id"] = str(workspace_id)
+        cursor = self.artifacts.find(query).skip(skip).limit(limit)
         artifacts = []
         async for doc in cursor:
             # Map MongoDB _id (ObjectId) to artifact_id field

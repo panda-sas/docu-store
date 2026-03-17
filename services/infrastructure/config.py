@@ -180,6 +180,17 @@ class Settings(BaseSettings):
         description="Low temperature for deterministic summaries.",
     )
 
+    # Sentinel (AuthZ mode)
+    sentinel_url: str = Field(default="http://localhost:9003", validation_alias="SENTINEL_URL")
+    sentinel_service_key: str = Field(default="", validation_alias="SENTINEL_SERVICE_KEY")
+    sentinel_service_name: str = Field(
+        default="docu-store", validation_alias="SENTINEL_SERVICE_NAME"
+    )
+    sentinel_idp_jwks_url: str = Field(
+        default="https://www.googleapis.com/oauth2/v3/certs",
+        validation_alias="SENTINEL_IDP_JWKS_URL",
+    )
+
     # Prompt management
     prompt_repository_type: Literal["langfuse", "yaml"] = Field(
         default="langfuse",

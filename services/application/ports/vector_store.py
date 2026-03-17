@@ -106,6 +106,7 @@ class VectorStore(Protocol):
         limit: int = 10,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[PageSearchResult]:
         """Find pages similar to the query embedding.
 

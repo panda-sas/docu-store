@@ -50,6 +50,7 @@ class SummaryVectorStore(Protocol):
         summary_text: str,
         artifact_title: str | None = None,
         page_index: int = 0,
+        workspace_id: UUID | None = None,
     ) -> None:
         """Store or update a page summary embedding.
 
@@ -57,13 +58,14 @@ class SummaryVectorStore(Protocol):
         """
         ...
 
-    async def upsert_artifact_summary_embedding(
+    async def upsert_artifact_summary_embedding(  # noqa: PLR0913
         self,
         artifact_id: UUID,
         embedding: TextEmbedding,
         summary_text: str,
         artifact_title: str | None = None,
         page_count: int = 0,
+        workspace_id: UUID | None = None,
     ) -> None:
         """Store or update an artifact summary embedding.
 
@@ -79,13 +81,14 @@ class SummaryVectorStore(Protocol):
         """Delete the artifact summary point. Idempotent — no error if missing."""
         ...
 
-    async def search_summaries(
+    async def search_summaries(  # noqa: PLR0913
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
         entity_type_filter: Literal["page", "artifact"] | None = None,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[SummarySearchResult]:
         """Search summary embeddings by dense vector similarity.
 

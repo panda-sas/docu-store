@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
@@ -19,6 +22,9 @@ from domain.value_objects.summary_candidate import SummaryCandidate
 from domain.value_objects.tag_mention import TagMention
 from domain.value_objects.text_mention import TextMention
 
+if TYPE_CHECKING:
+    from application.ports.auth import AuthContext
+
 logger = structlog.get_logger()
 
 
@@ -33,8 +39,13 @@ class CreatePageUseCase:
         self.artifact_repository = artifact_repository
         self.external_event_publisher = external_event_publisher
 
-    async def execute(self, request: CreatePageRequest) -> Result[PageResponse, AppError]:
+    async def execute(
+        self, request: CreatePageRequest, auth: AuthContext | None = None
+    ) -> Result[PageResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             logger.info(
                 "create_page_use_case_start",
                 artifact_id=str(request.artifact_id),
@@ -48,6 +59,8 @@ class CreatePageUseCase:
                 name=request.name,
                 artifact_id=request.artifact_id,
                 index=request.index,
+                workspace_id=auth.workspace_id if auth else None,
+                owner_id=auth.user_id if auth else None,
             )
 
             # Save the Page using the repository
@@ -94,10 +107,18 @@ class AddCompoundMentionsUseCase:
         self.page_repository = page_repository
         self.external_event_publisher = external_event_publisher
 
-    async def execute(self, request: AddCompoundMentionsRequest) -> Result[PageResponse, AppError]:
+    async def execute(
+        self, request: AddCompoundMentionsRequest, auth: AuthContext | None = None
+    ) -> Result[PageResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the page by ID
             page = self.page_repository.get_by_id(request.page_id)
+
+            if auth and page.workspace_id is not None and page.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Page not found"))
 
             # Add compound_mentions to the page
             page.update_compound_mentions(request.compound_mentions)
@@ -140,10 +161,17 @@ class UpdateTagMentionsUseCase:
         self,
         page_id: UUID,
         tag_mentions: list[TagMention],
+        auth: AuthContext | None = None,
     ) -> Result[PageResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the page by ID
             page = self.page_repository.get_by_id(page_id)
+
+            if auth and page.workspace_id is not None and page.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Page not found"))
 
             # Update tag mentions
             page.update_tag_mentions(tag_mentions)
@@ -185,10 +213,17 @@ class UpdateTextMentionUseCase:
         self,
         page_id: UUID,
         text_mention: TextMention,
+        auth: AuthContext | None = None,
     ) -> Result[PageResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the page by ID
             page = self.page_repository.get_by_id(page_id)
+
+            if auth and page.workspace_id is not None and page.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Page not found"))
 
             # Update text mention
             page.update_text_mention(text_mention)
@@ -230,10 +265,17 @@ class UpdateSummaryCandidateUseCase:
         self,
         page_id: UUID,
         summary_candidate: SummaryCandidate,
+        auth: AuthContext | None = None,
     ) -> Result[PageResponse, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             # Retrieve the page by ID
             page = self.page_repository.get_by_id(page_id)
+
+            if auth and page.workspace_id is not None and page.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Page not found"))
 
             # Update summary candidate
             page.update_summary_candidate(summary_candidate)
@@ -273,11 +315,19 @@ class DeletePageUseCase:
         self.artifact_repository = artifact_repository
         self.external_event_publisher = external_event_publisher
 
-    async def execute(self, page_id: UUID) -> Result[None, AppError]:
+    async def execute(
+        self, page_id: UUID, auth: AuthContext | None = None
+    ) -> Result[None, AppError]:
         try:
+            if auth and not auth.has_role("editor"):
+                return Failure(AppError("forbidden", "Requires editor role"))
+
             logger.info("delete_page_use_case_start", page_id=str(page_id))
             # Retrieve the page by ID
             page = self.page_repository.get_by_id(page_id)
+
+            if auth and page.workspace_id is not None and page.workspace_id != auth.workspace_id:
+                return Failure(AppError("not_found", "Page not found"))
 
             # Delete the page
             logger.info("deleting_page", page_id=str(page_id))

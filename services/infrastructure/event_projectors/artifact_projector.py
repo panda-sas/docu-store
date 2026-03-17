@@ -25,6 +25,8 @@ class ArtifactProjector:
                 "artifact_type": event.artifact_type,
                 "mime_type": event.mime_type,
                 "storage_location": event.storage_location,
+                "workspace_id": str(event.workspace_id) if event.workspace_id else None,
+                "owner_id": str(event.owner_id) if event.owner_id else None,
                 "pages": [],
                 "title_mention": None,
                 "tags": [],
