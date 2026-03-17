@@ -227,6 +227,7 @@ class SummaryQdrantStore(SummaryVectorStore):
         entity_type_filter: Literal["page", "artifact"] | None = None,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
     ) -> list[SummarySearchResult]:
         client = await self._get_client()
@@ -245,6 +246,13 @@ class SummaryQdrantStore(SummaryVectorStore):
                 models.FieldCondition(
                     key="artifact_id",
                     match=models.MatchValue(value=str(artifact_id_filter)),
+                ),
+            )
+        if allowed_artifact_ids is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="artifact_id",
+                    match=models.MatchAny(any=[str(aid) for aid in allowed_artifact_ids]),
                 ),
             )
         if workspace_id:

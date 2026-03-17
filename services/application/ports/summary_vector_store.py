@@ -88,6 +88,7 @@ class SummaryVectorStore(Protocol):
         entity_type_filter: Literal["page", "artifact"] | None = None,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
     ) -> list[SummarySearchResult]:
         """Search summary embeddings by dense vector similarity.

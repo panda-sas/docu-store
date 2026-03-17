@@ -43,6 +43,9 @@ from application.workflow_use_cases.trigger_page_summarization_use_case import (
 from application.workflow_use_cases.trigger_page_summary_embedding_use_case import (
     TriggerPageSummaryEmbeddingUseCase,
 )
+from application.workflow_use_cases.trigger_resource_registration_use_case import (
+    TriggerResourceRegistrationUseCase,
+)
 from application.workflow_use_cases.trigger_smiles_embedding_use_case import (
     TriggerSmilesEmbeddingUseCase,
 )
@@ -85,6 +88,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     trigger_artifact_summary_embedding_use_case = container[TriggerArtifactSummaryEmbeddingUseCase]
     trigger_ner_extraction_use_case = container[TriggerNERExtractionUseCase]
     trigger_artifact_tag_aggregation_use_case = container[TriggerArtifactTagAggregationUseCase]
+    trigger_resource_registration_use_case = container[TriggerResourceRegistrationUseCase]
 
     # Setup signal handlers
     def handle_signal(signum: int, _frame: object) -> None:
@@ -168,6 +172,26 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                     artifact_id=str(domain_event.originator_id),
                                     tracking_id=tracking.notification_id,
                                 )
+
+                                # Register artifact with Sentinel permission system
+                                if domain_event.workspace_id and domain_event.owner_id:
+                                    try:
+                                        await trigger_resource_registration_use_case.execute(
+                                            resource_type="artifact",
+                                            resource_id=domain_event.originator_id,
+                                            workspace_id=domain_event.workspace_id,
+                                            owner_id=domain_event.owner_id,
+                                        )
+                                        logger.info(
+                                            "pipeline_resource_registered",
+                                            artifact_id=str(domain_event.originator_id),
+                                        )
+                                    except Exception:
+                                        logger.warning(
+                                            "pipeline_resource_registration_failed",
+                                            artifact_id=str(domain_event.originator_id),
+                                            exc_info=True,
+                                        )
 
                             case Page.TextMentionUpdated():
                                 logger.info(

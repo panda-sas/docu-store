@@ -47,6 +47,7 @@ class SearchSummariesUseCase:
         self,
         request: SummarySearchRequest,
         workspace_id: UUID | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
     ) -> Result[SummarySearchResponse, AppError]:
         try:
             logger.info(
@@ -66,6 +67,7 @@ class SearchSummariesUseCase:
                 entity_type_filter=request.entity_type,
                 artifact_id_filter=request.artifact_id,
                 score_threshold=request.score_threshold,
+                allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
             )
 
@@ -134,6 +136,7 @@ class HierarchicalSearchUseCase:
         self,
         request: HierarchicalSearchRequest,
         workspace_id: UUID | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
     ) -> Result[HierarchicalSearchResponse, AppError]:
         try:
             logger.info(
@@ -153,6 +156,7 @@ class HierarchicalSearchUseCase:
                 query_embedding=query_embedding,
                 limit=request.limit,
                 score_threshold=request.score_threshold,
+                allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
             )
             summary_hits = [
@@ -176,6 +180,7 @@ class HierarchicalSearchUseCase:
                     query_embedding=query_embedding,
                     limit=request.limit * 3,
                     score_threshold=request.score_threshold,
+                    allowed_artifact_ids=allowed_artifact_ids,
                     workspace_id=workspace_id,
                 )
 

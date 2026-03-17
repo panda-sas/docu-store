@@ -16,20 +16,30 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel):
         self.pages = self.db[settings.mongo_pages_collection]
         self.artifacts = self.db[settings.mongo_artifacts_collection]
 
-    async def get_page_by_id(self, page_id: UUID) -> PageResponse | None:
-        doc = await self.pages.find_one({"page_id": str(page_id)})
+    async def get_page_by_id(
+        self, page_id: UUID, workspace_id: UUID | None = None
+    ) -> PageResponse | None:
+        query: dict = {"page_id": str(page_id)}
+        if workspace_id is not None:
+            query["workspace_id"] = str(workspace_id)
+        doc = await self.pages.find_one(query)
         if not doc:
             return None
         # Map MongoDB _id (ObjectId) to page_id field
         doc["page_id"] = doc.get("page_id") or str(doc.pop("_id"))
         return PageResponse(**doc)
 
-    async def get_pages_by_id(self, page_ids: list[UUID]) -> list[PageResponse]:
+    async def get_pages_by_id(
+        self, page_ids: list[UUID], workspace_id: UUID | None = None
+    ) -> list[PageResponse]:
         """Fetch multiple pages by their IDs in a single query."""
         if not page_ids:
             return []
 
-        cursor = self.pages.find({"page_id": {"$in": [str(pid) for pid in page_ids]}})
+        query: dict = {"page_id": {"$in": [str(pid) for pid in page_ids]}}
+        if workspace_id is not None:
+            query["workspace_id"] = str(workspace_id)
+        cursor = self.pages.find(query)
         pages = []
         async for doc in cursor:
             doc["page_id"] = doc.get("page_id") or str(doc.pop("_id"))
@@ -38,8 +48,13 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel):
         pages.sort(key=lambda p: p.index)
         return pages
 
-    async def get_artifact_by_id(self, artifact_id: UUID) -> ArtifactResponse | None:
-        doc = await self.artifacts.find_one({"artifact_id": str(artifact_id)})
+    async def get_artifact_by_id(
+        self, artifact_id: UUID, workspace_id: UUID | None = None
+    ) -> ArtifactResponse | None:
+        query: dict = {"artifact_id": str(artifact_id)}
+        if workspace_id is not None:
+            query["workspace_id"] = str(workspace_id)
+        doc = await self.artifacts.find_one(query)
         if not doc:
             return None
         # Map MongoDB _id (ObjectId) to artifact_id field

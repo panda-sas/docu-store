@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { MoleculeStructure } from "@docu-store/ui";
+import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
@@ -35,30 +36,26 @@ function PageImage({
   artifactId: string;
   pageIndex: number;
 }) {
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
+  const { blobUrl, error } = useAuthBlobUrl(
+    `${API_URL}/artifacts/${artifactId}/pages/${pageIndex}/image`,
+  );
 
   return (
     <div className="flex justify-center">
-      {!loaded && !error && (
+      {!blobUrl && !error && (
         <div className="h-[600px] w-full animate-pulse rounded-lg bg-surface-elevated" />
       )}
       {error ? (
         <div className="flex h-48 w-full items-center justify-center rounded-lg border border-border-default bg-surface-elevated">
           <p className="text-sm text-text-muted">Page image not available</p>
         </div>
-      ) : (
+      ) : blobUrl ? (
         <img
-          src={`${API_URL}/artifacts/${artifactId}/pages/${pageIndex}/image`}
+          src={blobUrl}
           alt={`Page ${pageIndex + 1}`}
-          className={`max-h-[80vh] rounded-lg border border-border-default object-contain ${loaded ? "" : "hidden"}`}
-          onLoad={() => setLoaded(true)}
-          onError={() => {
-            setError(true);
-            setLoaded(true);
-          }}
+          className="max-h-[80vh] rounded-lg border border-border-default object-contain"
         />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -70,19 +67,30 @@ function PagePdfEmbed({
   artifactId: string;
   pageNumber: number;
 }) {
-  const [loaded, setLoaded] = useState(false);
+  const { blobUrl, error } = useAuthBlobUrl(
+    `${API_URL}/artifacts/${artifactId}/pdf`,
+  );
+
+  if (error) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-ds-error/20 bg-ds-error/5">
+        <p className="text-sm text-ds-error">Failed to load PDF</p>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-lg border border-border-default">
-      {!loaded && (
+      {!blobUrl && (
         <div className="h-[80vh] w-full animate-pulse bg-surface-elevated" />
       )}
-      <iframe
-        src={`${API_URL}/artifacts/${artifactId}/pdf#page=${pageNumber}`}
-        className={`h-[80vh] w-full ${loaded ? "" : "hidden"}`}
-        title={`PDF page ${pageNumber}`}
-        onLoad={() => setLoaded(true)}
-      />
+      {blobUrl && (
+        <iframe
+          src={`${blobUrl}#page=${pageNumber}`}
+          className="h-[80vh] w-full"
+          title={`PDF page ${pageNumber}`}
+        />
+      )}
     </div>
   );
 }

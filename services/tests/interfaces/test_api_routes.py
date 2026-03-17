@@ -39,7 +39,7 @@ class FakeArtifactReadModel(ArtifactReadModel):
     def __init__(self, artifacts: dict[UUID, ArtifactResponse]) -> None:
         self._artifacts = artifacts
 
-    async def get_artifact_by_id(self, artifact_id: UUID) -> ArtifactResponse | None:
+    async def get_artifact_by_id(self, artifact_id: UUID, workspace_id: UUID | None = None) -> ArtifactResponse | None:
         return self._artifacts.get(artifact_id)
 
     async def list_artifacts(self, workspace_id: UUID | None = None, skip: int = 0, limit: int = 100) -> list[ArtifactResponse]:
@@ -51,8 +51,11 @@ class FakePageReadModel(PageReadModel):
     def __init__(self, pages: dict[UUID, PageResponse]) -> None:
         self._pages = pages
 
-    async def get_page_by_id(self, page_id: UUID) -> PageResponse | None:
+    async def get_page_by_id(self, page_id: UUID, workspace_id: UUID | None = None) -> PageResponse | None:
         return self._pages.get(page_id)
+
+    async def get_pages_by_id(self, page_ids: list[UUID], workspace_id: UUID | None = None) -> list[PageResponse]:
+        return [self._pages[pid] for pid in page_ids if pid in self._pages]
 
 
 class FakeUseCase:
@@ -145,12 +148,28 @@ class TestArtifactRoutes:
         assert data[0]["artifact_id"] == str(artifact_id)
 
     def test_update_title_mention_validation_error(self, make_client) -> None:
+        artifact_id = uuid4()
+        read_model = FakeArtifactReadModel(
+            {
+                artifact_id: ArtifactResponse(
+                    artifact_id=artifact_id,
+                    source_uri="https://example.com/paper.pdf",
+                    source_filename="paper.pdf",
+                    artifact_type=ArtifactType.RESEARCH_ARTICLE,
+                    mime_type=MimeType.PDF,
+                    storage_location="/storage/paper.pdf",
+                ),
+            },
+        )
         error_result = Failure(AppError("validation", "bad payload"))
         use_case = FakeUseCase(error_result)
-        client = make_client({UpdateTitleMentionUseCase: use_case})
+        client = make_client({
+            UpdateTitleMentionUseCase: use_case,
+            ArtifactReadModel: read_model,
+        })
 
         response = client.patch(
-            f"/artifacts/{uuid4()}/title_mention",
+            f"/artifacts/{artifact_id}/title_mention",
             json={"title": "Title", "confidence": 0.9},
         )
 
@@ -182,13 +201,28 @@ class TestPageRoutes:
         assert data["name"] == "Intro"
 
     def test_update_compound_mentions_path_mismatch(self, make_client) -> None:
-        client = make_client({})
+        path_page_id = uuid4()
+        body_page_id = uuid4()
+        artifact_id = uuid4()
+        read_model = FakePageReadModel(
+            {
+                path_page_id: PageResponse(
+                    page_id=path_page_id,
+                    artifact_id=artifact_id,
+                    name="Page",
+                    index=0,
+                    compound_mentions=[],
+                    tag_mentions=[],
+                ),
+            },
+        )
+        client = make_client({PageReadModel: read_model})
         request = AddCompoundMentionsRequest(
-            page_id=uuid4(),
+            page_id=body_page_id,
             compound_mentions=[],
         )
         response = client.post(
-            f"/pages/{uuid4()}/compound_mentions",
+            f"/pages/{path_page_id}/compound_mentions",
             json=request.model_dump(mode="json"),
         )
 
@@ -203,9 +237,26 @@ class TestPageRoutes:
         assert response.status_code == 404
 
     def test_delete_page_success(self, make_client) -> None:
+        page_id = uuid4()
+        artifact_id = uuid4()
+        read_model = FakePageReadModel(
+            {
+                page_id: PageResponse(
+                    page_id=page_id,
+                    artifact_id=artifact_id,
+                    name="Page",
+                    index=0,
+                    compound_mentions=[],
+                    tag_mentions=[],
+                ),
+            },
+        )
         use_case = FakeUseCase(Success(None))
-        client = make_client({DeletePageUseCase: use_case})
+        client = make_client({
+            DeletePageUseCase: use_case,
+            PageReadModel: read_model,
+        })
 
-        response = client.delete(f"/pages/{uuid4()}")
+        response = client.delete(f"/pages/{page_id}")
 
         assert response.status_code == 204

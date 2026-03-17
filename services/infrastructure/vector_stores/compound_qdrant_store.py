@@ -201,6 +201,7 @@ class CompoundQdrantStore(CompoundVectorStore):
         limit: int = 10,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
     ) -> list[CompoundSearchResult]:
         """Find compounds by SMILES structural similarity."""
@@ -212,6 +213,13 @@ class CompoundQdrantStore(CompoundVectorStore):
                 models.FieldCondition(
                     key="artifact_id",
                     match=models.MatchValue(value=str(artifact_id_filter)),
+                ),
+            )
+        if allowed_artifact_ids is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="artifact_id",
+                    match=models.MatchAny(any=[str(aid) for aid in allowed_artifact_ids]),
                 ),
             )
         if workspace_id:

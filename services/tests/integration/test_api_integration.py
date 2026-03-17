@@ -8,6 +8,10 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
+from application.dtos.artifact_dtos import ArtifactResponse
+from application.dtos.page_dtos import PageResponse
+from application.ports.repositories.artifact_read_models import ArtifactReadModel
+from application.ports.repositories.page_read_models import PageReadModel
 from application.use_cases.artifact_use_cases import (
     CreateArtifactUseCase,
     UpdateTitleMentionUseCase,
@@ -28,6 +32,58 @@ class SimpleContainer:
 
     def __getitem__(self, key: type) -> object:
         return self._mapping[key]
+
+
+class RepoBackedArtifactReadModel:
+    """Thin read model adapter that wraps MockArtifactRepository for integration tests."""
+
+    def __init__(self, repo: MockArtifactRepository) -> None:
+        self._repo = repo
+
+    async def get_artifact_by_id(self, artifact_id: UUID, workspace_id: UUID | None = None) -> ArtifactResponse | None:
+        try:
+            a = self._repo.get_by_id(artifact_id)
+        except Exception:
+            return None
+        return ArtifactResponse(
+            artifact_id=a.id,
+            source_uri=a.source_uri,
+            source_filename=a.source_filename,
+            artifact_type=a.artifact_type,
+            mime_type=a.mime_type,
+            storage_location=a.storage_location,
+            workspace_id=a.workspace_id,
+            owner_id=a.owner_id,
+        )
+
+    async def list_artifacts(self, workspace_id: UUID | None = None, skip: int = 0, limit: int = 100) -> list:
+        return []
+
+
+class RepoBackedPageReadModel:
+    """Thin read model adapter that wraps MockPageRepository for integration tests."""
+
+    def __init__(self, repo: MockPageRepository) -> None:
+        self._repo = repo
+
+    async def get_page_by_id(self, page_id: UUID, workspace_id: UUID | None = None) -> PageResponse | None:
+        try:
+            p = self._repo.get_by_id(page_id)
+        except Exception:
+            return None
+        return PageResponse(
+            page_id=p.id,
+            artifact_id=p.artifact_id,
+            name=p.name,
+            index=p.index,
+            compound_mentions=[],
+            tag_mentions=[],
+            workspace_id=p.workspace_id,
+            owner_id=p.owner_id,
+        )
+
+    async def get_pages_by_id(self, page_ids: list[UUID], workspace_id: UUID | None = None) -> list:
+        return []
 
 
 def _strip_authz_middleware() -> None:
@@ -61,6 +117,8 @@ def _build_use_cases() -> tuple[dict[type, object], MockArtifactRepository, Mock
         UpdateTitleMentionUseCase: UpdateTitleMentionUseCase(artifact_repo),
         CreatePageUseCase: CreatePageUseCase(page_repo, artifact_repo),
         AddCompoundMentionsUseCase: AddCompoundMentionsUseCase(page_repo),
+        ArtifactReadModel: RepoBackedArtifactReadModel(artifact_repo),
+        PageReadModel: RepoBackedPageReadModel(page_repo),
     }
 
     return use_cases, artifact_repo, page_repo

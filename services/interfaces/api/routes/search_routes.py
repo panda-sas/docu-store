@@ -26,11 +26,29 @@ from application.use_cases.search_use_cases import HierarchicalSearchUseCase, Se
 from application.use_cases.smiles_search_use_cases import SearchSimilarCompoundsUseCase
 from infrastructure.embeddings.chemberta_generator import ChemBertaEmbeddingGenerator
 from interfaces.api.middleware import handle_use_case_errors
+from interfaces.api.routes.helpers import require_workspace_page
 from interfaces.dependencies import get_auth, get_container
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/search", tags=["search"])
+
+
+async def _get_allowed_artifact_ids(auth: RequestAuth) -> list[UUID] | None:
+    """Get artifact IDs the user can access, or None for full access.
+
+    Calls Sentinel's accessible() endpoint. Returns None (no filtering)
+    when the user has full access or when Sentinel is unavailable (graceful
+    degradation to workspace-only filtering).
+    """
+    try:
+        ids, has_full_access = await auth.accessible("artifact", "view")
+        if has_full_access:
+            return None
+        return ids
+    except Exception:
+        logger.warning("permission_accessible_failed", exc_info=True)
+        return None
 
 
 @router.post("/pages", status_code=status.HTTP_200_OK)
@@ -63,9 +81,12 @@ async def search_pages(
     """
     logger.info("search_request", query_length=len(request.query_text), limit=request.limit)
 
+    allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
+
     use_case = container[SearchSimilarPagesUseCase]
-    # The @handle_use_case_errors decorator will handle unwrapping the result
-    return await use_case.execute(request, workspace_id=auth.workspace_id)
+    return await use_case.execute(
+        request, workspace_id=auth.workspace_id, allowed_artifact_ids=allowed_artifact_ids,
+    )
 
 
 @router.post("/pages/{page_id}/generate-embedding", status_code=status.HTTP_202_ACCEPTED)
@@ -93,6 +114,7 @@ async def generate_embedding_for_page(
     """
     logger.info("manual_embedding_trigger", page_id=str(page_id), force=force_regenerate)
 
+    await require_workspace_page(page_id, auth, container)
     orchestrator = container[WorkflowOrchestrator]
 
     try:
@@ -134,8 +156,13 @@ async def search_compounds(
 
     """
     logger.info("compound_search_request", query_smiles=request.query_smiles[:80])
+
+    allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
+
     use_case = container[SearchSimilarCompoundsUseCase]
-    return await use_case.execute(request, workspace_id=auth.workspace_id)
+    return await use_case.execute(
+        request, workspace_id=auth.workspace_id, allowed_artifact_ids=allowed_artifact_ids,
+    )
 
 
 @router.post("/summaries", status_code=status.HTTP_200_OK)
@@ -164,8 +191,12 @@ async def search_summaries(
         ```
 
     """
+    allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
+
     use_case = container[SearchSummariesUseCase]
-    return await use_case.execute(request=request, workspace_id=auth.workspace_id)
+    return await use_case.execute(
+        request=request, workspace_id=auth.workspace_id, allowed_artifact_ids=allowed_artifact_ids,
+    )
 
 
 @router.post("/hierarchical", status_code=status.HTTP_200_OK)
@@ -201,8 +232,12 @@ async def hierarchical_search(
         ```
 
     """
+    allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
+
     use_case = container[HierarchicalSearchUseCase]
-    result = await use_case.execute(request=request, workspace_id=auth.workspace_id)
+    result = await use_case.execute(
+        request=request, workspace_id=auth.workspace_id, allowed_artifact_ids=allowed_artifact_ids,
+    )
 
     return result.unwrap()
 

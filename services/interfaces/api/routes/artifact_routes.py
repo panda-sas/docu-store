@@ -28,7 +28,9 @@ from application.use_cases.artifact_use_cases import (
 from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.summary_candidate import SummaryCandidate
 from domain.value_objects.title_mention import TitleMention
+from application.dtos.permission_dtos import ShareResourceRequest, UpdateVisibilityRequest
 from interfaces.api.middleware import handle_use_case_errors
+from interfaces.api.routes.helpers import require_artifact_permission, require_workspace_artifact
 from interfaces.dependencies import get_auth, get_container
 
 logger = structlog.get_logger()
@@ -57,17 +59,8 @@ async def get_artifact(
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Retrieve an artifact by ID from the read model."""
-    read_repository = container[ArtifactReadModel]
-    artifact = await read_repository.get_artifact_by_id(artifact_id)
-
-    if artifact is None or (
-        artifact.workspace_id is not None and artifact.workspace_id != auth.workspace_id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Artifact not found",
-        )
-
+    artifact = await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "view")
     return artifact
 
 
@@ -122,6 +115,8 @@ async def add_pages(
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Add pages to an artifact."""
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
     use_case = container[AddPagesUseCase]
     return await use_case.execute(artifact_id=artifact_id, page_ids=page_ids, auth=auth)
 
@@ -135,6 +130,8 @@ async def remove_pages(
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Remove pages from an artifact."""
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
     use_case = container[RemovePagesUseCase]
     return await use_case.execute(artifact_id=artifact_id, page_ids=page_ids, auth=auth)
 
@@ -148,6 +145,8 @@ async def update_title_mention(
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Update title mention for an artifact."""
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
     logger.info(
         "update_title_mention_endpoint_called",
         artifact_id=str(artifact_id),
@@ -180,6 +179,8 @@ async def update_summary_candidate(
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Update summary candidate for an artifact."""
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
     use_case = container[UpdateSummaryCandidateUseCase]
     return await use_case.execute(
         artifact_id=artifact_id,
@@ -197,6 +198,8 @@ async def update_tags(
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
     """Update tags for an artifact."""
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
     use_case = container[UpdateTagsUseCase]
     return await use_case.execute(artifact_id=artifact_id, tags=tags, auth=auth)
 
@@ -209,6 +212,8 @@ async def delete_artifact(
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> None:
     """Delete an artifact and all its associated pages."""
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
     use_case = container[DeleteArtifactUseCase]
     await use_case.execute(artifact_id=artifact_id, auth=auth)
 
@@ -228,6 +233,8 @@ async def trigger_artifact_summarization(
     precondition — useful for re-running after manual corrections or partial ingestion.
     Locked summaries (human corrections) are preserved by the use case.
     """
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
     orchestrator = container[WorkflowOrchestrator]
     await orchestrator.start_artifact_summarization_workflow(artifact_id=artifact_id)
     return WorkflowStartedResponse(workflow_id=f"artifact-summarization-{artifact_id}")
@@ -244,14 +251,8 @@ async def get_artifact_summary(
     Returns the summary_candidate field. Returns 404 if the artifact has no
     summary yet.
     """
-    read_repository = container[ArtifactReadModel]
-    artifact = await read_repository.get_artifact_by_id(artifact_id)
-
-    if artifact is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Artifact not found",
-        )
+    artifact = await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "view")
 
     if artifact.summary_candidate is None:
         raise HTTPException(
@@ -280,6 +281,8 @@ async def get_artifact_workflows(
     Proxies to Temporal to return the current status of all workflows
     associated with the given artifact.
     """
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "view")
     orchestrator = container[WorkflowOrchestrator]
     workflows = await orchestrator.get_artifact_workflow_statuses(artifact_id)
     return {"artifact_id": str(artifact_id), "workflows": workflows}
@@ -296,14 +299,8 @@ async def stream_artifact_pdf(
     Returns the raw PDF binary from blob storage. The artifact must exist
     and have a valid storage_location.
     """
-    read_repository = container[ArtifactReadModel]
-    artifact = await read_repository.get_artifact_by_id(artifact_id)
-
-    if artifact is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Artifact not found",
-        )
+    artifact = await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "view")
 
     blob_store = container[BlobStore]
 
@@ -337,6 +334,8 @@ async def stream_page_image(
     Returns the pre-rendered page image from blob storage. Page images
     are generated during PDF ingestion.
     """
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "view")
     blob_store = container[BlobStore]
     image_key = f"artifacts/{artifact_id}/pages/{page_index}.png"
 
@@ -352,3 +351,81 @@ async def stream_page_image(
         BytesIO(image_bytes),
         media_type="image/png",
     )
+
+
+# ---------------------------------------------------------------------------
+# Entity-level permission endpoints (sharing, visibility)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{artifact_id}/permissions", status_code=status.HTTP_200_OK)
+async def get_artifact_permissions(
+    artifact_id: UUID,
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+) -> dict:
+    """Get the permission ACL for an artifact, including current shares."""
+    await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "view")
+    return await auth.get_resource_acl("artifact", artifact_id)
+
+
+@router.post("/{artifact_id}/shares", status_code=status.HTTP_201_CREATED)
+async def share_artifact(
+    artifact_id: UUID,
+    request: ShareResourceRequest,
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+) -> dict:
+    """Share an artifact with a user or group.
+
+    Only the artifact owner or workspace admin can share.
+    Sentinel enforces this server-side; the route also fast-fails.
+    """
+    artifact = await require_workspace_artifact(artifact_id, auth, container)
+    if artifact.owner_id != auth.user_id and not auth.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner or an admin can share this artifact",
+        )
+    return await auth.share(
+        "artifact", artifact_id,
+        request.grantee_type, request.grantee_id, request.permission,
+    )
+
+
+@router.delete("/{artifact_id}/shares", status_code=status.HTTP_200_OK)
+async def revoke_artifact_share(
+    artifact_id: UUID,
+    request: ShareResourceRequest,
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+) -> dict:
+    """Revoke a share on an artifact."""
+    artifact = await require_workspace_artifact(artifact_id, auth, container)
+    if artifact.owner_id != auth.user_id and not auth.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner or an admin can revoke shares",
+        )
+    return await auth.unshare(
+        "artifact", artifact_id,
+        request.grantee_type, request.grantee_id, request.permission,
+    )
+
+
+@router.patch("/{artifact_id}/visibility", status_code=status.HTTP_200_OK)
+async def update_artifact_visibility(
+    artifact_id: UUID,
+    request: UpdateVisibilityRequest,
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+) -> dict:
+    """Toggle artifact visibility between private and workspace."""
+    artifact = await require_workspace_artifact(artifact_id, auth, container)
+    if artifact.owner_id != auth.user_id and not auth.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner or an admin can change visibility",
+        )
+    return await auth.update_visibility("artifact", artifact_id, request.visibility)

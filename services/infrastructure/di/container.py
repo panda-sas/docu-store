@@ -8,6 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from application.dtos.pdf_dtos import PDFContent
 from application.ports.blob_store import BlobStore
+from application.ports.permission_registrar import PermissionRegistrar
 from application.ports.compound_vector_store import CompoundVectorStore
 from application.ports.cser_service import CserService
 from application.ports.embedding_generator import EmbeddingGenerator
@@ -67,6 +68,9 @@ from application.use_cases.summary_embedding_use_cases import (
     EmbedPageSummaryUseCase,
 )
 from application.workflow_use_cases.log_artifcat_sample_use_case import LogArtifactSampleUseCase
+from application.workflow_use_cases.trigger_resource_registration_use_case import (
+    TriggerResourceRegistrationUseCase,
+)
 from application.workflow_use_cases.trigger_artifact_summarization_use_case import (
     TriggerArtifactSummarizationUseCase,
 )
@@ -100,6 +104,7 @@ from domain.value_objects.summary_candidate import SummaryCandidate
 from domain.value_objects.tag_mention import TagMention
 from domain.value_objects.text_mention import TextMention
 from domain.value_objects.title_mention import TitleMention
+from infrastructure.auth import sentinel
 from infrastructure.blob_stores.fsspec_blob_store import FsspecBlobStore
 from infrastructure.chemistry.rdkit_smiles_validator import RdkitSmilesValidator
 from infrastructure.config import settings
@@ -116,6 +121,7 @@ from infrastructure.kafka.kafka_external_event_streamer import KafkaExternalEven
 from infrastructure.kafka.kafka_publisher import KafkaPublisher
 from infrastructure.llm.factory import create_llm_client, create_prompt_repository
 from infrastructure.ner.structflo_ner_extractor import StructfloNERExtractor
+from infrastructure.permissions.sentinel_permission_registrar import SentinelPermissionRegistrar
 from infrastructure.read_repositories.mongo_read_model_materializer import (
     MongoReadModelMaterializer,
 )
@@ -221,6 +227,12 @@ def create_container() -> Container:  # noqa: PLR0915
 
     # Register Pipeline Orchestrator (Temporal)
     container[WorkflowOrchestrator] = lambda _: TemporalWorkflowOrchestrator()
+
+    # Permission Registrar (Sentinel entity-level permissions)
+    container[PermissionRegistrar] = lambda _: SentinelPermissionRegistrar(sentinel.permissions)
+    container[TriggerResourceRegistrationUseCase] = lambda c: TriggerResourceRegistrationUseCase(
+        permission_registrar=c[PermissionRegistrar],
+    )
 
     # Register PDF Service with BlobStore injected
     container[PDFService] = lambda c: PyMuPDFService(blob_store=c[BlobStore])

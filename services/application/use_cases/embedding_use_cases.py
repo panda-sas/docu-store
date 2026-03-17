@@ -195,7 +195,10 @@ class SearchSimilarPagesUseCase:
         self.artifact_read_model = artifact_read_model
 
     async def execute(
-        self, request: SearchRequest, workspace_id: UUID | None = None,
+        self,
+        request: SearchRequest,
+        workspace_id: UUID | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
     ) -> Result[SearchResponse, AppError]:
         """Search for pages similar to the query text.
 
@@ -224,6 +227,7 @@ class SearchSimilarPagesUseCase:
                 limit=request.limit * 3,  # Over-fetch to handle chunk dedup
                 artifact_id_filter=request.artifact_id,
                 score_threshold=request.score_threshold,
+                allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
             )
 

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import type { components } from "@docu-store/api-client";
+import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { WorkflowStatusBadge } from "@/components/WorkflowStatusBadge";
@@ -36,19 +37,30 @@ interface WorkflowMap {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 function PdfEmbed({ artifactId }: { artifactId: string }) {
-  const [loaded, setLoaded] = useState(false);
+  const { blobUrl, error } = useAuthBlobUrl(
+    `${API_URL}/artifacts/${artifactId}/pdf`,
+  );
+
+  if (error) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-ds-error/20 bg-ds-error/5">
+        <p className="text-sm text-ds-error">Failed to load PDF</p>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-lg border border-border-default">
-      {!loaded && (
+      {!blobUrl && (
         <div className="h-[80vh] w-full animate-pulse bg-surface-elevated" />
       )}
-      <iframe
-        src={`${API_URL}/artifacts/${artifactId}/pdf`}
-        className={`h-[80vh] w-full ${loaded ? "" : "hidden"}`}
-        title="PDF Viewer"
-        onLoad={() => setLoaded(true)}
-      />
+      {blobUrl && (
+        <iframe
+          src={blobUrl}
+          className="h-[80vh] w-full"
+          title="PDF Viewer"
+        />
+      )}
     </div>
   );
 }
