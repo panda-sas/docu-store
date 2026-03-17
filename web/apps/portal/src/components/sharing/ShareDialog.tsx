@@ -16,7 +16,8 @@ import {
   Users,
   User,
 } from "lucide-react";
-import type { ResourceShare, WorkspaceMember } from "@docu-store/types";
+import type { ResourceShare } from "@docu-store/types";
+import type { WorkspaceMember } from "@sentinel-auth/js";
 import {
   useArtifactPermissions,
   useShareArtifact,
@@ -59,13 +60,7 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
       return;
     }
     try {
-      // searchMembers() added in @sentinel-auth/js 0.9.7
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const client = getAuthzClient() as any;
-      const results = (await client.searchMembers(
-        event.query,
-        10,
-      )) as WorkspaceMember[];
+      const results = await getAuthzClient().searchMembers(event.query, 10);
       setSuggestions(results);
     } catch {
       setSuggestions([]);
