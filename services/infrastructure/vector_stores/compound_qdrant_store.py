@@ -84,6 +84,11 @@ class CompoundQdrantStore(CompoundVectorStore):
                 field_name="canonical_smiles",
                 field_schema=models.PayloadSchemaType.KEYWORD,
             )
+            await client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="workspace_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
 
             logger.info(
                 "compound_collection_created",
@@ -99,13 +104,14 @@ class CompoundQdrantStore(CompoundVectorStore):
             )
             raise
 
-    async def upsert_compound_embeddings(
+    async def upsert_compound_embeddings(  # noqa: PLR0913
         self,
         page_id: UUID,
         artifact_id: UUID,
         page_index: int,
         compounds: list[dict],
         embeddings: list[TextEmbedding],
+        workspace_id: UUID | None = None,
     ) -> None:
         """Delete existing compound points for the page, then insert the new ones."""
         client = await self._get_client()
@@ -129,6 +135,7 @@ class CompoundQdrantStore(CompoundVectorStore):
                 "embedding_id": str(embedding.embedding_id),
                 "model_name": embedding.model_name,
                 "generated_at": embedding.generated_at.isoformat(),
+                "workspace_id": str(workspace_id) if workspace_id else None,
             }
 
             points.append(
@@ -194,20 +201,35 @@ class CompoundQdrantStore(CompoundVectorStore):
         limit: int = 10,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[CompoundSearchResult]:
         """Find compounds by SMILES structural similarity."""
         client = await self._get_client()
 
-        query_filter = None
+        must_conditions = []
         if artifact_id_filter:
-            query_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="artifact_id",
-                        match=models.MatchValue(value=str(artifact_id_filter)),
-                    ),
-                ],
+            must_conditions.append(
+                models.FieldCondition(
+                    key="artifact_id",
+                    match=models.MatchValue(value=str(artifact_id_filter)),
+                ),
             )
+        if allowed_artifact_ids is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="artifact_id",
+                    match=models.MatchAny(any=[str(aid) for aid in allowed_artifact_ids]),
+                ),
+            )
+        if workspace_id:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="workspace_id",
+                    match=models.MatchValue(value=str(workspace_id)),
+                ),
+            )
+        query_filter = models.Filter(must=must_conditions) if must_conditions else None
 
         try:
             search_result = await client.query_points(

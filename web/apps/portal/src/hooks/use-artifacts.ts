@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@docu-store/api-client";
 import { queryKeys } from "@/lib/query-keys";
+import { getAuthzClient } from "@/lib/authz-client";
 
 /** Shape of the workflow endpoint response (untyped in OpenAPI schema) */
 interface WorkflowMap {
@@ -98,9 +99,12 @@ export function useUploadArtifact() {
       formData.append("artifact_type", artifactType);
       if (sourceUri) formData.append("source_uri", sourceUri);
 
+      const authHeaders = getAuthzClient().getHeaders();
+
       const res = await fetch(`${baseUrl}/artifacts/upload`, {
         method: "POST",
         body: formData,
+        headers: authHeaders,
       });
 
       if (!res.ok) {

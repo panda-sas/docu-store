@@ -25,4 +25,6 @@ class PageMapper:
             tag_mentions=page.tag_mentions,
             text_mention=page.text_mention,
             summary_candidate=page.summary_candidate,
+            workspace_id=page.workspace_id,
+            owner_id=page.owner_id,
         )

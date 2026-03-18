@@ -23,6 +23,8 @@ class Artifact(Aggregate):
         mime_type: MimeType,
         storage_location: str,
         artifact_id: UUID | None = None,
+        workspace_id: UUID | None = None,
+        owner_id: UUID | None = None,
     ) -> "Artifact":
         """Create a new Artifact aggregate (Factory Method)."""
         kwargs = {
@@ -31,6 +33,8 @@ class Artifact(Aggregate):
             "artifact_type": artifact_type,
             "mime_type": mime_type,
             "storage_location": storage_location,
+            "workspace_id": workspace_id,
+            "owner_id": owner_id,
         }
         if artifact_id is not None:
             kwargs["originator_id"] = artifact_id
@@ -44,15 +48,19 @@ class Artifact(Aggregate):
         artifact_type: ArtifactType
         mime_type: MimeType
         storage_location: str
+        workspace_id: UUID | None = None
+        owner_id: UUID | None = None
 
     @event(Created)  # Links this handler to the Created event class above
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         source_uri: str | None,
         source_filename: str | None,
         artifact_type: ArtifactType,
         mime_type: MimeType,
         storage_location: str,
+        workspace_id: UUID | None = None,
+        owner_id: UUID | None = None,
     ) -> None:
         # Strip whitespace BEFORE validation to catch whitespace-only strings
         if source_uri is not None:
@@ -76,6 +84,8 @@ class Artifact(Aggregate):
         self.artifact_type = artifact_type
         self.mime_type = mime_type
         self.storage_location = storage_location
+        self.workspace_id = workspace_id
+        self.owner_id = owner_id
         self._pages: list[UUID] = []
         self.title_mention: TitleMention | None = None
         self.summary_candidate: SummaryCandidate | None = None

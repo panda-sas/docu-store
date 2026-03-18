@@ -1,6 +1,20 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { FlaskConical } from "lucide-react";
+import { useAuthz } from "@sentinel-auth/react";
 
 export default function LoginPage() {
+  const { login, isAuthenticated, isLoading } = useAuthz();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-sunken">
       <div className="w-full max-w-sm rounded-xl border border-border-default bg-surface-elevated p-8 shadow-ds">
@@ -18,27 +32,27 @@ export default function LoginPage() {
 
         <div className="mt-8 space-y-3">
           <button
+            onClick={() => login("google")}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-default bg-surface px-4 py-2.5 text-sm text-text-primary transition-colors hover:bg-accent-light hover:text-accent-text"
+          >
+            Continue with Google
+          </button>
+          <button
+            onClick={() => login("github")}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-default bg-surface px-4 py-2.5 text-sm text-text-primary transition-colors hover:bg-accent-light hover:text-accent-text"
+          >
+            Continue with GitHub
+          </button>
+          <button
             disabled
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-default bg-surface px-4 py-2.5 text-sm text-text-muted transition-colors"
           >
             Continue with Entra ID
           </button>
-          <button
-            disabled
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-default bg-surface px-4 py-2.5 text-sm text-text-muted transition-colors"
-          >
-            Continue with Google
-          </button>
-          <button
-            disabled
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-default bg-surface px-4 py-2.5 text-sm text-text-muted transition-colors"
-          >
-            Continue with GitHub
-          </button>
         </div>
 
         <p className="mt-6 text-center text-xs text-text-muted">
-          Auth providers will be configured in a future release
+          Entra ID support coming soon
         </p>
       </div>
     </div>

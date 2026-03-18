@@ -48,6 +48,8 @@ class SearchSimilarCompoundsUseCase:
     async def execute(
         self,
         request: CompoundSearchRequest,
+        workspace_id: UUID | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
     ) -> Result[CompoundSearchResponse, AppError]:
         try:
             logger.info(
@@ -77,6 +79,8 @@ class SearchSimilarCompoundsUseCase:
                 limit=request.limit,
                 artifact_id_filter=request.artifact_id,
                 score_threshold=request.score_threshold,
+                allowed_artifact_ids=allowed_artifact_ids,
+                workspace_id=workspace_id,
             )
 
             # 5. Enrich with artifact metadata

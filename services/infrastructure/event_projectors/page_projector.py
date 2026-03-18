@@ -23,6 +23,8 @@ class PageProjector:
                 "name": event.name,
                 "artifact_id": str(event.artifact_id),
                 "index": event.index,
+                "workspace_id": str(event.workspace_id) if event.workspace_id else None,
+                "owner_id": str(event.owner_id) if event.owner_id else None,
                 "compound_mentions": [],
                 "tag_mentions": [],
                 "text_mention": None,

@@ -25,4 +25,6 @@ class ArtifactMapper:
             title_mention=artifact.title_mention,
             tags=list(artifact.tags),
             summary_candidate=artifact.summary_candidate,
+            workspace_id=artifact.workspace_id,
+            owner_id=artifact.owner_id,
         )

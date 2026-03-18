@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import type { components } from "@docu-store/api-client";
+import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { WorkflowStatusBadge } from "@/components/WorkflowStatusBadge";
@@ -26,6 +27,8 @@ import {
   useArtifactWorkflows,
   useDeleteArtifact,
 } from "@/hooks/use-artifacts";
+import { ShareDialog } from "@/components/sharing/ShareDialog";
+import { useSession } from "@/lib/auth";
 
 type PageResponse = components["schemas"]["PageResponse"];
 
@@ -36,19 +39,30 @@ interface WorkflowMap {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 function PdfEmbed({ artifactId }: { artifactId: string }) {
-  const [loaded, setLoaded] = useState(false);
+  const { blobUrl, error } = useAuthBlobUrl(
+    `${API_URL}/artifacts/${artifactId}/pdf`,
+  );
+
+  if (error) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-ds-error/20 bg-ds-error/5">
+        <p className="text-sm text-ds-error">Failed to load PDF</p>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-lg border border-border-default">
-      {!loaded && (
+      {!blobUrl && (
         <div className="h-[80vh] w-full animate-pulse bg-surface-elevated" />
       )}
-      <iframe
-        src={`${API_URL}/artifacts/${artifactId}/pdf`}
-        className={`h-[80vh] w-full ${loaded ? "" : "hidden"}`}
-        title="PDF Viewer"
-        onLoad={() => setLoaded(true)}
-      />
+      {blobUrl && (
+        <iframe
+          src={blobUrl}
+          className="h-[80vh] w-full"
+          title="PDF Viewer"
+        />
+      )}
     </div>
   );
 }
@@ -57,9 +71,13 @@ export default function ArtifactDetailPage() {
   const { workspace, id } = useParams<{ workspace: string; id: string }>();
   const router = useRouter();
   const toast = useRef<Toast>(null);
+  const { user } = useSession();
   const { data: artifact, isLoading, error } = useArtifact(id);
   const { data: workflowData } = useArtifactWorkflows(id);
   const deleteMutation = useDeleteArtifact();
+
+  const isOwnerOrAdmin =
+    !!artifact?.owner_id && artifact.owner_id === user.id;
 
   if (isLoading) {
     return (
@@ -140,14 +158,20 @@ export default function ArtifactDetailPage() {
         title={title}
         subtitle={`${artifact.artifact_type.replace(/_/g, " ")} · ${pages.length} pages`}
         actions={
-          <button
-            onClick={handleDelete}
-            disabled={deleteMutation.isPending}
-            className="flex items-center gap-2 rounded-lg border border-ds-error/20 px-3 py-2 text-sm text-ds-error transition-colors hover:bg-ds-error/5"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
+          <div className="flex items-center gap-2">
+            <ShareDialog
+              artifactId={id}
+              isOwnerOrAdmin={isOwnerOrAdmin}
+            />
+            <button
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="flex items-center gap-2 rounded-lg border border-ds-error/20 px-3 py-2 text-sm text-ds-error transition-colors hover:bg-ds-error/5"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          </div>
         }
       />
 

@@ -42,13 +42,14 @@ class CompoundVectorStore(Protocol):
         """
         ...
 
-    async def upsert_compound_embeddings(
+    async def upsert_compound_embeddings(  # noqa: PLR0913
         self,
         page_id: UUID,
         artifact_id: UUID,
         page_index: int,
         compounds: list[dict],
         embeddings: list[TextEmbedding],
+        workspace_id: UUID | None = None,
     ) -> None:
         """Store or replace all compound embeddings for a page.
 
@@ -79,6 +80,8 @@ class CompoundVectorStore(Protocol):
         limit: int = 10,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[CompoundSearchResult]:
         """Find compounds structurally similar to the query SMILES embedding.
 

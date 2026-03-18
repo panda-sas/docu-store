@@ -82,6 +82,7 @@ class SummaryQdrantStore(SummaryVectorStore):
                 ("entity_type", models.PayloadSchemaType.KEYWORD),
                 ("entity_id", models.PayloadSchemaType.KEYWORD),
                 ("artifact_id", models.PayloadSchemaType.KEYWORD),
+                ("workspace_id", models.PayloadSchemaType.KEYWORD),
             ]:
                 await client.create_payload_index(
                     collection_name=self.collection_name,
@@ -111,6 +112,7 @@ class SummaryQdrantStore(SummaryVectorStore):
         summary_text: str,
         artifact_title: str | None = None,
         page_index: int = 0,
+        workspace_id: UUID | None = None,
     ) -> None:
         client = await self._get_client()
 
@@ -125,6 +127,7 @@ class SummaryQdrantStore(SummaryVectorStore):
             "model_name": embedding.model_name,
             "dimensions": embedding.dimensions,
             "generated_at": embedding.generated_at.isoformat(),
+            "workspace_id": str(workspace_id) if workspace_id else None,
         }
 
         try:
@@ -145,13 +148,14 @@ class SummaryQdrantStore(SummaryVectorStore):
             )
             raise
 
-    async def upsert_artifact_summary_embedding(
+    async def upsert_artifact_summary_embedding(  # noqa: PLR0913
         self,
         artifact_id: UUID,
         embedding: TextEmbedding,
         summary_text: str,
         artifact_title: str | None = None,
         page_count: int = 0,
+        workspace_id: UUID | None = None,
     ) -> None:
         client = await self._get_client()
 
@@ -166,6 +170,7 @@ class SummaryQdrantStore(SummaryVectorStore):
             "model_name": embedding.model_name,
             "dimensions": embedding.dimensions,
             "generated_at": embedding.generated_at.isoformat(),
+            "workspace_id": str(workspace_id) if workspace_id else None,
         }
 
         try:
@@ -215,13 +220,15 @@ class SummaryQdrantStore(SummaryVectorStore):
                 error=str(e),
             )
 
-    async def search_summaries(
+    async def search_summaries(  # noqa: PLR0913
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
         entity_type_filter: Literal["page", "artifact"] | None = None,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[SummarySearchResult]:
         client = await self._get_client()
 
@@ -239,6 +246,20 @@ class SummaryQdrantStore(SummaryVectorStore):
                 models.FieldCondition(
                     key="artifact_id",
                     match=models.MatchValue(value=str(artifact_id_filter)),
+                ),
+            )
+        if allowed_artifact_ids is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="artifact_id",
+                    match=models.MatchAny(any=[str(aid) for aid in allowed_artifact_ids]),
+                ),
+            )
+        if workspace_id:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="workspace_id",
+                    match=models.MatchValue(value=str(workspace_id)),
                 ),
             )
 

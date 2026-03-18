@@ -71,6 +71,7 @@ class EmbedPageSummaryUseCase:
                 summary_text=summary_text,
                 artifact_title=artifact_title,
                 page_index=page.index,
+                workspace_id=page.workspace_id,
             )
 
             logger.info(
@@ -135,6 +136,7 @@ class EmbedArtifactSummaryUseCase:
                 summary_text=summary_text,
                 artifact_title=artifact_title,
                 page_count=page_count,
+                workspace_id=artifact.workspace_id,
             )
 
             logger.info(

@@ -113,12 +113,18 @@ class GeneratePageEmbeddingUseCase:
                 page_id=str(page_id),
                 chunk_count=len(embeddings),
             )
+            # Pass workspace_id through metadata for tenant isolation in Qdrant
+            upsert_metadata = {}
+            if page.workspace_id:
+                upsert_metadata["workspace_id"] = str(page.workspace_id)
+
             await self.vector_store.upsert_page_chunk_embeddings(
                 page_id=page_id,
                 artifact_id=page.artifact_id,
                 embeddings=embeddings,
                 page_index=page.index,
                 chunk_count=len(chunks),
+                metadata=upsert_metadata or None,
             )
 
             # 7. Update domain aggregate with metadata (using first embedding as reference)
@@ -188,7 +194,12 @@ class SearchSimilarPagesUseCase:
         self.page_read_model = page_read_model
         self.artifact_read_model = artifact_read_model
 
-    async def execute(self, request: SearchRequest) -> Result[SearchResponse, AppError]:
+    async def execute(
+        self,
+        request: SearchRequest,
+        workspace_id: UUID | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+    ) -> Result[SearchResponse, AppError]:
         """Search for pages similar to the query text.
 
         Args:
@@ -216,6 +227,8 @@ class SearchSimilarPagesUseCase:
                 limit=request.limit * 3,  # Over-fetch to handle chunk dedup
                 artifact_id_filter=request.artifact_id,
                 score_threshold=request.score_threshold,
+                allowed_artifact_ids=allowed_artifact_ids,
+                workspace_id=workspace_id,
             )
 
             # 3. Deduplicate by page_id (keep highest-scoring chunk per page)

@@ -192,8 +192,10 @@ class MockVectorStore:
         limit: int = 10,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[PageSearchResult]:
-        self.search_calls.append({"limit": limit, "filter": artifact_id_filter})
+        self.search_calls.append({"limit": limit, "filter": artifact_id_filter, "allowed_artifact_ids": allowed_artifact_ids, "workspace_id": workspace_id})
         return self._search_results
 
     async def get_collection_info(self) -> dict:
@@ -216,13 +218,22 @@ class MockCompoundVectorStore:
         page_index: int,
         compounds: list[dict],
         embeddings: list[TextEmbedding],
+        workspace_id: UUID | None = None,
     ) -> None:
-        self.upsert_calls.append({"page_id": page_id, "count": len(embeddings)})
+        self.upsert_calls.append({"page_id": page_id, "count": len(embeddings), "workspace_id": workspace_id})
 
     async def delete_compound_embeddings_for_page(self, page_id: UUID) -> None:
         pass
 
-    async def search_similar_compounds(self, *args: Any, **kwargs: Any) -> list:
+    async def search_similar_compounds(
+        self,
+        query_embedding: TextEmbedding,
+        limit: int = 10,
+        artifact_id_filter: UUID | None = None,
+        score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
+    ) -> list:
         return []
 
     async def get_compound_collection_info(self) -> dict:
@@ -387,8 +398,11 @@ class MockPageReadModel:
     def __init__(self, pages: dict[UUID, Any] | None = None) -> None:
         self._pages = pages or {}
 
-    async def get_page_by_id(self, page_id: UUID) -> Any:
+    async def get_page_by_id(self, page_id: UUID, workspace_id: UUID | None = None) -> Any:
         return self._pages.get(page_id)
+
+    async def get_pages_by_id(self, page_ids: list[UUID], workspace_id: UUID | None = None) -> list:
+        return [self._pages[pid] for pid in page_ids if pid in self._pages]
 
     async def list_pages(self, *args: Any, **kwargs: Any) -> list:
         return list(self._pages.values())
@@ -400,7 +414,7 @@ class MockArtifactReadModel:
     def __init__(self, artifacts: dict[UUID, Any] | None = None) -> None:
         self._artifacts = artifacts or {}
 
-    async def get_artifact_by_id(self, artifact_id: UUID) -> Any:
+    async def get_artifact_by_id(self, artifact_id: UUID, workspace_id: UUID | None = None) -> Any:
         return self._artifacts.get(artifact_id)
 
     async def list_artifacts(self, *args: Any, **kwargs: Any) -> list:
@@ -410,6 +424,29 @@ class MockArtifactReadModel:
 # ---------------------------------------------------------------------------
 # Workflow orchestrator mock
 # ---------------------------------------------------------------------------
+
+
+class MockPermissionRegistrar:
+    """Mock implementation of PermissionRegistrar."""
+
+    def __init__(self) -> None:
+        self.register_calls: list[dict] = []
+
+    async def register_resource(
+        self,
+        resource_type: str,
+        resource_id: UUID,
+        workspace_id: UUID,
+        owner_id: UUID,
+        visibility: str = "workspace",
+    ) -> None:
+        self.register_calls.append({
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "workspace_id": workspace_id,
+            "owner_id": owner_id,
+            "visibility": visibility,
+        })
 
 
 class MockWorkflowOrchestrator:

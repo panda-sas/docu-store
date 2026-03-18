@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Search, Sun, Moon } from "lucide-react";
+import { ChevronRight, Search, Sun, Moon, LogOut } from "lucide-react";
+import { useAuthz } from "@sentinel-auth/react";
 
 import { useSession } from "@/lib/auth";
 import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
@@ -10,9 +11,15 @@ import { useThemeStore } from "@/lib/stores/theme-store";
 
 export function Topbar() {
   const { user, workspace } = useSession();
+  const { logout } = useAuthz();
   const breadcrumbs = useBreadcrumbs();
   const { theme, toggleTheme } = useThemeStore();
   const router = useRouter();
+
+  const handleLogout = () => {
+    logout();
+    window.location.href = "/login";
+  };
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-6 transition-colors duration-200">
@@ -69,9 +76,18 @@ export function Topbar() {
         {/* User avatar */}
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-sm font-medium text-accent-text">
-            {user.name.charAt(0)}
+            {user.name?.charAt(0) || "?"}
           </div>
         </div>
+
+        {/* Sign out */}
+        <button
+          onClick={handleLogout}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-500"
+          title="Sign out"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
     </header>
   );

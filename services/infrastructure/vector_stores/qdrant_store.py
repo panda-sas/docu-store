@@ -99,6 +99,13 @@ class QdrantStore(VectorStore):
                 field_schema=models.PayloadSchemaType.KEYWORD,
             )
 
+            # Create index on workspace_id for tenant isolation
+            await client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="workspace_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+
             logger.info(
                 "collection_created",
                 collection=self.collection_name,
@@ -146,6 +153,9 @@ class QdrantStore(VectorStore):
 
         if metadata:
             payload.update(metadata)
+
+        # workspace_id comes from metadata (passed by use case)
+        # Already included via payload.update(metadata) above
 
         # Note: sentence-transformers embeddings are already L2-normalized
         # Using them as-is ensures optimal similarity calculations in Qdrant
@@ -224,6 +234,8 @@ class QdrantStore(VectorStore):
 
             if metadata:
                 payload.update(metadata)
+
+            # workspace_id comes from metadata (passed by use case)
 
             points.append(
                 PointStruct(
@@ -309,6 +321,8 @@ class QdrantStore(VectorStore):
         limit: int = 10,
         artifact_id_filter: UUID | None = None,
         score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
     ) -> list[PageSearchResult]:
         """Find pages similar to the query embedding using cosine similarity.
 
@@ -317,6 +331,7 @@ class QdrantStore(VectorStore):
             limit: Maximum number of results to return
             artifact_id_filter: Optional filter to search within a specific artifact
             score_threshold: Optional minimum similarity score (0.0 to 1.0)
+            workspace_id: Optional workspace filter for tenant isolation
 
         Returns:
             List of PageSearchResult, ordered by similarity (highest first)
@@ -324,17 +339,30 @@ class QdrantStore(VectorStore):
         """
         client = await self._get_client()
 
-        # Build filter if artifact_id is provided
-        query_filter = None
+        # Build filter conditions
+        must_conditions = []
         if artifact_id_filter:
-            query_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="artifact_id",
-                        match=models.MatchValue(value=str(artifact_id_filter)),
-                    ),
-                ],
+            must_conditions.append(
+                models.FieldCondition(
+                    key="artifact_id",
+                    match=models.MatchValue(value=str(artifact_id_filter)),
+                ),
             )
+        if allowed_artifact_ids is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="artifact_id",
+                    match=models.MatchAny(any=[str(aid) for aid in allowed_artifact_ids]),
+                ),
+            )
+        if workspace_id:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="workspace_id",
+                    match=models.MatchValue(value=str(workspace_id)),
+                ),
+            )
+        query_filter = models.Filter(must=must_conditions) if must_conditions else None
 
         # Note: sentence-transformers embeddings are already L2-normalized
         # Using them as-is ensures optimal similarity calculations in Qdrant
