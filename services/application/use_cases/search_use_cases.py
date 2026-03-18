@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from application.ports.embedding_generator import EmbeddingGenerator
+    from application.ports.repositories.artifact_read_models import ArtifactReadModel
     from application.ports.repositories.page_read_models import PageReadModel
     from application.ports.summary_vector_store import SummaryVectorStore
     from application.ports.vector_store import VectorStore
@@ -39,9 +40,11 @@ class SearchSummariesUseCase:
         self,
         embedding_generator: EmbeddingGenerator,
         summary_vector_store: SummaryVectorStore,
+        artifact_read_model: ArtifactReadModel,
     ) -> None:
         self.embedding_generator = embedding_generator
         self.summary_vector_store = summary_vector_store
+        self.artifact_read_model = artifact_read_model
 
     async def execute(
         self,
@@ -71,19 +74,29 @@ class SearchSummariesUseCase:
                 workspace_id=workspace_id,
             )
 
-            result_dtos = [
-                SummarySearchResultDTO(
-                    entity_type=h.entity_type,
-                    entity_id=h.entity_id,
-                    artifact_id=h.artifact_id,
-                    similarity_score=h.score,
-                    summary_text=h.summary_text,
-                    artifact_title=h.artifact_title,
-                    page_index=h.metadata.get("page_index"),
-                    metadata=h.metadata,
+            result_dtos: list[SummarySearchResultDTO] = []
+            for h in hits:
+                title = h.artifact_title
+                if not title:
+                    artifact = await self.artifact_read_model.get_artifact_by_id(h.artifact_id)
+                    if artifact:
+                        title = (
+                            artifact.title_mention.title
+                            if artifact.title_mention
+                            else artifact.source_filename
+                        )
+                result_dtos.append(
+                    SummarySearchResultDTO(
+                        entity_type=h.entity_type,
+                        entity_id=h.entity_id,
+                        artifact_id=h.artifact_id,
+                        similarity_score=h.score,
+                        summary_text=h.summary_text,
+                        artifact_title=title,
+                        page_index=h.metadata.get("page_index"),
+                        metadata=h.metadata,
+                    ),
                 )
-                for h in hits
-            ]
 
             model_info = await self.embedding_generator.get_model_info()
 
@@ -126,11 +139,13 @@ class HierarchicalSearchUseCase:
         vector_store: VectorStore,
         summary_vector_store: SummaryVectorStore,
         page_read_model: PageReadModel,
+        artifact_read_model: ArtifactReadModel,
     ) -> None:
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
         self.summary_vector_store = summary_vector_store
         self.page_read_model = page_read_model
+        self.artifact_read_model = artifact_read_model
 
     async def execute(
         self,
@@ -159,18 +174,32 @@ class HierarchicalSearchUseCase:
                 allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
             )
-            summary_hits = [
-                SummaryHit(
-                    entity_type=h.entity_type,
-                    entity_id=h.entity_id,
-                    artifact_id=h.artifact_id,
-                    score=h.score,
-                    summary_text=h.summary_text,
-                    artifact_title=h.artifact_title,
-                    page_index=h.metadata.get("page_index"),
+            summary_hits: list[SummaryHit] = []
+            for h in summary_hits_raw:
+                title = h.artifact_title
+                page_index = h.metadata.get("page_index")
+
+                # Enrich missing artifact_title from read model
+                if not title:
+                    artifact = await self.artifact_read_model.get_artifact_by_id(h.artifact_id)
+                    if artifact:
+                        title = (
+                            artifact.title_mention.title
+                            if artifact.title_mention
+                            else artifact.source_filename
+                        )
+
+                summary_hits.append(
+                    SummaryHit(
+                        entity_type=h.entity_type,
+                        entity_id=h.entity_id,
+                        artifact_id=h.artifact_id,
+                        score=h.score,
+                        summary_text=h.summary_text,
+                        artifact_title=title,
+                        page_index=page_index,
+                    ),
                 )
-                for h in summary_hits_raw
-            ]
 
             # Query raw chunk collection (optional)
             chunk_hits: list[ChunkHit] = []
@@ -199,9 +228,22 @@ class HierarchicalSearchUseCase:
                     # Find artifact_id from raw results
                     artifact_id = next(r.artifact_id for r in raw_results if r.page_id == page_id)
                     text_preview = None
+                    page_name = None
                     page = await self.page_read_model.get_page_by_id(page_id)
-                    if page and page.text_mention and page.text_mention.text:
-                        text_preview = page.text_mention.text[:500]
+                    if page:
+                        page_name = page.name
+                        if page.text_mention and page.text_mention.text:
+                            text_preview = page.text_mention.text[:500]
+
+                    # Fetch artifact name for display
+                    artifact_name = None
+                    artifact = await self.artifact_read_model.get_artifact_by_id(artifact_id)
+                    if artifact:
+                        artifact_name = (
+                            artifact.title_mention.title
+                            if artifact.title_mention
+                            else artifact.source_filename
+                        )
 
                     chunk_hits.append(
                         ChunkHit(
@@ -210,6 +252,8 @@ class HierarchicalSearchUseCase:
                             page_index=page_index,
                             score=score,
                             text_preview=text_preview,
+                            artifact_name=artifact_name,
+                            page_name=page_name,
                         ),
                     )
 

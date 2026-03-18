@@ -504,12 +504,14 @@ def create_container() -> Container:  # noqa: PLR0915
     container[SearchSummariesUseCase] = lambda c: SearchSummariesUseCase(
         embedding_generator=c[EmbeddingGenerator],
         summary_vector_store=c[SummaryVectorStore],
+        artifact_read_model=c[ArtifactReadModel],
     )
     container[HierarchicalSearchUseCase] = lambda c: HierarchicalSearchUseCase(
         embedding_generator=c[EmbeddingGenerator],
         vector_store=c[VectorStore],
         summary_vector_store=c[SummaryVectorStore],
         page_read_model=c[PageReadModel],
+        artifact_read_model=c[ArtifactReadModel],
     )
 
     return container

@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { Button } from "primereact/button";
 import { IconField } from "primereact/iconfield";
@@ -21,6 +21,7 @@ import {
   useSearchSummaries,
   useHierarchicalSearch,
 } from "@/hooks/use-search";
+import { useSearchStore } from "@/lib/stores/search-store";
 
 type SearchMode = "text" | "summary" | "hierarchical";
 
@@ -35,9 +36,32 @@ export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("hierarchical");
 
+  // Track whether we need to auto-search after prefill
+  const [shouldAutoSearch, setShouldAutoSearch] = useState(false);
+
   const textSearch = useSearchPages();
   const summarySearch = useSearchSummaries();
   const hierarchicalSearch = useHierarchicalSearch();
+
+  // Step 1: Consume pending query from store on mount — only prefill state
+  useEffect(() => {
+    const pending = useSearchStore.getState().pendingQuery;
+    if (pending) {
+      useSearchStore.getState().setPendingQuery(null);
+      setQuery(pending);
+      setMode("hierarchical");
+      setShouldAutoSearch(true);
+    }
+  }, []);
+
+  // Step 2: Fire the search AFTER the query state has been committed
+  // This runs on the render AFTER setQuery/setShouldAutoSearch
+  useEffect(() => {
+    if (shouldAutoSearch && query) {
+      setShouldAutoSearch(false);
+      hierarchicalSearch.mutate({ query_text: query, include_chunks: true });
+    }
+  }, [shouldAutoSearch, query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isPending =
     textSearch.isPending ||
@@ -76,7 +100,6 @@ export default function SearchPage() {
 
       {/* Search controls */}
       <div className="space-y-4">
-        {/* Search input */}
         <div className="flex gap-3">
           <IconField iconPosition="left" className="flex-1">
             <InputIcon className="pi pi-search" />
@@ -96,7 +119,6 @@ export default function SearchPage() {
           />
         </div>
 
-        {/* Mode selector */}
         <SelectButton
           value={mode}
           options={SEARCH_MODES}
@@ -124,7 +146,6 @@ export default function SearchPage() {
           />
         )}
 
-      {/* Loading */}
       {isPending && (
         <div className="mt-12 flex items-center justify-center">
           <ProgressSpinner
@@ -134,7 +155,6 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Empty state — no search yet */}
       {!hasResults && !isPending && (
         <EmptyState
           icon={SearchIcon}
@@ -143,7 +163,6 @@ export default function SearchPage() {
         />
       )}
 
-      {/* Error states */}
       {(textSearch.error || summarySearch.error || hierarchicalSearch.error) && (
         <div className="mt-6">
           <Message

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { BreadCrumb } from "primereact/breadcrumb";
 import { Button } from "primereact/button";
 import { useAuthz } from "@sentinel-auth/react";
@@ -10,6 +9,7 @@ import { useSession } from "@/lib/auth";
 import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useScopeStore } from "@/lib/stores/scope-store";
+import { SearchCommand } from "./SearchCommand";
 
 export function Topbar() {
   const { user, workspace } = useSession();
@@ -17,7 +17,6 @@ export function Topbar() {
   const breadcrumbs = useBreadcrumbs();
   const { theme, toggleTheme } = useThemeStore();
   const { defaultScope, setDefaultScope } = useScopeStore();
-  const router = useRouter();
 
   const handleLogout = () => {
     logout();
@@ -67,17 +66,8 @@ export function Topbar() {
         </span>
       )}
 
-      {/* Search pill */}
-      <button
-        onClick={() => router.push(`/${workspace.slug}/search`)}
-        className="flex items-center gap-2 rounded-full border border-border-default bg-surface-sunken px-4 py-1.5 text-sm text-text-muted transition-all hover:border-accent/40 hover:text-text-secondary hover:shadow-ds-sm"
-      >
-        <i className="pi pi-search text-xs" />
-        <span>Search...</span>
-        <kbd className="ml-1 rounded border border-border-default bg-surface px-1.5 py-0.5 text-xs font-medium text-text-muted">
-          {"\u2318"}K
-        </kbd>
-      </button>
+      {/* Search command */}
+      <SearchCommand />
 
       {/* Right section */}
       <div className="flex items-center gap-1">

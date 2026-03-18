@@ -61,7 +61,7 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
         {!collapsed && (
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-wide text-white">
-              DAIKON
+              DOCU.STORE
             </span>
             <span className="text-xs uppercase tracking-widest text-sidebar-text opacity-60">
               {workspaceSlug}
