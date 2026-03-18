@@ -27,7 +27,7 @@ run-temporal-worker: ## Run the Temporal workflow worker
 run-plugin-consumer: ## Run the plugin consumer (Kafka → plugin Temporal workflows)
 	uv run python -m infrastructure.plugins.plugin_consumer
 
-run-all: ## Start all services (API, read models, workflow worker, temporal worker, plugin consumer)
+run-all: stop-all ## Start all services (API, read models, workflow worker, temporal worker, plugin consumer)
 	@echo "Starting all services..."
 	uv run uvicorn interfaces.api.main:app --host 0.0.0.0 --port 8000 --reload &
 	uv run python -m infrastructure.read_worker &
@@ -39,11 +39,11 @@ run-all: ## Start all services (API, read models, workflow worker, temporal work
 
 stop-all: ## Stop all services started by run-all
 	@echo "Stopping all services..."
-	@pkill -f "uvicorn interfaces.api.main:app" || true
-	@pkill -f "infrastructure.read_worker" || true
-	@pkill -f "infrastructure.pipeline_worker" || true
-	@pkill -f "infrastructure.temporal.worker" || true
-	@pkill -f "infrastructure.plugins.plugin_consumer" || true
+	@pkill -9 -f "uvicorn interfaces.api.main:app" || true
+	@pkill -9 -f "infrastructure.read_worker" || true
+	@pkill -9 -f "infrastructure.pipeline_worker" || true
+	@pkill -9 -f "infrastructure.temporal.worker" || true
+	@pkill -9 -f "infrastructure.plugins.plugin_consumer" || true
 	@echo "All services stopped."
 
 lint: ## Run linting checks

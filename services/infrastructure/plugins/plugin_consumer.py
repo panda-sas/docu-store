@@ -73,9 +73,11 @@ async def run_plugin_consumer(
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
 
+    loop = asyncio.get_running_loop()
+
     try:
         while not shutdown.is_set():
-            msg = consumer.poll(timeout=1.0)
+            msg = await loop.run_in_executor(None, consumer.poll, 1.0)
             if msg is None:
                 continue
 
@@ -133,11 +135,8 @@ async def _run_async() -> None:
     """
     from motor.motor_asyncio import AsyncIOMotorClient  # noqa: PLC0415
     from temporalio.client import Client as TemporalClient  # noqa: PLC0415
+    from temporalio.worker import UnsandboxedWorkflowRunner  # noqa: PLC0415
     from temporalio.worker import Worker as TemporalWorker  # noqa: PLC0415
-    from temporalio.worker.workflow_sandbox import (  # noqa: PLC0415
-        SandboxedWorkflowRunner,
-        SandboxRestrictions,
-    )
 
     from infrastructure.config import settings  # noqa: PLC0415
     from infrastructure.plugins.context import DefaultPluginContext  # noqa: PLC0415
@@ -172,12 +171,10 @@ async def _run_async() -> None:
     # Build one Temporal worker per unique plugin task queue
     unique_task_queues = {m.effective_task_queue() for m in registry.list_manifests()}
 
-    # Plugin packages may import libraries (structlog, rich, etc.) that are
-    # incompatible with the Temporal workflow sandbox.  Pass the entire
-    # "plugins" tree through so the sandbox doesn't choke on those imports.
-    plugin_sandbox_runner = SandboxedWorkflowRunner(
-        restrictions=SandboxRestrictions.default.with_passthrough_modules("plugins"),
-    )
+    # Plugin workflows are simple activity dispatchers — disable the Temporal
+    # workflow sandbox to avoid import restrictions on third-party libraries
+    # (structlog, rich, etc.) that plugins may pull in.
+    plugin_workflow_runner = UnsandboxedWorkflowRunner()
 
     async def run_temporal_workers() -> None:
         workers = []
@@ -188,7 +185,7 @@ async def _run_async() -> None:
                 workflows=all_workflows,
                 activities=all_activities,
                 max_concurrent_activities=settings.plugin_max_concurrent_activities,
-                workflow_runner=plugin_sandbox_runner,
+                workflow_runner=plugin_workflow_runner,
             )
             workers.append(worker)
             logger.info("plugin_consumer.temporal_worker_registered", task_queue=task_queue)
