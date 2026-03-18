@@ -33,7 +33,7 @@ from application.use_cases.artifact_use_cases import (
     CreateArtifactUseCase,
     DeleteArtifactUseCase,
     RemovePagesUseCase,
-    UpdateTagsUseCase,
+    UpdateTagMentionsUseCase as UpdateArtifactTagMentionsUseCase,
     UpdateTitleMentionUseCase,
 )
 from application.use_cases.artifact_use_cases import (
@@ -361,7 +361,7 @@ def create_container() -> Container:  # noqa: PLR0915
             external_event_publisher=c[ExternalEventPublisher],
         )
     )
-    container[UpdateTagsUseCase] = lambda c: UpdateTagsUseCase(
+    container[UpdateArtifactTagMentionsUseCase] = lambda c: UpdateArtifactTagMentionsUseCase(
         artifact_repository=c[ArtifactRepository],
         external_event_publisher=c[ExternalEventPublisher],
     )

@@ -6,6 +6,7 @@ from eventsourcing.domain import Aggregate, event
 from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.mime_type import MimeType
 from domain.value_objects.summary_candidate import SummaryCandidate
+from domain.value_objects.tag_mention import TagMention
 from domain.value_objects.title_mention import TitleMention
 
 
@@ -89,7 +90,7 @@ class Artifact(Aggregate):
         self._pages: list[UUID] = []
         self.title_mention: TitleMention | None = None
         self.summary_candidate: SummaryCandidate | None = None
-        self.tags: list[str] = []
+        self.tag_mentions: list[TagMention] = []
         self.is_deleted: bool = False
 
     def __hash__(self) -> int:
@@ -197,28 +198,20 @@ class Artifact(Aggregate):
         self.summary_candidate = summary_candidate
 
     # ============================================================================
-    # COMMAND METHOD - Tag Updated
+    # COMMAND METHOD - Tag Mentions Updated
     # ============================================================================
-    class TagsUpdated(Aggregate.Event):
-        tags: list[str]
+    class TagMentionsUpdated(Aggregate.Event):
+        tag_mentions: list[TagMention]
 
-    def update_tags(self, tags: list[str]) -> None:
+    def update_tag_mentions(self, tag_mentions: list[TagMention]) -> None:
         if self.is_deleted:
-            msg = "Cannot update tags on a deleted artifact"
+            msg = "Cannot update tag mentions on a deleted artifact"
             raise ValueError(msg)
-        # Normalize: strip and drop blanks
-        normalized = [t.strip() for t in tags if t and t.strip()]
-        # Deduplicate while preserving order
-        cleaned_tags = list(dict.fromkeys(normalized))
+        self.trigger_event(self.TagMentionsUpdated, tag_mentions=tag_mentions)
 
-        if cleaned_tags == self.tags:
-            return
-
-        self.trigger_event(self.TagsUpdated, tags=cleaned_tags)
-
-    @event(TagsUpdated)
-    def _apply_tags_updated(self, tags: list[str]) -> None:
-        self.tags = tags
+    @event(TagMentionsUpdated)
+    def _apply_tag_mentions_updated(self, tag_mentions: list[TagMention]) -> None:
+        self.tag_mentions = tag_mentions
 
     # ============================================================================
     # COMMAND METHOD - Delete Artifact

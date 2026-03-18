@@ -221,19 +221,109 @@ export default function ArtifactDetailPage() {
               </div>
             </Card>
 
-            {/* Tags */}
-            {artifact.tags && artifact.tags.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-sm font-medium text-text-secondary">
-                  Tags
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {artifact.tags.map((tag) => (
-                    <Tag key={tag} value={tag} severity="secondary" rounded />
-                  ))}
+            {/* Tag Mentions — grouped by entity type */}
+            {artifact.tag_mentions && artifact.tag_mentions.length > 0 && (() => {
+              type TagMentionItem = NonNullable<typeof artifact.tag_mentions>[number];
+              type Bioactivity = { assay_type: string; value: string; unit: string; raw_text: string };
+              const ENTITY_COLORS: Record<string, "success" | "warning" | "danger" | "secondary"> = {
+                compound_name: "success",
+                target: "warning",
+                disease: "danger",
+              };
+              const compounds: TagMentionItem[] = [];
+              const grouped = new Map<string, TagMentionItem[]>();
+              for (const tm of artifact.tag_mentions) {
+                const key = tm.entity_type ?? "other";
+                if (key === "compound_name") {
+                  compounds.push(tm);
+                } else {
+                  const arr = grouped.get(key);
+                  if (arr) arr.push(tm);
+                  else grouped.set(key, [tm]);
+                }
+              }
+              return (
+                <div>
+                  <h3 className="mb-3 text-sm font-medium text-text-secondary">
+                    Tag Mentions
+                  </h3>
+                  <div className="space-y-3">
+                    {compounds.length > 0 && (
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 min-w-[120px] shrink-0 text-xs font-medium text-text-muted">
+                          compound name
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {compounds.map((tm, i) => {
+                            const params = tm.additional_model_params as Record<string, unknown> | undefined;
+                            const activities = params?.bioactivities as Bioactivity[] | undefined;
+                            const synonyms = params?.synonyms as string | undefined;
+                            return (
+                              <div
+                                key={`${tm.tag}-${i}`}
+                                className="rounded-lg border border-border-default bg-surface-elevated px-3 py-2"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Tag value={tm.tag} severity="success" rounded />
+                                  {synonyms && (
+                                    <span className="text-xs text-text-muted">
+                                      aka {synonyms}
+                                    </span>
+                                  )}
+                                </div>
+                                {activities && activities.length > 0 && (
+                                  <table className="mt-2 w-full text-xs">
+                                    <thead>
+                                      <tr className="border-b border-border-subtle text-text-muted">
+                                        <th className="pb-1 pr-3 text-left font-medium">Assay</th>
+                                        <th className="pb-1 pr-3 text-left font-medium">Value</th>
+                                        <th className="pb-1 text-left font-medium">Source</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {activities.map((a, j) => (
+                                        <tr key={j} className="border-b border-border-subtle last:border-0">
+                                          <td className="py-1 pr-3 font-mono font-medium text-text-primary">
+                                            {a.assay_type}
+                                          </td>
+                                          <td className="py-1 pr-3 font-mono text-text-primary">
+                                            {a.value}{a.unit ? ` ${a.unit}` : ""}
+                                          </td>
+                                          <td className="py-1 text-text-muted">
+                                            {a.raw_text}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {[...grouped.entries()].map(([entityType, tags]) => (
+                      <div key={entityType} className="flex items-start gap-3">
+                        <span className="mt-0.5 min-w-[120px] shrink-0 text-xs font-medium text-text-muted">
+                          {entityType.replace(/_/g, " ")}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {tags.map((tm, i) => (
+                            <Tag
+                              key={`${tm.tag}-${i}`}
+                              value={tm.tag}
+                              severity={ENTITY_COLORS[entityType] ?? "secondary"}
+                              rounded
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Summary */}
             {artifact.summary_candidate?.summary && (

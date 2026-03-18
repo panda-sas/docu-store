@@ -23,11 +23,12 @@ from application.use_cases.artifact_use_cases import (
     DeleteArtifactUseCase,
     RemovePagesUseCase,
     UpdateSummaryCandidateUseCase,
-    UpdateTagsUseCase,
+    UpdateTagMentionsUseCase as UpdateArtifactTagMentionsUseCase,
     UpdateTitleMentionUseCase,
 )
 from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.summary_candidate import SummaryCandidate
+from domain.value_objects.tag_mention import TagMention
 from domain.value_objects.title_mention import TitleMention
 from interfaces.api.middleware import handle_use_case_errors
 from interfaces.api.routes.helpers import (
@@ -201,19 +202,19 @@ async def update_summary_candidate(
     )
 
 
-@router.patch("/{artifact_id}/tags", status_code=status.HTTP_200_OK)
+@router.patch("/{artifact_id}/tag_mentions", status_code=status.HTTP_200_OK)
 @handle_use_case_errors
-async def update_tags(
+async def update_tag_mentions(
     artifact_id: UUID,
-    tags: Annotated[list[str], Body(...)],
+    tag_mentions: Annotated[list[TagMention], Body(...)],
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
-    """Update tags for an artifact."""
+    """Update tag mentions for an artifact."""
     await require_workspace_artifact(artifact_id, auth, container)
     await require_artifact_permission(artifact_id, auth, "edit")
-    use_case = container[UpdateTagsUseCase]
-    return await use_case.execute(artifact_id=artifact_id, tags=tags, auth=auth)
+    use_case = container[UpdateArtifactTagMentionsUseCase]
+    return await use_case.execute(artifact_id=artifact_id, tag_mentions=tag_mentions, auth=auth)
 
 
 @router.delete("/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)

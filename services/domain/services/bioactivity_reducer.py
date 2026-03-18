@@ -44,7 +44,7 @@ def associate_bioactivities(tag_mentions: list[TagMention]) -> list[TagMention]:
             others.append(tm)
 
     if not bioactivities:
-        return tag_mentions  # nothing to reduce
+        return list(tag_mentions)  # nothing to reduce; return a copy for safety
 
     # Index compounds by normalised name (first occurrence wins on duplicates)
     compound_index: dict[str, int] = {}

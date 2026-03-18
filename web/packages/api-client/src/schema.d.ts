@@ -157,7 +157,7 @@ export interface paths {
         patch: operations["update_summary_candidate_artifacts__artifact_id__summary_candidate_patch"];
         trace?: never;
     };
-    "/artifacts/{artifact_id}/tags": {
+    "/artifacts/{artifact_id}/tag_mentions": {
         parameters: {
             query?: never;
             header?: never;
@@ -171,10 +171,10 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Update Tags
-         * @description Update tags for an artifact.
+         * Update Tag Mentions
+         * @description Update tag mentions for an artifact.
          */
-        patch: operations["update_tags_artifacts__artifact_id__tags_patch"];
+        patch: operations["update_tag_mentions_artifacts__artifact_id__tag_mentions_patch"];
         trace?: never;
     };
     "/artifacts/{artifact_id}/summarize": {
@@ -1056,10 +1056,10 @@ export interface components {
             /** @description Title mention extracted from the artifact */
             title_mention?: components["schemas"]["TitleMention"] | null;
             /**
-             * Tags
-             * @description List of tags associated with the artifact
+             * Tag Mentions
+             * @description Structured tag mentions aggregated from all pages
              */
-            tags?: string[];
+            tag_mentions?: components["schemas"]["TagMention"][];
             /** @description Summary candidate extracted from the artifact */
             summary_candidate?: components["schemas"]["SummaryCandidate"] | null;
         };
@@ -1138,10 +1138,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1506,10 +1506,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1662,10 +1662,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1702,10 +1702,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1740,10 +1740,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -2084,7 +2084,7 @@ export interface operations {
             };
         };
     };
-    update_tags_artifacts__artifact_id__tags_patch: {
+    update_tag_mentions_artifacts__artifact_id__tag_mentions_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -2095,7 +2095,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": string[];
+                "application/json": {
+                    [key: string]: unknown;
+                }[];
             };
         };
         responses: {

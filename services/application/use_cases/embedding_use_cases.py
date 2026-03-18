@@ -281,7 +281,7 @@ class SearchSimilarPagesUseCase:
                         mime_type=str(artifact.mime_type),
                         storage_location=artifact.storage_location,
                         page_count=page_count,
-                        tags=artifact.tags or [],
+                        tags=[tm.tag for tm in artifact.tag_mentions] if artifact.tag_mentions else [],
                         summary=artifact.summary_candidate.text
                         if artifact.summary_candidate
                         else None,

@@ -1,4 +1,4 @@
-"""Use case: aggregate NER tags from all pages into artifact-level tags."""
+"""Use case: aggregate NER tag mentions from all pages into artifact-level tag mentions."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from application.dtos.errors import AppError
+from domain.services.tag_mention_aggregator import aggregate_tag_mentions
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -20,12 +21,14 @@ logger = structlog.get_logger()
 
 
 class AggregateArtifactTagsUseCase:
-    """Collect all TagMention.tag strings from every page of an artifact.
+    """Collect TagMentions from every page of an artifact and merge them.
 
-    Refreshes Artifact.tags with the deduplicated union.
+    Uses the ``aggregate_tag_mentions`` domain service to deduplicate across
+    pages and merge compound bioactivities.  The result is stored on the
+    artifact via ``update_tag_mentions()``.
 
     This use case is idempotent and re-entrant: re-running it after any page
-    receives new tag_mentions simply refreshes the artifact's tag list.
+    receives new tag_mentions simply refreshes the artifact's tag mention list.
     """
 
     def __init__(
@@ -42,12 +45,12 @@ class AggregateArtifactTagsUseCase:
         try:
             artifact = self.artifact_repository.get_by_id(artifact_id)
 
-            all_tags: list[str] = []
+            pages_tags = []
             pages_loaded = 0
             for page_id in artifact.pages:
                 try:
                     page = self.page_repository.get_by_id(page_id)
-                    all_tags.extend(m.tag for m in page.tag_mentions if m.tag)
+                    pages_tags.append(list(page.tag_mentions))
                     pages_loaded += 1
                 except Exception:  # noqa: BLE001
                     # Skip pages that can't be loaded — partial aggregation is fine
@@ -57,17 +60,9 @@ class AggregateArtifactTagsUseCase:
                         page_id=str(page_id),
                     )
 
-            # Preserve first-seen order, deduplicate case-insensitively but keep
-            # the original casing of the first occurrence.
-            seen_lower: set[str] = set()
-            deduped: list[str] = []
-            for tag in all_tags:
-                key = tag.strip().lower()
-                if key and key not in seen_lower:
-                    deduped.append(tag.strip())
-                    seen_lower.add(key)
+            merged = aggregate_tag_mentions(pages_tags)
 
-            artifact.update_tags(deduped)
+            artifact.update_tag_mentions(merged)
             self.artifact_repository.save(artifact)
 
             if self.external_event_publisher:
@@ -76,21 +71,21 @@ class AggregateArtifactTagsUseCase:
                 artifact_response = ArtifactMapper.to_artifact_response(artifact)
                 await self.external_event_publisher.notify_artifact_updated(
                     artifact_response,
-                    sub_type="TagsUpdated",
+                    sub_type="TagMentionsUpdated",
                 )
 
             logger.info(
                 "aggregate_artifact_tags.success",
                 artifact_id=str(artifact_id),
                 pages_loaded=pages_loaded,
-                tag_count=len(deduped),
+                tag_count=len(merged),
             )
             return Success(
                 {
                     "status": "success",
                     "artifact_id": str(artifact_id),
                     "pages_loaded": pages_loaded,
-                    "tag_count": len(deduped),
+                    "tag_count": len(merged),
                 },
             )
 

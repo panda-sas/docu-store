@@ -242,8 +242,8 @@ class UpdateSummaryCandidateUseCase:
         return Success(result)
 
 
-class UpdateTagsUseCase:
-    """Update tags for an artifact."""
+class UpdateTagMentionsUseCase:
+    """Update tag mentions for an artifact."""
 
     def __init__(
         self,
@@ -257,7 +257,7 @@ class UpdateTagsUseCase:
     async def execute(
         self,
         artifact_id: UUID,
-        tags: list[str],
+        tag_mentions: list,
         auth: AuthContext | None = None,
     ) -> Result[ArtifactResponse, AppError]:
         require_editor(auth)
@@ -265,7 +265,7 @@ class UpdateTagsUseCase:
         artifact = self.artifact_repository.get_by_id(artifact_id)
         require_artifact_workspace(auth, artifact)
 
-        artifact.update_tags(tags)
+        artifact.update_tag_mentions(tag_mentions)
         self.artifact_repository.save(artifact)
 
         result = ArtifactMapper.to_artifact_response(artifact)
@@ -273,7 +273,7 @@ class UpdateTagsUseCase:
         if self.external_event_publisher:
             await self.external_event_publisher.notify_artifact_updated(
                 result,
-                sub_type="TagsUpdated",
+                sub_type="TagMentionsUpdated",
             )
 
         return Success(result)

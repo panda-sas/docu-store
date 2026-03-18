@@ -54,15 +54,15 @@ export default function DocumentsPage() {
   );
 
   const tagsTemplate = (row: ArtifactResponse) => {
-    const tags = row.tags;
-    if (!tags?.length) return <span className="text-text-muted">—</span>;
+    const tms = row.tag_mentions;
+    if (!tms?.length) return <span className="text-text-muted">—</span>;
     return (
       <div className="flex flex-wrap gap-1">
-        {tags.slice(0, 3).map((tag) => (
-          <Tag key={tag} value={tag} severity="secondary" rounded />
+        {tms.slice(0, 3).map((tm, i) => (
+          <Tag key={`${tm.tag}-${i}`} value={tm.tag} severity="secondary" rounded />
         ))}
-        {tags.length > 3 && (
-          <span className="text-xs text-text-muted">+{tags.length - 3}</span>
+        {tms.length > 3 && (
+          <span className="text-xs text-text-muted">+{tms.length - 3}</span>
         )}
       </div>
     );

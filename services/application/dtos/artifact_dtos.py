@@ -6,6 +6,7 @@ from application.dtos.page_dtos import PageResponse
 from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.mime_type import MimeType
 from domain.value_objects.summary_candidate import SummaryCandidate
+from domain.value_objects.tag_mention import TagMention
 from domain.value_objects.title_mention import TitleMention
 
 
@@ -42,9 +43,9 @@ class ArtifactResponse(BaseModel):
         None,
         description="Title mention extracted from the artifact",
     )
-    tags: list[str] = Field(
+    tag_mentions: list[TagMention] = Field(
         default_factory=list,
-        description="List of tags associated with the artifact",
+        description="Structured tag mentions aggregated from all pages",
     )
     summary_candidate: SummaryCandidate | None = Field(
         None,

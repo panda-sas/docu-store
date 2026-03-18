@@ -23,7 +23,7 @@ class ArtifactMapper:
             storage_location=artifact.storage_location,
             pages=tuple(artifact.pages),
             title_mention=artifact.title_mention,
-            tags=list(artifact.tags),
+            tag_mentions=list(artifact.tag_mentions),
             summary_candidate=artifact.summary_candidate,
             workspace_id=artifact.workspace_id,
             owner_id=artifact.owner_id,
