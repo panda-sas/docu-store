@@ -145,7 +145,9 @@ class SummarizePageUseCase:
             result = PageMapper.to_page_response(page)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_page_updated(result)
+                await self.external_event_publisher.notify_page_updated(
+                    result, sub_type="SummaryCandidateUpdated"
+                )
 
             log.info("summarize_page.success", page_id=str(page_id), mode=mode)
             return Success(result)
@@ -276,7 +278,9 @@ class SummarizeArtifactUseCase:
             result = ArtifactMapper.to_artifact_response(artifact)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_artifact_updated(result)
+                await self.external_event_publisher.notify_artifact_updated(
+                    result, sub_type="SummaryCandidateUpdated"
+                )
 
             log.info("summarize_artifact.success", artifact_id=str(artifact_id))
             return Success(result)

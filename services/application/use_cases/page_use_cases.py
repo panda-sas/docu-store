@@ -130,7 +130,9 @@ class AddCompoundMentionsUseCase:
             result = PageMapper.to_page_response(page)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_page_updated(result)
+                await self.external_event_publisher.notify_page_updated(
+                    result, sub_type="CompoundMentionsUpdated"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:
@@ -183,7 +185,9 @@ class UpdateTagMentionsUseCase:
             result = PageMapper.to_page_response(page)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_page_updated(result)
+                await self.external_event_publisher.notify_page_updated(
+                    result, sub_type="TagMentionsUpdated"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:
@@ -235,7 +239,9 @@ class UpdateTextMentionUseCase:
             result = PageMapper.to_page_response(page)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_page_updated(result)
+                await self.external_event_publisher.notify_page_updated(
+                    result, sub_type="TextMentionUpdated"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:
@@ -287,7 +293,9 @@ class UpdateSummaryCandidateUseCase:
             result = PageMapper.to_page_response(page)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_page_updated(result)
+                await self.external_event_publisher.notify_page_updated(
+                    result, sub_type="SummaryCandidateUpdated"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:

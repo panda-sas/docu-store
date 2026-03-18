@@ -127,7 +127,9 @@ class AddPagesUseCase:
             result = ArtifactMapper.to_artifact_response(artifact)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_artifact_updated(result)
+                await self.external_event_publisher.notify_artifact_updated(
+                    result, sub_type="PagesAdded"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:
@@ -179,7 +181,9 @@ class RemovePagesUseCase:
             result = ArtifactMapper.to_artifact_response(artifact)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_artifact_updated(result)
+                await self.external_event_publisher.notify_artifact_updated(
+                    result, sub_type="PagesRemoved"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:
@@ -251,7 +255,9 @@ class UpdateTitleMentionUseCase:
 
             if self.external_event_publisher:
                 logger.info("publishing_event", artifact_id=str(artifact_id))
-                await self.external_event_publisher.notify_artifact_updated(result)
+                await self.external_event_publisher.notify_artifact_updated(
+                    result, sub_type="TitleMentionUpdated"
+                )
                 logger.info("event_published", artifact_id=str(artifact_id))
 
             logger.info("update_title_mention_use_case_success", artifact_id=str(artifact_id))
@@ -317,7 +323,9 @@ class UpdateSummaryCandidateUseCase:
             result = ArtifactMapper.to_artifact_response(artifact)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_artifact_updated(result)
+                await self.external_event_publisher.notify_artifact_updated(
+                    result, sub_type="SummaryCandidateUpdated"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:
@@ -369,7 +377,9 @@ class UpdateTagsUseCase:
             result = ArtifactMapper.to_artifact_response(artifact)
 
             if self.external_event_publisher:
-                await self.external_event_publisher.notify_artifact_updated(result)
+                await self.external_event_publisher.notify_artifact_updated(
+                    result, sub_type="TagsUpdated"
+                )
 
             return Success(result)
         except AggregateNotFoundError as e:
