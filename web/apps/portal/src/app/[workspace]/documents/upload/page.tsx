@@ -12,6 +12,7 @@ import { Upload, ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { useUploadArtifact } from "@/hooks/use-artifacts";
+import { useScopeStore } from "@/lib/stores/scope-store";
 
 const ARTIFACT_TYPES = [
   { label: "Research Article", value: "RESEARCH_ARTICLE" },
@@ -27,6 +28,7 @@ export default function UploadPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const router = useRouter();
   const uploadMutation = useUploadArtifact();
+  const { defaultScope } = useScopeStore();
 
   const [artifactType, setArtifactType] = useState("RESEARCH_ARTICLE");
   const [sourceUri, setSourceUri] = useState("");
@@ -40,6 +42,7 @@ export default function UploadPage() {
         file,
         artifactType,
         sourceUri: sourceUri || undefined,
+        visibility: defaultScope,
       });
       router.push(`/${workspace}/documents`);
     } catch {

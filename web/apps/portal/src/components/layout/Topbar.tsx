@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Sun, Moon, LogOut } from "lucide-react";
 import { BreadCrumb } from "primereact/breadcrumb";
 import { Button } from "primereact/button";
 import { useAuthz } from "@sentinel-auth/react";
@@ -10,12 +9,14 @@ import { useAuthz } from "@sentinel-auth/react";
 import { useSession } from "@/lib/auth";
 import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { useScopeStore } from "@/lib/stores/scope-store";
 
 export function Topbar() {
   const { user, workspace } = useSession();
   const { logout } = useAuthz();
   const breadcrumbs = useBreadcrumbs();
   const { theme, toggleTheme } = useThemeStore();
+  const { defaultScope, setDefaultScope } = useScopeStore();
   const router = useRouter();
 
   const handleLogout = () => {
@@ -36,6 +37,13 @@ export function Topbar() {
   }));
 
   const lastCrumb = breadcrumbs[breadcrumbs.length - 1];
+
+  const initials = user.name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "?";
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-6 transition-colors duration-200">
@@ -62,43 +70,73 @@ export function Topbar() {
       {/* Search pill */}
       <button
         onClick={() => router.push(`/${workspace.slug}/search`)}
-        className="flex items-center gap-2 rounded-lg border border-border-default bg-surface-sunken px-3 py-1.5 text-sm text-text-muted transition-colors hover:border-accent hover:text-text-secondary"
+        className="flex items-center gap-2 rounded-full border border-border-default bg-surface-sunken px-4 py-1.5 text-sm text-text-muted transition-all hover:border-accent/40 hover:text-text-secondary hover:shadow-ds-sm"
       >
-        <Search className="h-3.5 w-3.5" />
+        <i className="pi pi-search text-xs" />
         <span>Search...</span>
-        <kbd className="ml-2 rounded border border-border-default bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+        <kbd className="ml-1 rounded border border-border-default bg-surface px-1.5 py-0.5 text-xs font-medium text-text-muted">
           {"\u2318"}K
         </kbd>
       </button>
 
       {/* Right section */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        {/* Scope toggle */}
         <Button
-          icon={theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+          label={defaultScope === "workspace" ? "Workspace" : "Private"}
+          icon={defaultScope === "workspace" ? "pi pi-globe" : "pi pi-lock"}
+          onClick={() => setDefaultScope(defaultScope === "workspace" ? "private" : "workspace")}
+          severity="secondary"
+          text
+          size="small"
+          aria-label={`Default visibility: ${defaultScope}. Click to switch.`}
+          tooltip="Default visibility for new documents"
+          tooltipOptions={{ position: "bottom" }}
+        />
+
+        {/* Theme toggle */}
+        <Button
+          icon={theme === "light" ? "pi pi-moon" : "pi pi-sun"}
           onClick={toggleTheme}
           severity="secondary"
           text
           rounded
+          size="small"
           aria-label={theme === "light" ? "Dark mode" : "Light mode"}
           tooltip={theme === "light" ? "Dark mode" : "Light mode"}
           tooltipOptions={{ position: "bottom" }}
         />
 
-        {/* User avatar */}
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-sm font-medium text-accent-text">
-          {user.name?.charAt(0) || "?"}
-        </div>
+        {/* Separator */}
+        <div className="mx-1.5 h-5 w-px bg-border-default" />
 
-        <Button
-          icon={<LogOut className="h-4 w-4" />}
-          onClick={handleLogout}
-          severity="danger"
-          text
-          rounded
-          aria-label="Sign out"
-          tooltip="Sign out"
-          tooltipOptions={{ position: "bottom" }}
-        />
+        {/* User + logout */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-hover text-xs font-semibold text-white shadow-sm">
+              {initials}
+            </div>
+            <div className="hidden sm:flex flex-col">
+              <span className="text-sm font-medium leading-tight text-text-primary">
+                {user.name || "User"}
+              </span>
+              <span className="text-xs leading-tight text-text-muted">
+                {user.email || workspace.slug}
+              </span>
+            </div>
+          </div>
+          <Button
+            icon="pi pi-sign-out"
+            onClick={handleLogout}
+            severity="secondary"
+            text
+            rounded
+            size="small"
+            aria-label="Sign out"
+            tooltip="Sign out"
+            tooltipOptions={{ position: "bottom" }}
+          />
+        </div>
       </div>
     </header>
   );

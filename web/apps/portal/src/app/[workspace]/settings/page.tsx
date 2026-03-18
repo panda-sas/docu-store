@@ -1,20 +1,27 @@
 "use client";
 
-import { Settings, Sun, Moon } from "lucide-react";
+import { Settings, Sun, Moon, Globe, Lock } from "lucide-react";
 import { SelectButton } from "primereact/selectbutton";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { useScopeStore } from "@/lib/stores/scope-store";
 import { useSession } from "@/lib/auth";
 
 const THEME_OPTIONS = [
-  { label: "Light", value: "light" as const, icon: "pi pi-sun" },
-  { label: "Dark", value: "dark" as const, icon: "pi pi-moon" },
+  { label: "Light", value: "light" as const },
+  { label: "Dark", value: "dark" as const },
+];
+
+const SCOPE_OPTIONS = [
+  { label: "Workspace", value: "workspace" as const },
+  { label: "Private", value: "private" as const },
 ];
 
 export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
+  const { defaultScope, setDefaultScope } = useScopeStore();
   const { workspace } = useSession();
 
   return (
@@ -41,6 +48,31 @@ export default function SettingsPage() {
                   <Sun className="h-4 w-4" />
                 ) : (
                   <Moon className="h-4 w-4" />
+                )}
+                {option.label}
+              </span>
+            )}
+          />
+        </Card>
+
+        {/* Default Visibility */}
+        <Card>
+          <CardHeader title="Default Visibility" />
+          <p className="mb-3 text-xs text-text-muted">
+            New documents will be created with this visibility by default.
+          </p>
+          <SelectButton
+            value={defaultScope}
+            options={SCOPE_OPTIONS}
+            onChange={(e) => {
+              if (e.value) setDefaultScope(e.value);
+            }}
+            itemTemplate={(option) => (
+              <span className="flex items-center gap-2">
+                {option.value === "workspace" ? (
+                  <Globe className="h-4 w-4" />
+                ) : (
+                  <Lock className="h-4 w-4" />
                 )}
                 {option.label}
               </span>

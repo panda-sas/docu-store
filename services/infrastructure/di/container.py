@@ -384,6 +384,7 @@ def create_container() -> Container:  # noqa: PLR0915
         update_text_mention_use_case=c[UpdateTextMentionUseCase],
         pdf_service=c[PDFService],
         blob_store=c[BlobStore],
+        permission_registrar=c[PermissionRegistrar],
     )
 
     # NER Extraction Use Cases

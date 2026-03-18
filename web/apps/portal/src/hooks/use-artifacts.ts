@@ -82,16 +82,19 @@ export function useUploadArtifact() {
       file,
       artifactType,
       sourceUri,
+      visibility,
     }: {
       file: File;
       artifactType: string;
       sourceUri?: string;
+      visibility?: "workspace" | "private";
     }) => {
       // apiClient doesn't support multipart/form-data, so use fetch directly.
       const formData = new FormData();
       formData.append("file", file);
       formData.append("artifact_type", artifactType);
       if (sourceUri) formData.append("source_uri", sourceUri);
+      if (visibility) formData.append("visibility", visibility);
 
       const authHeaders = getAuthzClient().getHeaders();
 

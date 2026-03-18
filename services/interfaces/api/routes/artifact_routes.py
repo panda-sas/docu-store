@@ -99,6 +99,7 @@ async def upload_blob(
     file: Annotated[UploadFile, File()],
     artifact_type: Annotated[ArtifactType, Form()],
     source_uri: Annotated[str | None, Form()] = None,
+    visibility: Annotated[str, Form()] = "workspace",
 ) -> ArtifactResponse:
     """Upload a blob to the blob store and create an artifact."""
     saga = container[ArtifactUploadSaga]
@@ -109,6 +110,7 @@ async def upload_blob(
             mime_type=file.content_type,
             artifact_type=artifact_type,
             source_uri=source_uri,
+            visibility=visibility,
         ),
         auth=auth,
     )
