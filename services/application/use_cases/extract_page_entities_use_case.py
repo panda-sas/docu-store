@@ -87,7 +87,8 @@ class ExtractPageEntitiesUseCase:
 
                 page_response = PageMapper.to_page_response(page)
                 await self.external_event_publisher.notify_page_updated(
-                    page_response, sub_type="TagMentionsUpdated"
+                    page_response,
+                    sub_type="TagMentionsUpdated",
                 )
 
             logger.info(

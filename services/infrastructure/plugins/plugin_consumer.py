@@ -10,12 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 import signal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from application.plugins.protocol import PluginContext, PluginEventHandler
-from application.plugins.registry import PluginRegistry
+if TYPE_CHECKING:
+    from application.plugins.protocol import PluginContext, PluginEventHandler
+    from application.plugins.registry import PluginRegistry
 
 logger = structlog.get_logger()
 
@@ -45,24 +46,9 @@ async def run_plugin_consumer(
         subscribed_events=sorted(all_sub_types),
     )
 
-    try:
-        from confluent_kafka import Consumer, KafkaError  # noqa: PLC0415
-    except ImportError:
-        logger.error("plugin_consumer.confluent_kafka_not_installed")
+    consumer, kafka_error_cls = _create_kafka_consumer(kafka_bootstrap_servers, kafka_topic)
+    if consumer is None:
         return
-
-    # One shared consumer for simplicity — filter messages by sub_type
-    # Each plugin has its own consumer group but we use a single consumer here
-    # with the combined plugin consumer group for MVP simplicity.
-    consumer_config = {
-        "bootstrap.servers": kafka_bootstrap_servers,
-        "group.id": "plugin_consumer",
-        "auto.offset.reset": "earliest",
-        "enable.auto.commit": True,
-    }
-
-    consumer = Consumer(consumer_config)
-    consumer.subscribe([kafka_topic])
 
     shutdown = asyncio.Event()
 
@@ -73,35 +59,81 @@ async def run_plugin_consumer(
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
 
-    loop = asyncio.get_running_loop()
-
     try:
-        while not shutdown.is_set():
-            msg = await loop.run_in_executor(None, consumer.poll, 1.0)
-            if msg is None:
-                continue
-
-            if msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    continue
-                logger.error("plugin_consumer.kafka_error", error=msg.error())
-                continue
-
-            try:
-                payload = json.loads(msg.value().decode("utf-8"))
-                event_type = payload.get("event_type", "")
-                sub_type = payload.get("sub_type", "")
-                data = payload.get("data", {})
-
-                if sub_type and sub_type in routing_table:
-                    await _dispatch(routing_table[sub_type], event_type, sub_type, data)
-
-            except Exception:
-                logger.exception("plugin_consumer.message_processing_error")
-
+        await _consume_loop(consumer, kafka_error_cls, routing_table, shutdown)
     finally:
         consumer.close()
         logger.info("plugin_consumer.stopped")
+
+
+def _create_kafka_consumer(
+    bootstrap_servers: str,
+    topic: str,
+) -> tuple[object | None, type | None]:
+    """Create and subscribe a Kafka consumer. Returns (consumer, KafkaError) or (None, None)."""
+    try:
+        from confluent_kafka import Consumer, KafkaError  # noqa: PLC0415
+    except ImportError:
+        logger.exception("plugin_consumer.confluent_kafka_not_installed")
+        return None, None
+
+    consumer_config = {
+        "bootstrap.servers": bootstrap_servers,
+        "group.id": "plugin_consumer",
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": True,
+    }
+
+    consumer = Consumer(consumer_config)
+    consumer.subscribe([topic])
+    return consumer, KafkaError
+
+
+async def _consume_loop(
+    consumer: object,
+    kafka_error_cls: type,
+    routing_table: dict[str, list[PluginEventHandler]],
+    shutdown: asyncio.Event,
+) -> None:
+    """Poll messages and dispatch to plugin handlers until shutdown."""
+    loop = asyncio.get_running_loop()
+
+    while not shutdown.is_set():
+        msg = await loop.run_in_executor(None, consumer.poll, 1.0)  # type: ignore[attr-defined]
+        if msg is None:
+            continue
+
+        if msg.error():
+            if msg.error().code() == kafka_error_cls._PARTITION_EOF:  # noqa: SLF001
+                continue
+            logger.error("plugin_consumer.kafka_error", error=msg.error())
+            continue
+
+        await _process_message(msg, routing_table)
+
+
+async def _process_message(
+    msg: object,
+    routing_table: dict[str, list[PluginEventHandler]],
+) -> None:
+    """Parse a single Kafka message and dispatch to matching handlers."""
+    try:
+        payload = json.loads(msg.value().decode("utf-8"))  # type: ignore[attr-defined]
+        event_type = payload.get("event_type", "")
+        sub_type = payload.get("sub_type", "")
+        data = payload.get("data", {})
+
+        # Match by sub_type first (e.g. CompoundMentionsUpdated),
+        # fall back to event_type (e.g. ArtifactDeleted, PageDeleted)
+        matched_key = sub_type if sub_type and sub_type in routing_table else None
+        if matched_key is None and event_type and event_type in routing_table:
+            matched_key = event_type
+
+        if matched_key:
+            await _dispatch(routing_table[matched_key], event_type, matched_key, data)
+
+    except Exception:
+        logger.exception("plugin_consumer.message_processing_error")
 
 
 async def _dispatch(

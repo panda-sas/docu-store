@@ -132,7 +132,11 @@ def _mount_plugin_routes(app: FastAPI) -> None:
                 router = plugin.create_router(context)
                 if router:
                     app.include_router(router, prefix=manifest.api_prefix, tags=[manifest.name])
-                    logger.info("plugin_router_mounted", plugin=manifest.name, prefix=manifest.api_prefix)
+                    logger.info(
+                        "plugin_router_mounted",
+                        plugin=manifest.name,
+                        prefix=manifest.api_prefix,
+                    )
 
         # Plugin discovery endpoint
         manifests = registry.list_manifests()
@@ -142,7 +146,7 @@ def _mount_plugin_routes(app: FastAPI) -> None:
             """List all enabled plugins and their manifests."""
             return [m.model_dump() for m in manifests]
 
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("plugin_routes_mount_failed", exc_info=True)
 
 

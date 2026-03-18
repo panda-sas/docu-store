@@ -77,3 +77,23 @@ class PubChemEnrichmentStore:
             {"_id": 0},
         )
         return await cursor.to_list(length=None)
+
+    async def delete_for_artifact(self, artifact_id: UUID) -> int:
+        """Delete all enrichment records for an artifact. Returns deleted count."""
+        result = await self._collection.delete_many({"artifact_id": str(artifact_id)})
+        logger.info(
+            "pubchem_enrichments_deleted_for_artifact",
+            artifact_id=str(artifact_id),
+            deleted_count=result.deleted_count,
+        )
+        return result.deleted_count
+
+    async def delete_for_page(self, page_id: UUID) -> int:
+        """Delete all enrichment records for a page. Returns deleted count."""
+        result = await self._collection.delete_many({"page_id": str(page_id)})
+        logger.info(
+            "pubchem_enrichments_deleted_for_page",
+            page_id=str(page_id),
+            deleted_count=result.deleted_count,
+        )
+        return result.deleted_count

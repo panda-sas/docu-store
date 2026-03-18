@@ -146,7 +146,8 @@ class SummarizePageUseCase:
 
             if self.external_event_publisher:
                 await self.external_event_publisher.notify_page_updated(
-                    result, sub_type="SummaryCandidateUpdated"
+                    result,
+                    sub_type="SummaryCandidateUpdated",
                 )
 
             log.info("summarize_page.success", page_id=str(page_id), mode=mode)
@@ -279,7 +280,8 @@ class SummarizeArtifactUseCase:
 
             if self.external_event_publisher:
                 await self.external_event_publisher.notify_artifact_updated(
-                    result, sub_type="SummaryCandidateUpdated"
+                    result,
+                    sub_type="SummaryCandidateUpdated",
                 )
 
             log.info("summarize_artifact.success", artifact_id=str(artifact_id))

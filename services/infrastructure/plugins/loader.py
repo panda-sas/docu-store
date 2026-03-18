@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 
-from application.plugins.protocol import Plugin
 from application.plugins.registry import PluginRegistry
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from application.plugins.protocol import Plugin
 
 logger = structlog.get_logger()
 
@@ -40,7 +44,11 @@ def discover_plugins(
         try:
             plugin_path = plugin_dir / name
             if not plugin_path.is_dir():
-                logger.warning("plugin_loader.directory_not_found", plugin=name, path=str(plugin_path))
+                logger.warning(
+                    "plugin_loader.directory_not_found",
+                    plugin=name,
+                    path=str(plugin_path),
+                )
                 continue
 
             module = importlib.import_module(f"plugins.{name}")

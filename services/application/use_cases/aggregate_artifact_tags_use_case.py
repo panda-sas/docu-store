@@ -75,7 +75,8 @@ class AggregateArtifactTagsUseCase:
 
                 artifact_response = ArtifactMapper.to_artifact_response(artifact)
                 await self.external_event_publisher.notify_artifact_updated(
-                    artifact_response, sub_type="TagsUpdated"
+                    artifact_response,
+                    sub_type="TagsUpdated",
                 )
 
             logger.info(

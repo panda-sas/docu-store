@@ -42,7 +42,10 @@ class PluginManifest(BaseModel):
     )
 
     # API
-    has_api_routes: bool = Field(default=False, description="Whether this plugin adds FastAPI routes.")
+    has_api_routes: bool = Field(
+        default=False,
+        description="Whether this plugin adds FastAPI routes.",
+    )
     api_prefix: str | None = Field(
         default=None,
         description="Route prefix, e.g. '/plugins/pubchem'.",

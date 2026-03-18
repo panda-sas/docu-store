@@ -115,7 +115,8 @@ class ExtractCompoundMentionsUseCase:
 
             if self.external_event_publisher:
                 await self.external_event_publisher.notify_page_updated(
-                    result, sub_type="CompoundMentionsUpdated"
+                    result,
+                    sub_type="CompoundMentionsUpdated",
                 )
 
             logger.info("extract_compound_mentions_success", page_id=str(page_id))

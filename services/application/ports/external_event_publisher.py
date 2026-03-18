@@ -48,7 +48,10 @@ class ExternalEventPublisher(ABC):
 
     @abstractmethod
     async def notify_artifact_updated(
-        self, artifact: ArtifactResponse, *, sub_type: str | None = None
+        self,
+        artifact: ArtifactResponse,
+        *,
+        sub_type: str | None = None,
     ) -> None:
         """Notify that an artifact has been updated.
 

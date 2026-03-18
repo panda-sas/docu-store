@@ -53,7 +53,8 @@ class PluginRegistry:
         return list(self._plugins.keys())
 
     def build_event_routing_table(
-        self, context: PluginContext
+        self,
+        context: PluginContext,
     ) -> dict[str, list[PluginEventHandler]]:
         """Build a mapping of sub_type → list of plugin event handlers.
 

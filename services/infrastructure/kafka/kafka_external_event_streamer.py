@@ -51,7 +51,10 @@ class KafkaExternalEventPublisher(ExternalEventPublisher):
         logger.info("kafka notified_artifact_created", artifact_id=str(artifact.artifact_id))
 
     async def notify_artifact_updated(
-        self, artifact: ArtifactResponse, *, sub_type: str | None = None
+        self,
+        artifact: ArtifactResponse,
+        *,
+        sub_type: str | None = None,
     ) -> None:
         event: dict[str, object] = {
             "event_type": "ArtifactUpdated",
@@ -61,7 +64,9 @@ class KafkaExternalEventPublisher(ExternalEventPublisher):
             event["sub_type"] = sub_type
         await self.publisher.publish(subject="ArtifactUpdated", event=event)
         logger.info(
-            "kafka notified_artifact_updated", artifact_id=str(artifact.artifact_id), sub_type=sub_type
+            "kafka notified_artifact_updated",
+            artifact_id=str(artifact.artifact_id),
+            sub_type=sub_type,
         )
 
     async def notify_artifact_deleted(self, artifact_id: UUID) -> None:

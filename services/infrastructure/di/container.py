@@ -8,7 +8,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from application.dtos.pdf_dtos import PDFContent
 from application.ports.blob_store import BlobStore
-from application.ports.permission_registrar import PermissionRegistrar
 from application.ports.compound_vector_store import CompoundVectorStore
 from application.ports.cser_service import CserService
 from application.ports.embedding_generator import EmbeddingGenerator
@@ -16,6 +15,7 @@ from application.ports.external_event_publisher import ExternalEventPublisher
 from application.ports.llm_client import LLMClientPort
 from application.ports.ner_extractor import NERExtractorPort
 from application.ports.pdf_service import PDFService
+from application.ports.permission_registrar import PermissionRegistrar
 from application.ports.prompt_repository import PromptRepositoryPort
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
 from application.ports.repositories.artifact_repository import ArtifactRepository
@@ -68,9 +68,6 @@ from application.use_cases.summary_embedding_use_cases import (
     EmbedPageSummaryUseCase,
 )
 from application.workflow_use_cases.log_artifcat_sample_use_case import LogArtifactSampleUseCase
-from application.workflow_use_cases.trigger_resource_registration_use_case import (
-    TriggerResourceRegistrationUseCase,
-)
 from application.workflow_use_cases.trigger_artifact_summarization_use_case import (
     TriggerArtifactSummarizationUseCase,
 )
@@ -92,6 +89,9 @@ from application.workflow_use_cases.trigger_page_summarization_use_case import (
 )
 from application.workflow_use_cases.trigger_page_summary_embedding_use_case import (
     TriggerPageSummaryEmbeddingUseCase,
+)
+from application.workflow_use_cases.trigger_resource_registration_use_case import (
+    TriggerResourceRegistrationUseCase,
 )
 from application.workflow_use_cases.trigger_smiles_embedding_use_case import (
     TriggerSmilesEmbeddingUseCase,

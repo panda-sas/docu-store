@@ -22,8 +22,8 @@ if TYPE_CHECKING:
     from application.dtos.pdf_dtos import PDFContent
     from application.ports.auth import AuthContext
     from application.ports.blob_store import BlobStore
-    from application.ports.permission_registrar import PermissionRegistrar
     from application.ports.pdf_service import PDFService
+    from application.ports.permission_registrar import PermissionRegistrar
     from application.use_cases.artifact_use_cases import (
         AddPagesUseCase,
         CreateArtifactUseCase,
@@ -157,6 +157,7 @@ class ArtifactUploadSaga:
             pdf_content: Parsed PDF content with pages and PNG streams
             artifact_id: ID of the artifact
             now: Current datetime for text mention extraction
+            auth: Optional auth context for workspace/owner scoping
 
         Returns:
             Result containing list of page IDs or error

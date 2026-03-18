@@ -184,7 +184,8 @@ class Settings(BaseSettings):
     sentinel_url: str = Field(default="http://localhost:9003", validation_alias="SENTINEL_URL")
     sentinel_service_key: str = Field(default="", validation_alias="SENTINEL_SERVICE_KEY")
     sentinel_service_name: str = Field(
-        default="docu-store", validation_alias="SENTINEL_SERVICE_NAME"
+        default="docu-store",
+        validation_alias="SENTINEL_SERVICE_NAME",
     )
     sentinel_idp_jwks_url: str = Field(
         default="https://www.googleapis.com/oauth2/v3/certs",
@@ -204,6 +205,7 @@ class Settings(BaseSettings):
         if not self.enabled_plugins:
             return []
         return [p.strip() for p in self.enabled_plugins.split(",") if p.strip()]
+
     plugin_dir: Path = Field(
         default=Path(__file__).resolve().parents[1] / "plugins",
         validation_alias="PLUGIN_DIR",

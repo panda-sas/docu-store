@@ -43,9 +43,6 @@ from application.workflow_use_cases.trigger_page_summarization_use_case import (
 from application.workflow_use_cases.trigger_page_summary_embedding_use_case import (
     TriggerPageSummaryEmbeddingUseCase,
 )
-from application.workflow_use_cases.trigger_resource_registration_use_case import (
-    TriggerResourceRegistrationUseCase,
-)
 from application.workflow_use_cases.trigger_smiles_embedding_use_case import (
     TriggerSmilesEmbeddingUseCase,
 )
@@ -88,7 +85,6 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     trigger_artifact_summary_embedding_use_case = container[TriggerArtifactSummaryEmbeddingUseCase]
     trigger_ner_extraction_use_case = container[TriggerNERExtractionUseCase]
     trigger_artifact_tag_aggregation_use_case = container[TriggerArtifactTagAggregationUseCase]
-    trigger_resource_registration_use_case = container[TriggerResourceRegistrationUseCase]
 
     # Setup signal handlers
     def handle_signal(signum: int, _frame: object) -> None:

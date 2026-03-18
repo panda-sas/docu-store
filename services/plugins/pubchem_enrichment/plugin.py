@@ -14,17 +14,26 @@ logger = structlog.get_logger()
 
 
 class PubChemEventHandler:
-    """Handles CompoundMentionsUpdated events by starting a Temporal workflow."""
+    """Handles CompoundMentionsUpdated events and deletion cleanup."""
 
-    def __init__(self, temporal_client: Any, task_queue: str) -> None:
+    def __init__(self, temporal_client: Any, task_queue: str, mongo_db: Any) -> None:
         self._temporal_client = temporal_client
         self._task_queue = task_queue
+        self._mongo_db = mongo_db
 
     @property
     def plugin_name(self) -> str:
         return "pubchem_enrichment"
 
     async def handle(self, event_type: str, sub_type: str, data: dict[str, Any]) -> None:
+        """Route events to enrichment workflows or deletion cleanup."""
+        if event_type in ("ArtifactDeleted", "PageDeleted"):
+            await self._handle_deletion(event_type, data)
+            return
+
+        await self._handle_enrichment(data)
+
+    async def _handle_enrichment(self, data: dict[str, Any]) -> None:
         """Start PubChemEnrichmentWorkflow for the page."""
         page_id = data.get("page_id", "unknown")
 
@@ -48,6 +57,29 @@ class PubChemEventHandler:
             page_id=page_id,
         )
 
+    async def _handle_deletion(self, event_type: str, data: dict[str, Any]) -> None:
+        """Clean up enrichment records when artifacts or pages are deleted."""
+        from uuid import UUID  # noqa: PLC0415
+
+        from plugins.pubchem_enrichment.storage.enrichment_store import (  # noqa: PLC0415
+            PubChemEnrichmentStore,
+        )
+
+        if self._mongo_db is None:
+            logger.warning("pubchem_handler.no_mongo_db_for_cleanup", event_type=event_type)
+            return
+
+        store = PubChemEnrichmentStore(self._mongo_db)
+
+        if event_type == "ArtifactDeleted":
+            artifact_id = data.get("artifact_id")
+            if artifact_id:
+                await store.delete_for_artifact(UUID(artifact_id))
+        elif event_type == "PageDeleted":
+            page_id = data.get("page_id")
+            if page_id:
+                await store.delete_for_page(UUID(page_id))
+
 
 class PubChemEnrichmentPlugin:
     """Plugin implementation for PubChem compound enrichment."""
@@ -60,6 +92,7 @@ class PubChemEnrichmentPlugin:
         return PubChemEventHandler(
             temporal_client=context.temporal_client,
             task_queue=PUBCHEM_MANIFEST.effective_task_queue(),
+            mongo_db=context.mongo_db,
         )
 
     def create_workflows(self) -> list[type]:

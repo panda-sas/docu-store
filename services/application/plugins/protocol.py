@@ -21,32 +21,32 @@ class PluginContext(Protocol):
     """
 
     @property
-    def page_read_model(self) -> Any:
+    def page_read_model(self) -> Any:  # noqa: ANN401
         """MongoDB page read-model accessor."""
         ...
 
     @property
-    def artifact_read_model(self) -> Any:
+    def artifact_read_model(self) -> Any:  # noqa: ANN401
         """MongoDB artifact read-model accessor."""
         ...
 
     @property
-    def smiles_validator(self) -> Any:
+    def smiles_validator(self) -> Any:  # noqa: ANN401
         """Stateless SMILES validation utility."""
         ...
 
     @property
-    def embedding_generator(self) -> Any:
+    def embedding_generator(self) -> Any:  # noqa: ANN401
         """Shared embedding generator."""
         ...
 
     @property
-    def mongo_db(self) -> Any:
+    def mongo_db(self) -> Any:  # noqa: ANN401
         """AsyncIOMotorDatabase for plugin-owned collections."""
         ...
 
     @property
-    def temporal_client(self) -> Any:
+    def temporal_client(self) -> Any:  # noqa: ANN401
         """Temporal client for starting plugin workflows."""
         ...
 

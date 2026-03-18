@@ -24,10 +24,38 @@ if TYPE_CHECKING:
     from application.ports.embedding_generator import EmbeddingGenerator
     from application.ports.repositories.artifact_read_models import ArtifactReadModel
     from application.ports.repositories.page_read_models import PageReadModel
-    from application.ports.summary_vector_store import SummaryVectorStore
-    from application.ports.vector_store import VectorStore
+    from application.ports.summary_vector_store import SummarySearchResult, SummaryVectorStore
+    from application.ports.vector_store import PageSearchResult, VectorStore
 
 logger = structlog.get_logger()
+
+
+# ---------------------------------------------------------------------------
+# Shared enrichment helpers
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_artifact_title(
+    artifact_id: UUID,
+    artifact_read_model: ArtifactReadModel,
+    fallback_title: str | None = None,
+) -> str | None:
+    """Return the best-available title for an artifact.
+
+    Uses the existing *fallback_title* when present, otherwise queries the
+    read model.
+    """
+    if fallback_title:
+        return fallback_title
+    artifact = await artifact_read_model.get_artifact_by_id(artifact_id)
+    if artifact:
+        return artifact.title_mention.title if artifact.title_mention else artifact.source_filename
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Summary search
+# ---------------------------------------------------------------------------
 
 
 class SearchSummariesUseCase:
@@ -76,15 +104,11 @@ class SearchSummariesUseCase:
 
             result_dtos: list[SummarySearchResultDTO] = []
             for h in hits:
-                title = h.artifact_title
-                if not title:
-                    artifact = await self.artifact_read_model.get_artifact_by_id(h.artifact_id)
-                    if artifact:
-                        title = (
-                            artifact.title_mention.title
-                            if artifact.title_mention
-                            else artifact.source_filename
-                        )
+                title = await _resolve_artifact_title(
+                    h.artifact_id,
+                    self.artifact_read_model,
+                    h.artifact_title,
+                )
                 result_dtos.append(
                     SummarySearchResultDTO(
                         entity_type=h.entity_type,
@@ -100,10 +124,7 @@ class SearchSummariesUseCase:
 
             model_info = await self.embedding_generator.get_model_info()
 
-            logger.info(
-                "search_summaries_success",
-                results_count=len(result_dtos),
-            )
+            logger.info("search_summaries_success", results_count=len(result_dtos))
 
             return Success(
                 SummarySearchResponse(
@@ -121,6 +142,11 @@ class SearchSummariesUseCase:
                 error=str(e),
             )
             return Failure(AppError("internal_error", f"Failed to search summaries: {e!s}"))
+
+
+# ---------------------------------------------------------------------------
+# Hierarchical (cross-collection) search
+# ---------------------------------------------------------------------------
 
 
 class HierarchicalSearchUseCase:
@@ -161,101 +187,25 @@ class HierarchicalSearchUseCase:
                 include_chunks=request.include_chunks,
             )
 
-            # Single embedding — reused for both collections
             query_embedding = await self.embedding_generator.generate_text_embedding(
                 text=request.query_text,
             )
 
-            # Query summary collection (always)
-            summary_hits_raw = await self.summary_vector_store.search_summaries(
-                query_embedding=query_embedding,
-                limit=request.limit,
-                score_threshold=request.score_threshold,
-                allowed_artifact_ids=allowed_artifact_ids,
-                workspace_id=workspace_id,
+            summary_hits = await self._search_summaries(
+                query_embedding,
+                request,
+                allowed_artifact_ids,
+                workspace_id,
             )
-            summary_hits: list[SummaryHit] = []
-            for h in summary_hits_raw:
-                title = h.artifact_title
-                page_index = h.metadata.get("page_index")
 
-                # Enrich missing artifact_title from read model
-                if not title:
-                    artifact = await self.artifact_read_model.get_artifact_by_id(h.artifact_id)
-                    if artifact:
-                        title = (
-                            artifact.title_mention.title
-                            if artifact.title_mention
-                            else artifact.source_filename
-                        )
-
-                summary_hits.append(
-                    SummaryHit(
-                        entity_type=h.entity_type,
-                        entity_id=h.entity_id,
-                        artifact_id=h.artifact_id,
-                        score=h.score,
-                        summary_text=h.summary_text,
-                        artifact_title=title,
-                        page_index=page_index,
-                    ),
-                )
-
-            # Query raw chunk collection (optional)
             chunk_hits: list[ChunkHit] = []
             if request.include_chunks:
-                # Over-fetch to allow dedup by page
-                raw_results = await self.vector_store.search_similar_pages(
-                    query_embedding=query_embedding,
-                    limit=request.limit * 3,
-                    score_threshold=request.score_threshold,
-                    allowed_artifact_ids=allowed_artifact_ids,
-                    workspace_id=workspace_id,
+                chunk_hits = await self._search_chunks(
+                    query_embedding,
+                    request,
+                    allowed_artifact_ids,
+                    workspace_id,
                 )
-
-                # Deduplicate: keep best chunk per page
-                best_by_page: dict[UUID, tuple[float, int]] = {}
-                for r in raw_results:
-                    existing_score, _ = best_by_page.get(r.page_id, (-1.0, 0))
-                    if r.score > existing_score:
-                        best_by_page[r.page_id] = (r.score, r.page_index)
-
-                # Build chunk hits, enriched with text preview from read model
-                top_pages = sorted(best_by_page.items(), key=lambda x: x[1][0], reverse=True)[
-                    : request.limit
-                ]
-                for page_id, (score, page_index) in top_pages:
-                    # Find artifact_id from raw results
-                    artifact_id = next(r.artifact_id for r in raw_results if r.page_id == page_id)
-                    text_preview = None
-                    page_name = None
-                    page = await self.page_read_model.get_page_by_id(page_id)
-                    if page:
-                        page_name = page.name
-                        if page.text_mention and page.text_mention.text:
-                            text_preview = page.text_mention.text[:500]
-
-                    # Fetch artifact name for display
-                    artifact_name = None
-                    artifact = await self.artifact_read_model.get_artifact_by_id(artifact_id)
-                    if artifact:
-                        artifact_name = (
-                            artifact.title_mention.title
-                            if artifact.title_mention
-                            else artifact.source_filename
-                        )
-
-                    chunk_hits.append(
-                        ChunkHit(
-                            page_id=page_id,
-                            artifact_id=artifact_id,
-                            page_index=page_index,
-                            score=score,
-                            text_preview=text_preview,
-                            artifact_name=artifact_name,
-                            page_name=page_name,
-                        ),
-                    )
 
             model_info = await self.embedding_generator.get_model_info()
 
@@ -285,3 +235,101 @@ class HierarchicalSearchUseCase:
             return Failure(
                 AppError("internal_error", f"Failed to perform hierarchical search: {e!s}"),
             )
+
+    async def _search_summaries(
+        self,
+        query_embedding: object,
+        request: HierarchicalSearchRequest,
+        allowed_artifact_ids: list[UUID] | None,
+        workspace_id: UUID | None,
+    ) -> list[SummaryHit]:
+        """Query the summary collection and enrich with artifact titles."""
+        summary_hits_raw: list[
+            SummarySearchResult
+        ] = await self.summary_vector_store.search_summaries(
+            query_embedding=query_embedding,
+            limit=request.limit,
+            score_threshold=request.score_threshold,
+            allowed_artifact_ids=allowed_artifact_ids,
+            workspace_id=workspace_id,
+        )
+        result: list[SummaryHit] = []
+        for h in summary_hits_raw:
+            title = await _resolve_artifact_title(
+                h.artifact_id,
+                self.artifact_read_model,
+                h.artifact_title,
+            )
+            result.append(
+                SummaryHit(
+                    entity_type=h.entity_type,
+                    entity_id=h.entity_id,
+                    artifact_id=h.artifact_id,
+                    score=h.score,
+                    summary_text=h.summary_text,
+                    artifact_title=title,
+                    page_index=h.metadata.get("page_index"),
+                ),
+            )
+        return result
+
+    async def _search_chunks(
+        self,
+        query_embedding: object,
+        request: HierarchicalSearchRequest,
+        allowed_artifact_ids: list[UUID] | None,
+        workspace_id: UUID | None,
+    ) -> list[ChunkHit]:
+        """Query the raw chunk collection, deduplicate by page, enrich."""
+        raw_results: list[PageSearchResult] = await self.vector_store.search_similar_pages(
+            query_embedding=query_embedding,
+            limit=request.limit * 3,
+            score_threshold=request.score_threshold,
+            allowed_artifact_ids=allowed_artifact_ids,
+            workspace_id=workspace_id,
+        )
+
+        # Deduplicate: keep best chunk per page
+        best_by_page: dict[UUID, tuple[float, int]] = {}
+        for r in raw_results:
+            existing_score, _ = best_by_page.get(r.page_id, (-1.0, 0))
+            if r.score > existing_score:
+                best_by_page[r.page_id] = (r.score, r.page_index)
+
+        top_pages = sorted(best_by_page.items(), key=lambda x: x[1][0], reverse=True)[
+            : request.limit
+        ]
+
+        chunk_hits: list[ChunkHit] = []
+        for page_id, (score, page_index) in top_pages:
+            artifact_id = next(r.artifact_id for r in raw_results if r.page_id == page_id)
+            chunk_hits.append(await self._enrich_chunk_hit(page_id, artifact_id, page_index, score))
+        return chunk_hits
+
+    async def _enrich_chunk_hit(
+        self,
+        page_id: UUID,
+        artifact_id: UUID,
+        page_index: int,
+        score: float,
+    ) -> ChunkHit:
+        """Build a single ChunkHit enriched with read-model data."""
+        text_preview = None
+        page_name = None
+        page = await self.page_read_model.get_page_by_id(page_id)
+        if page:
+            page_name = page.name
+            if page.text_mention and page.text_mention.text:
+                text_preview = page.text_mention.text[:500]
+
+        artifact_name = await _resolve_artifact_title(artifact_id, self.artifact_read_model)
+
+        return ChunkHit(
+            page_id=page_id,
+            artifact_id=artifact_id,
+            page_index=page_index,
+            score=score,
+            text_preview=text_preview,
+            artifact_name=artifact_name,
+            page_name=page_name,
+        )
