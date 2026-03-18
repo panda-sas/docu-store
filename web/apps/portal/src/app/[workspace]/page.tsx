@@ -8,10 +8,10 @@ import {
   BookOpen,
   Atom,
   Activity,
-  Upload,
-  Search,
   ArrowRight,
 } from "lucide-react";
+import { Button } from "primereact/button";
+import { Skeleton } from "primereact/skeleton";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -79,10 +79,10 @@ export default function DashboardPage() {
             {isLoading ? (
               <div className="divide-y divide-border-subtle">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 px-5 py-3 animate-pulse">
-                    <div className="h-4 w-4 rounded bg-border-subtle" />
-                    <div className="h-4 flex-1 rounded bg-border-subtle" />
-                    <div className="h-4 w-12 rounded bg-border-subtle" />
+                  <div key={i} className="flex items-center gap-3 px-5 py-3">
+                    <Skeleton width="1rem" height="1rem" />
+                    <Skeleton width="100%" height="1rem" />
+                    <Skeleton width="3rem" height="1rem" />
                   </div>
                 ))}
               </div>
@@ -120,26 +120,32 @@ export default function DashboardPage() {
         <Card>
           <CardHeader title="Quick Actions" />
           <div className="space-y-2">
-            <Link
-              href={`/${workspace}/documents/upload`}
-              className="flex items-center gap-3 rounded-lg border border-border-default px-4 py-3 text-sm font-medium text-text-primary transition-colors hover:border-accent hover:bg-accent-light"
-            >
-              <Upload className="h-4 w-4 text-accent-text" />
-              Upload Document
+            <Link href={`/${workspace}/documents/upload`}>
+              <Button
+                label="Upload Document"
+                icon="pi pi-upload"
+                outlined
+                severity="secondary"
+                className="w-full !justify-start"
+              />
             </Link>
-            <Link
-              href={`/${workspace}/search`}
-              className="flex items-center gap-3 rounded-lg border border-border-default px-4 py-3 text-sm font-medium text-text-primary transition-colors hover:border-accent hover:bg-accent-light"
-            >
-              <Search className="h-4 w-4 text-accent-text" />
-              Search Documents
+            <Link href={`/${workspace}/search`}>
+              <Button
+                label="Search Documents"
+                icon="pi pi-search"
+                outlined
+                severity="secondary"
+                className="w-full !justify-start"
+              />
             </Link>
-            <Link
-              href={`/${workspace}/compounds`}
-              className="flex items-center gap-3 rounded-lg border border-border-default px-4 py-3 text-sm font-medium text-text-primary transition-colors hover:border-accent hover:bg-accent-light"
-            >
-              <Atom className="h-4 w-4 text-accent-text" />
-              Browse Compounds
+            <Link href={`/${workspace}/compounds`}>
+              <Button
+                label="Browse Compounds"
+                icon="pi pi-sitemap"
+                outlined
+                severity="secondary"
+                className="w-full !justify-start"
+              />
             </Link>
           </div>
         </Card>

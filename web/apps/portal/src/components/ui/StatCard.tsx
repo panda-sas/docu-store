@@ -1,3 +1,4 @@
+import { Skeleton } from "primereact/skeleton";
 import type { LucideIcon } from "lucide-react";
 
 interface StatCardProps {
@@ -17,12 +18,14 @@ export function StatCard({
 }: StatCardProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-border-default bg-surface-elevated p-5 shadow-ds-sm animate-pulse">
+      <div className="rounded-xl border border-border-default bg-surface-elevated p-5">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-border-subtle" />
-          <div className="h-4 w-20 rounded bg-border-subtle" />
+          <Skeleton width="2.25rem" height="2.25rem" borderRadius="0.5rem" />
+          <Skeleton width="5rem" height="1rem" />
         </div>
-        <div className="mt-3 h-8 w-16 rounded bg-border-subtle" />
+        <div className="mt-3">
+          <Skeleton width="4rem" height="2rem" />
+        </div>
       </div>
     );
   }

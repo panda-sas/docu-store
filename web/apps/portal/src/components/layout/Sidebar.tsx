@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { Button } from "primereact/button";
 import {
   LayoutDashboard,
   FileText,
@@ -95,10 +96,13 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
         />
 
         {/* Theme toggle */}
-        <button
+        <Button
           onClick={toggleTheme}
-          title={collapsed ? (theme === "light" ? "Dark mode" : "Light mode") : undefined}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-text transition-colors duration-150 hover:bg-sidebar-hover hover:text-sidebar-text-active"
+          text
+          className="!w-full !justify-start !gap-3 !rounded-lg !px-3 !py-2 !text-sm !text-sidebar-text hover:!bg-sidebar-hover hover:!text-sidebar-text-active !border-none"
+          aria-label={theme === "light" ? "Dark mode" : "Light mode"}
+          tooltip={collapsed ? (theme === "light" ? "Dark mode" : "Light mode") : undefined}
+          tooltipOptions={{ position: "right" }}
         >
           {theme === "light" ? (
             <Moon className="h-[18px] w-[18px] shrink-0" />
@@ -108,13 +112,17 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
           {!collapsed && (
             <span>{theme === "light" ? "Dark mode" : "Light mode"}</span>
           )}
-        </button>
+        </Button>
 
         {/* Collapse toggle */}
-        <button
+        <Button
           onClick={toggleCollapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-text transition-colors duration-150 hover:bg-sidebar-hover hover:text-sidebar-text-active"
+          text
+          className="!w-full !justify-start !gap-3 !rounded-lg !px-3 !py-2 !text-sm !text-sidebar-text hover:!bg-sidebar-hover hover:!text-sidebar-text-active !border-none"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          tooltip={collapsed ? "Expand sidebar" : undefined}
+          tooltipOptions={{ position: "right" }}
         >
           {collapsed ? (
             <PanelLeftOpen className="h-[18px] w-[18px] shrink-0" />
@@ -122,7 +130,7 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
             <PanelLeftClose className="h-[18px] w-[18px] shrink-0" />
           )}
           {!collapsed && <span>Collapse</span>}
-        </button>
+        </Button>
       </div>
     </aside>
   );

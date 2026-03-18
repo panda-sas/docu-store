@@ -14,6 +14,9 @@
 @import "tailwindcss/theme" layer(theme);
 @import "tailwindcss/utilities" layer(utilities);
 
+/* Bind Tailwind's dark: variant to the data-theme attribute used by ThemeProvider */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* PrimeReact theme loaded dynamically via ThemeProvider — no static import */
 @import "primeicons/primeicons.css" layer(primereact);
 
