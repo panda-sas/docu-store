@@ -58,7 +58,7 @@ class EmbedPageSummaryUseCase:
             try:
                 artifact = self.artifact_repository.get_by_id(page.artifact_id)
                 if artifact.title_mention:
-                    artifact_title = artifact.title_mention.text
+                    artifact_title = artifact.title_mention.title
             except AggregateNotFoundError:
                 pass  # Title is optional — embed without it
 
@@ -125,7 +125,7 @@ class EmbedArtifactSummaryUseCase:
                 )
 
             summary_text = artifact.summary_candidate.summary
-            artifact_title = artifact.title_mention.text if artifact.title_mention else None
+            artifact_title = artifact.title_mention.title if artifact.title_mention else None
             page_count = len(artifact.pages)
 
             embedding = await self.embedding_generator.generate_text_embedding(text=summary_text)

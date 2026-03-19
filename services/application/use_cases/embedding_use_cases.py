@@ -282,10 +282,10 @@ class SearchSimilarPagesUseCase:
                         storage_location=artifact.storage_location,
                         page_count=page_count,
                         tags=[tm.tag for tm in artifact.tag_mentions] if artifact.tag_mentions else [],
-                        summary=artifact.summary_candidate.text
+                        summary=artifact.summary_candidate.summary
                         if artifact.summary_candidate
                         else None,
-                        title=artifact.title_mention.text if artifact.title_mention else None,
+                        title=artifact.title_mention.title if artifact.title_mention else None,
                     )
 
                 result_dto = SearchResultDTO(
