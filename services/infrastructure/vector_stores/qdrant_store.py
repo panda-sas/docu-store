@@ -25,7 +25,7 @@ class QdrantStore(VectorStore):
         url: str = "http://localhost:6333",
         api_key: str | None = None,
         collection_name: str = "page_embeddings",
-        vector_size: int = 384,  # Default for all-MiniLM-L6-v2
+        vector_size: int = 768,  # Default for nomic-embed-text-v1.5
     ) -> None:
         """Initialize Qdrant client.
 
@@ -79,7 +79,7 @@ class QdrantStore(VectorStore):
                 logger.info("collection_already_exists", collection=self.collection_name)
                 return
 
-            # Create collection with named dense vector + sparse vector
+            # Create collection with named dense vector + sparse vector + quantization
             try:
                 await client.create_collection(
                     collection_name=self.collection_name,
@@ -94,6 +94,13 @@ class QdrantStore(VectorStore):
                             modifier=models.Modifier.IDF,
                         ),
                     },
+                    quantization_config=models.ScalarQuantization(
+                        scalar=models.ScalarQuantizationConfig(
+                            type=models.ScalarType.INT8,
+                            quantile=0.99,
+                            always_ram=True,
+                        ),
+                    ),
                 )
             except UnexpectedResponse as e:
                 if e.status_code == 409:
@@ -435,6 +442,12 @@ class QdrantStore(VectorStore):
                 limit=limit,
                 score_threshold=score_threshold,
                 with_payload=True,
+                search_params=models.SearchParams(
+                    quantization=models.QuantizationSearchParams(
+                        rescore=True,
+                        oversampling=2.0,
+                    ),
+                ),
             )
         except Exception as e:
             logger.exception("search_failed", error=str(e))

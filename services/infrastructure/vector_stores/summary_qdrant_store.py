@@ -40,7 +40,7 @@ class SummaryQdrantStore(SummaryVectorStore):
         url: str = "http://localhost:6333",
         api_key: str | None = None,
         collection_name: str = "summary_embeddings",
-        vector_size: int = 384,  # all-MiniLM-L6-v2
+        vector_size: int = 768,  # nomic-embed-text-v1.5
     ) -> None:
         self.url = url
         self.api_key = api_key

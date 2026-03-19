@@ -286,6 +286,8 @@ def create_container() -> Container:  # noqa: PLR0915
     container[EmbeddingGenerator] = lambda _: SentenceTransformerGenerator(
         model_name=settings.embedding_model_name,
         device=settings.embedding_device,
+        query_prefix=settings.embedding_query_prefix,
+        document_prefix=settings.embedding_document_prefix,
     )
 
     # Vector Store (text embeddings — page chunks)
@@ -293,7 +295,7 @@ def create_container() -> Container:  # noqa: PLR0915
         url=settings.qdrant_url,
         api_key=settings.qdrant_api_key,
         collection_name=settings.qdrant_collection_name,
-        vector_size=384,  # all-MiniLM-L6-v2 default
+        vector_size=settings.embedding_dimensions,
     )
     container[VectorStore] = vector_store_instance
 
@@ -310,7 +312,7 @@ def create_container() -> Container:  # noqa: PLR0915
         url=settings.qdrant_url,
         api_key=settings.qdrant_api_key,
         collection_name=settings.qdrant_summary_collection_name,
-        vector_size=384,  # all-MiniLM-L6-v2 default
+        vector_size=settings.embedding_dimensions,
     )
     container[SummaryVectorStore] = summary_vector_store_instance
 

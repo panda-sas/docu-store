@@ -29,18 +29,24 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
 
     def __init__(
         self,
-        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+        model_name: str = "nomic-ai/nomic-embed-text-v1.5",
         device: Literal["cpu", "cuda", "mps"] = "cpu",
+        query_prefix: str = "",
+        document_prefix: str = "",
     ) -> None:
         """Initialize the sentence-transformers generator.
 
         Args:
             model_name: HuggingFace model name or path
             device: Device to run the model on (cpu, cuda, or mps for Apple Silicon)
+            query_prefix: Prefix prepended to query text (e.g. "search_query: " for nomic)
+            document_prefix: Prefix prepended to document text (e.g. "search_document: " for nomic)
 
         """
         self.model_name = model_name
         self.device = self._resolve_device(device)
+        self.query_prefix = query_prefix
+        self.document_prefix = document_prefix
 
         logger.info(
             "initializing_sentence_transformer",
@@ -72,7 +78,9 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
             )  # heavy import — deferred until first use
 
             logger.info("loading_sentence_transformer_model", model_name=self.model_name)
-            self._model = SentenceTransformer(self.model_name, device=self.device)
+            self._model = SentenceTransformer(
+                self.model_name, device=self.device, trust_remote_code=True,
+            )
             self._dimensions = self._model.get_sentence_embedding_dimension()
             logger.info(
                 "model_loaded",
@@ -106,9 +114,9 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
 
         logger.debug("generating_embedding", text_length=len(text))
 
-        # Generate embedding
-        # encode() returns numpy array, convert to list
-        vector = self._model.encode(text, convert_to_tensor=False).tolist()
+        # Apply query prefix (e.g. "search_query: " for nomic asymmetric retrieval)
+        prefixed_text = self.query_prefix + text if self.query_prefix else text
+        vector = self._model.encode(prefixed_text, convert_to_tensor=False).tolist()
 
         embedding = TextEmbedding(
             embedding_id=uuid4(),
@@ -158,6 +166,10 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
         self._ensure_model_loaded()
 
         logger.debug("generating_batch_embeddings", count=len(texts))
+
+        # Apply document prefix for asymmetric retrieval models (e.g. nomic)
+        if self.document_prefix:
+            texts = [self.document_prefix + t for t in texts]
 
         # Batch encode all texts at once — much faster than encoding one by one
         vectors = self._model.encode(texts, convert_to_tensor=False).tolist()

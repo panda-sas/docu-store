@@ -112,12 +112,27 @@ class Settings(BaseSettings):
         validation_alias="EMBEDDING_MODEL_PROVIDER",
     )
     embedding_model_name: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
+        default="nomic-ai/nomic-embed-text-v1.5",
         validation_alias="EMBEDDING_MODEL_NAME",
+    )
+    embedding_dimensions: int = Field(
+        default=768,
+        validation_alias="EMBEDDING_DIMENSIONS",
+        description="Vector dimensionality (768 for nomic, 384 for MiniLM)",
     )
     embedding_device: Literal["cpu", "cuda", "mps"] = Field(
         default="cpu",
         validation_alias="EMBEDDING_DEVICE",
+    )
+    embedding_query_prefix: str = Field(
+        default="search_query: ",
+        validation_alias="EMBEDDING_QUERY_PREFIX",
+        description="Prefix for query text (nomic requires 'search_query: ')",
+    )
+    embedding_document_prefix: str = Field(
+        default="search_document: ",
+        validation_alias="EMBEDDING_DOCUMENT_PREFIX",
+        description="Prefix for document text (nomic requires 'search_document: ')",
     )
 
     # SMILES / ChemBERTa embeddings
