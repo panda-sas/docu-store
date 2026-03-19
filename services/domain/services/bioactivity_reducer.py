@@ -65,9 +65,14 @@ def associate_bioactivities(tag_mentions: list[TagMention]) -> list[TagMention]:
         if idx is None:
             continue
 
+        assay_type = (params.get("assay_type") or "").strip()
+        value = (params.get("value") or "").strip()
+        if not assay_type or not value:
+            continue
+
         activity: dict = {
-            "assay_type": params.get("assay_type", ""),
-            "value": params.get("value", ""),
+            "assay_type": assay_type,
+            "value": value,
             "unit": params.get("unit", ""),
             "raw_text": bio.tag,
         }
