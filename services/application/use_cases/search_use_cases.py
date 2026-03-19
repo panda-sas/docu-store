@@ -100,6 +100,9 @@ class SearchSummariesUseCase:
                 score_threshold=request.score_threshold,
                 allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
+                tags=request.tags,
+                entity_types=request.entity_types_filter,
+                tag_match_mode=request.tag_match_mode,
             )
 
             result_dtos: list[SummarySearchResultDTO] = []
@@ -252,6 +255,9 @@ class HierarchicalSearchUseCase:
             score_threshold=request.score_threshold,
             allowed_artifact_ids=allowed_artifact_ids,
             workspace_id=workspace_id,
+            tags=request.tags,
+            entity_types=request.entity_types_filter,
+            tag_match_mode=request.tag_match_mode,
         )
         result: list[SummaryHit] = []
         for h in summary_hits_raw:
@@ -287,6 +293,9 @@ class HierarchicalSearchUseCase:
             score_threshold=request.score_threshold,
             allowed_artifact_ids=allowed_artifact_ids,
             workspace_id=workspace_id,
+            tags=request.tags,
+            entity_types=request.entity_types_filter,
+            tag_match_mode=request.tag_match_mode,
         )
 
         # Deduplicate: keep best chunk per page

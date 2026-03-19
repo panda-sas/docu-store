@@ -113,10 +113,25 @@ class GeneratePageEmbeddingUseCase:
                 page_id=str(page_id),
                 chunk_count=len(embeddings),
             )
-            # Pass workspace_id through metadata for tenant isolation in Qdrant
-            upsert_metadata = {}
+            # Pass workspace_id and tag metadata through metadata for Qdrant payload
+            upsert_metadata: dict = {}
             if page.workspace_id:
                 upsert_metadata["workspace_id"] = str(page.workspace_id)
+
+            # Include tag metadata for filtered search
+            if page.tag_mentions:
+                upsert_metadata["tags"] = [tm.tag for tm in page.tag_mentions]
+                upsert_metadata["tag_normalized"] = [tm.tag.lower() for tm in page.tag_mentions]
+                ner_types = {tm.entity_type for tm in page.tag_mentions if tm.entity_type}
+                upsert_metadata["entity_types"] = sorted(ner_types)
+
+            # Include compound SMILES for cross-reference
+            if page.compound_mentions:
+                upsert_metadata["compound_smiles"] = [
+                    cm.canonical_smiles
+                    for cm in page.compound_mentions
+                    if cm.canonical_smiles and cm.is_smiles_valid
+                ]
 
             await self.vector_store.upsert_page_chunk_embeddings(
                 page_id=page_id,
@@ -231,6 +246,9 @@ class SearchSimilarPagesUseCase:
                 score_threshold=request.score_threshold,
                 allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
+                tags=request.tags,
+                entity_types=request.entity_types,
+                tag_match_mode=request.tag_match_mode,
             )
 
             # 3. Deduplicate by page_id (keep highest-scoring chunk per page)

@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { TextSearchResults } from "@/components/search/TextSearchResults";
 import { SummarySearchResults } from "@/components/search/SummarySearchResults";
 import { HierarchicalSearchResults } from "@/components/search/HierarchicalSearchResults";
+import { TagFilter } from "@/components/search/TagFilter";
 import {
   useSearchPages,
   useSearchSummaries,
@@ -35,6 +36,8 @@ export default function SearchPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("hierarchical");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [tagMatchMode, setTagMatchMode] = useState<"any" | "all">("any");
 
   // Track whether we need to auto-search after prefill
   const [shouldAutoSearch, setShouldAutoSearch] = useState(false);
@@ -59,7 +62,7 @@ export default function SearchPage() {
   useEffect(() => {
     if (shouldAutoSearch && query) {
       setShouldAutoSearch(false);
-      hierarchicalSearch.mutate({ query_text: query, include_chunks: true });
+      hierarchicalSearch.mutate({ query_text: query, include_chunks: true, ...tagParams });
     }
   }, [shouldAutoSearch, query]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -73,16 +76,20 @@ export default function SearchPage() {
     (mode === "summary" && summarySearch.data) ||
     (mode === "hierarchical" && hierarchicalSearch.data);
 
+  const tagParams = filterTags.length > 0
+    ? { tags: filterTags, tag_match_mode: tagMatchMode as "any" | "all" }
+    : {};
+
   const handleSearch = () => {
     const trimmed = query.trim();
     if (!trimmed) return;
 
     if (mode === "text") {
-      textSearch.mutate({ query_text: trimmed });
+      textSearch.mutate({ query_text: trimmed, ...tagParams });
     } else if (mode === "summary") {
-      summarySearch.mutate({ query_text: trimmed });
+      summarySearch.mutate({ query_text: trimmed, ...tagParams });
     } else {
-      hierarchicalSearch.mutate({ query_text: trimmed, include_chunks: true });
+      hierarchicalSearch.mutate({ query_text: trimmed, include_chunks: true, ...tagParams });
     }
   };
 
@@ -125,6 +132,13 @@ export default function SearchPage() {
           onChange={(e) => {
             if (e.value) setMode(e.value);
           }}
+        />
+
+        <TagFilter
+          tags={filterTags}
+          matchMode={tagMatchMode}
+          onTagsChange={setFilterTags}
+          onMatchModeChange={setTagMatchMode}
         />
       </div>
 

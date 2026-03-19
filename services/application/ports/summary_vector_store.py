@@ -51,6 +51,8 @@ class SummaryVectorStore(Protocol):
         artifact_title: str | None = None,
         page_index: int = 0,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
     ) -> None:
         """Store or update a page summary embedding.
 
@@ -66,6 +68,8 @@ class SummaryVectorStore(Protocol):
         artifact_title: str | None = None,
         page_count: int = 0,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
     ) -> None:
         """Store or update an artifact summary embedding.
 
@@ -90,6 +94,9 @@ class SummaryVectorStore(Protocol):
         score_threshold: float | None = None,
         allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
     ) -> list[SummarySearchResult]:
         """Search summary embeddings by dense vector similarity.
 
@@ -101,10 +108,25 @@ class SummaryVectorStore(Protocol):
             score_threshold: Minimum cosine similarity (0.0-1.0).
             allowed_artifact_ids: Optional whitelist of accessible artifact IDs.
             workspace_id: Optional workspace scope for multi-tenant filtering.
+            tags: Optional tag filter (case-insensitive).
+            entity_types: Optional NER entity type filter.
+            tag_match_mode: 'any' = match ANY tag, 'all' = must have ALL tags.
 
         Returns:
             List of SummarySearchResult ordered by score descending.
 
+        """
+        ...
+
+    async def set_summary_payload(
+        self,
+        entity_type: Literal["page", "artifact"],
+        entity_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload fields on a summary point.
+
+        Used to update metadata (e.g. tags) without re-embedding.
         """
         ...
 

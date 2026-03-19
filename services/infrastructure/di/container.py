@@ -65,6 +65,7 @@ from application.use_cases.page_use_cases import (
 from application.use_cases.search_use_cases import HierarchicalSearchUseCase, SearchSummariesUseCase
 from application.use_cases.smiles_embedding_use_cases import EmbedCompoundSmilesUseCase
 from application.use_cases.smiles_search_use_cases import SearchSimilarCompoundsUseCase
+from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
 from application.use_cases.summarization_use_cases import (
     SummarizeArtifactUseCase,
     SummarizePageUseCase,
@@ -547,6 +548,13 @@ def create_container() -> Container:  # noqa: PLR0915
         lambda c: TriggerArtifactSummaryEmbeddingUseCase(
             workflow_orchestrator=c[WorkflowOrchestrator],
         )
+    )
+
+    # Vector Metadata Sync Use Cases
+    container[SyncPageTagsToVectorStoreUseCase] = lambda c: SyncPageTagsToVectorStoreUseCase(
+        page_repository=c[PageRepository],
+        vector_store=c[VectorStore],
+        summary_vector_store=c[SummaryVectorStore],
     )
 
     # Search Use Cases

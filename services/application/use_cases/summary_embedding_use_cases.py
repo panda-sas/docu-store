@@ -72,6 +72,12 @@ class EmbedPageSummaryUseCase:
                 artifact_title=artifact_title,
                 page_index=page.index,
                 workspace_id=page.workspace_id,
+                tags=[tm.tag for tm in page.tag_mentions] if page.tag_mentions else None,
+                entity_types=(
+                    sorted({tm.entity_type for tm in page.tag_mentions if tm.entity_type})
+                    if page.tag_mentions
+                    else None
+                ),
             )
 
             logger.info(
@@ -137,6 +143,12 @@ class EmbedArtifactSummaryUseCase:
                 artifact_title=artifact_title,
                 page_count=page_count,
                 workspace_id=artifact.workspace_id,
+                tags=[tm.tag for tm in artifact.tag_mentions] if artifact.tag_mentions else None,
+                entity_types=(
+                    sorted({tm.entity_type for tm in artifact.tag_mentions if tm.entity_type})
+                    if artifact.tag_mentions
+                    else None
+                ),
             )
 
             logger.info(

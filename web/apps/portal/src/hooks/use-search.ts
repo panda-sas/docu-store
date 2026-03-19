@@ -8,6 +8,12 @@ import { apiClient } from "@docu-store/api-client";
 // - The same query text may return different results over time as the index grows
 // - useMutation gives us isPending / isSuccess / reset without stale-time caching
 
+export interface TagFilterParams {
+  tags?: string[];
+  entity_types?: string[];
+  tag_match_mode?: "any" | "all";
+}
+
 export function useSearchPages() {
   return useMutation({
     mutationFn: async (params: {
@@ -15,13 +21,16 @@ export function useSearchPages() {
       limit?: number;
       artifact_id?: string;
       score_threshold?: number;
-    }) => {
+    } & TagFilterParams) => {
       const { data, error } = await apiClient.POST("/search/pages", {
         body: {
           query_text: params.query_text,
           limit: params.limit ?? 10,
           artifact_id: params.artifact_id,
           score_threshold: params.score_threshold,
+          tags: params.tags,
+          entity_types: params.entity_types,
+          tag_match_mode: params.tag_match_mode,
         },
       });
       if (error) throw new Error("Failed to search pages");
@@ -38,7 +47,7 @@ export function useSearchSummaries() {
       entity_type?: "page" | "artifact";
       artifact_id?: string;
       score_threshold?: number;
-    }) => {
+    } & TagFilterParams) => {
       const { data, error } = await apiClient.POST("/search/summaries", {
         body: {
           query_text: params.query_text,
@@ -46,6 +55,9 @@ export function useSearchSummaries() {
           entity_type: params.entity_type,
           artifact_id: params.artifact_id,
           score_threshold: params.score_threshold,
+          tags: params.tags,
+          entity_types_filter: params.entity_types,
+          tag_match_mode: params.tag_match_mode,
         },
       });
       if (error) throw new Error("Failed to search summaries");
@@ -61,13 +73,16 @@ export function useHierarchicalSearch() {
       limit?: number;
       score_threshold?: number;
       include_chunks?: boolean;
-    }) => {
+    } & TagFilterParams) => {
       const { data, error } = await apiClient.POST("/search/hierarchical", {
         body: {
           query_text: params.query_text,
           limit: params.limit ?? 10,
           score_threshold: params.score_threshold,
           include_chunks: params.include_chunks ?? true,
+          tags: params.tags,
+          entity_types_filter: params.entity_types,
+          tag_match_mode: params.tag_match_mode,
         },
       });
       if (error) throw new Error("Failed to perform hierarchical search");

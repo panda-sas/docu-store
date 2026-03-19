@@ -40,6 +40,19 @@ class SearchRequest(BaseModel):
         le=1.0,
         description="Minimum similarity score (0.0 to 1.0)",
     )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Filter by tags (case-insensitive). Matches pages containing these tags.",
+    )
+    entity_types: list[str] | None = Field(
+        default=None,
+        description="Filter by entity types (e.g. 'target', 'compound_name', 'gene_name').",
+    )
+    tag_match_mode: str = Field(
+        default="any",
+        pattern="^(any|all)$",
+        description="'any' = match pages with ANY of the tags, 'all' = must have ALL tags.",
+    )
 
 
 class SearchResultDTO(BaseModel):

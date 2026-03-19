@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from domain.value_objects.text_embedding import TextEmbedding
@@ -108,6 +108,9 @@ class VectorStore(Protocol):
         score_threshold: float | None = None,
         allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
     ) -> list[PageSearchResult]:
         """Find pages similar to the query embedding.
 
@@ -118,9 +121,28 @@ class VectorStore(Protocol):
             score_threshold: Optional minimum similarity score (0.0 to 1.0)
             allowed_artifact_ids: Optional whitelist of accessible artifact IDs
             workspace_id: Optional workspace scope for multi-tenant filtering
+            tags: Optional tag filter (case-insensitive)
+            entity_types: Optional NER entity type filter
+            tag_match_mode: 'any' = match ANY tag, 'all' = must have ALL tags
 
         Returns:
             List of PageSearchResult, ordered by similarity (highest first)
+
+        """
+        ...
+
+    async def set_page_payload(
+        self,
+        page_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload fields on all points for a given page.
+
+        Used to update metadata (e.g. tags) without re-embedding.
+
+        Args:
+            page_id: The page whose points should be updated
+            payload: Payload fields to set/overwrite
 
         """
         ...

@@ -25,6 +25,19 @@ class SummarySearchRequest(BaseModel):
         le=1.0,
         description="Minimum cosine similarity score.",
     )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Filter by tags (case-insensitive).",
+    )
+    entity_types_filter: list[str] | None = Field(
+        default=None,
+        description="Filter by NER entity types (e.g. 'target', 'compound_name').",
+    )
+    tag_match_mode: str = Field(
+        default="any",
+        pattern="^(any|all)$",
+        description="'any' = match ANY tag, 'all' = must have ALL tags.",
+    )
 
 
 class SummarySearchResultDTO(BaseModel):
@@ -62,6 +75,19 @@ class HierarchicalSearchRequest(BaseModel):
     include_chunks: bool = Field(
         default=True,
         description="Whether to include raw chunk hits alongside summary hits.",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Filter by tags (case-insensitive).",
+    )
+    entity_types_filter: list[str] | None = Field(
+        default=None,
+        description="Filter by NER entity types (e.g. 'target', 'compound_name').",
+    )
+    tag_match_mode: str = Field(
+        default="any",
+        pattern="^(any|all)$",
+        description="'any' = match ANY tag, 'all' = must have ALL tags.",
     )
 
 

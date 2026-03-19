@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import structlog
@@ -103,6 +104,18 @@ class QdrantStore(VectorStore):
             await client.create_payload_index(
                 collection_name=self.collection_name,
                 field_name="workspace_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+
+            # Create indexes for tag-based filtering
+            await client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="tag_normalized",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+            await client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="entity_types",
                 field_schema=models.PayloadSchemaType.KEYWORD,
             )
 
@@ -315,6 +328,40 @@ class QdrantStore(VectorStore):
             )
             # Don't raise - deletion is idempotent
 
+    def _build_tag_conditions(
+        self,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
+    ) -> list[models.Condition]:
+        """Build Qdrant filter conditions for tag-based filtering."""
+        conditions: list[models.Condition] = []
+        if tags:
+            normalized = [t.lower() for t in tags]
+            if tag_match_mode == "any":
+                conditions.append(
+                    models.FieldCondition(
+                        key="tag_normalized",
+                        match=models.MatchAny(any=normalized),
+                    ),
+                )
+            else:
+                for tag in normalized:
+                    conditions.append(
+                        models.FieldCondition(
+                            key="tag_normalized",
+                            match=models.MatchValue(value=tag),
+                        ),
+                    )
+        if entity_types:
+            conditions.append(
+                models.FieldCondition(
+                    key="entity_types",
+                    match=models.MatchAny(any=entity_types),
+                ),
+            )
+        return conditions
+
     async def search_similar_pages(  # noqa: PLR0913
         self,
         query_embedding: TextEmbedding,
@@ -323,6 +370,9 @@ class QdrantStore(VectorStore):
         score_threshold: float | None = None,
         allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
     ) -> list[PageSearchResult]:
         """Find pages similar to the query embedding using cosine similarity.
 
@@ -333,6 +383,9 @@ class QdrantStore(VectorStore):
             score_threshold: Optional minimum similarity score (0.0 to 1.0)
             allowed_artifact_ids: Optional whitelist of accessible artifact IDs
             workspace_id: Optional workspace filter for tenant isolation
+            tags: Optional tag filter (case-insensitive)
+            entity_types: Optional NER entity type filter
+            tag_match_mode: 'any' = match ANY tag, 'all' = must have ALL tags
 
         Returns:
             List of PageSearchResult, ordered by similarity (highest first)
@@ -341,7 +394,7 @@ class QdrantStore(VectorStore):
         client = await self._get_client()
 
         # Build filter conditions
-        must_conditions = []
+        must_conditions: list[models.Condition] = []
         if artifact_id_filter:
             must_conditions.append(
                 models.FieldCondition(
@@ -363,6 +416,7 @@ class QdrantStore(VectorStore):
                     match=models.MatchValue(value=str(workspace_id)),
                 ),
             )
+        must_conditions.extend(self._build_tag_conditions(tags, entity_types, tag_match_mode))
         query_filter = models.Filter(must=must_conditions) if must_conditions else None
 
         # Note: sentence-transformers embeddings are already L2-normalized
@@ -432,6 +486,32 @@ class QdrantStore(VectorStore):
                 "status": info.status,
                 "vector_size": self.vector_size,
             }
+
+    async def set_page_payload(
+        self,
+        page_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload fields on all points for a given page without re-embedding."""
+        client = await self._get_client()
+        try:
+            await client.set_payload(
+                collection_name=self.collection_name,
+                payload=payload,
+                points=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="page_id",
+                                match=models.MatchValue(value=str(page_id)),
+                            ),
+                        ],
+                    ),
+                ),
+            )
+            logger.info("page_payload_updated", page_id=str(page_id), fields=list(payload.keys()))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("failed_to_set_page_payload", page_id=str(page_id), error=str(e))
 
     async def close(self) -> None:
         """Close the Qdrant client connection."""

@@ -49,6 +49,7 @@ from application.workflow_use_cases.trigger_page_summary_embedding_use_case impo
 from application.workflow_use_cases.trigger_smiles_embedding_use_case import (
     TriggerSmilesEmbeddingUseCase,
 )
+from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
 from domain.aggregates.artifact import Artifact
 from domain.aggregates.page import Page
 from infrastructure.di.container import create_container
@@ -89,6 +90,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     trigger_ner_extraction_use_case = container[TriggerNERExtractionUseCase]
     trigger_artifact_tag_aggregation_use_case = container[TriggerArtifactTagAggregationUseCase]
     trigger_doc_metadata_extraction_use_case = container[TriggerDocMetadataExtractionUseCase]
+    sync_page_tags_use_case = container[SyncPageTagsToVectorStoreUseCase]
 
     # Setup signal handlers
     def handle_signal(signum: int, _frame: object) -> None:
@@ -287,6 +289,11 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 )
 
                                 await trigger_artifact_tag_aggregation_use_case.execute(
+                                    page_id=domain_event.originator_id,
+                                )
+
+                                # Sync tags to Qdrant payloads (page_embeddings + summary_embeddings)
+                                await sync_page_tags_use_case.execute(
                                     page_id=domain_event.originator_id,
                                 )
 
