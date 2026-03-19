@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -11,11 +12,16 @@ from application.dtos.browse_dtos import (
     TagCategoryDTO,
     TagFolderDTO,
 )
+from application.dtos.dashboard_dtos import DashboardStatsResponse
 from application.dtos.page_dtos import PageResponse
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
+from application.ports.repositories.dashboard_read_models import DashboardReadModel
 from application.ports.repositories.page_read_models import PageReadModel
 from application.ports.repositories.tag_browse_read_model import TagBrowseReadModel
 from infrastructure.config import Settings
+
+_dashboard_cache: dict[tuple, tuple[float, DashboardStatsResponse]] = {}
+_DASHBOARD_CACHE_TTL = 60.0  # seconds
 
 ENTITY_TYPE_DISPLAY_NAMES: dict[str, str] = {
     "target": "Target",
@@ -29,7 +35,7 @@ ENTITY_TYPE_DISPLAY_NAMES: dict[str, str] = {
 }
 
 
-class MongoReadRepository(PageReadModel, ArtifactReadModel, TagBrowseReadModel):
+class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, TagBrowseReadModel):
     def __init__(self, client: AsyncIOMotorClient, settings: Settings) -> None:
         self.client = client
         self.db = self.client[settings.mongo_db]
@@ -99,6 +105,8 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, TagBrowseReadModel):
         skip: int = 0,
         limit: int = 100,
         allowed_artifact_ids: list[UUID] | None = None,
+        sort_by: str = "updated_at",
+        sort_order: int = -1,
     ) -> list[ArtifactResponse]:
         """List all artifacts with pagination, scoped by workspace and permissions."""
         query = {}
@@ -106,7 +114,7 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, TagBrowseReadModel):
             query["workspace_id"] = str(workspace_id)
         if allowed_artifact_ids is not None:
             query["artifact_id"] = {"$in": [str(aid) for aid in allowed_artifact_ids]}
-        cursor = self.artifacts.find(query).skip(skip).limit(limit)
+        cursor = self.artifacts.find(query).sort(sort_by, sort_order).skip(skip).limit(limit)
         artifacts = []
         async for doc in cursor:
             # Map MongoDB _id (ObjectId) to artifact_id field
@@ -118,6 +126,92 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, TagBrowseReadModel):
                 doc["pages"] = ()
             artifacts.append(ArtifactResponse(**doc))
         return artifacts
+
+    # ── DashboardReadModel implementation ────────────────────────────
+
+    async def get_dashboard_stats(
+        self,
+        workspace_id: UUID | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+    ) -> DashboardStatsResponse:
+        """Aggregate workspace statistics with a short TTL cache."""
+        cache_key = (
+            str(workspace_id),
+            frozenset(str(aid) for aid in allowed_artifact_ids)
+            if allowed_artifact_ids is not None
+            else None,
+        )
+        now = time.monotonic()
+        cached = _dashboard_cache.get(cache_key)
+        if cached and now - cached[0] < _DASHBOARD_CACHE_TTL:
+            return cached[1]
+
+        # Build workspace + permission filter (shared with other queries)
+        query: dict = {}
+        if workspace_id is not None:
+            query["workspace_id"] = str(workspace_id)
+        if allowed_artifact_ids is not None:
+            query["artifact_id"] = {"$in": [str(aid) for aid in allowed_artifact_ids]}
+
+        # Artifact-level stats: count, page total, summary count
+        artifact_pipeline: list[dict] = [
+            {"$match": query},
+            {
+                "$group": {
+                    "_id": None,
+                    "total_artifacts": {"$sum": 1},
+                    "total_pages": {
+                        "$sum": {"$size": {"$ifNull": ["$pages", []]}},
+                    },
+                    "with_summary": {
+                        "$sum": {
+                            "$cond": [
+                                {
+                                    "$and": [
+                                        {"$ne": [{"$ifNull": ["$summary_candidate.summary", None]}, None]},
+                                        {"$ne": ["$summary_candidate.summary", ""]},
+                                    ],
+                                },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                },
+            },
+        ]
+        artifact_result = await self.artifacts.aggregate(artifact_pipeline).to_list(1)
+        artifact_stats = artifact_result[0] if artifact_result else {}
+
+        # Page-level stats: compound mention count (pages have workspace_id)
+        page_query: dict = {}
+        if workspace_id is not None:
+            page_query["workspace_id"] = str(workspace_id)
+        if allowed_artifact_ids is not None:
+            page_query["artifact_id"] = {"$in": [str(aid) for aid in allowed_artifact_ids]}
+
+        compound_pipeline: list[dict] = [
+            {"$match": page_query},
+            {
+                "$group": {
+                    "_id": None,
+                    "total_compounds": {
+                        "$sum": {"$size": {"$ifNull": ["$compound_mentions", []]}},
+                    },
+                },
+            },
+        ]
+        compound_result = await self.pages.aggregate(compound_pipeline).to_list(1)
+        compound_stats = compound_result[0] if compound_result else {}
+
+        stats = DashboardStatsResponse(
+            total_artifacts=artifact_stats.get("total_artifacts", 0),
+            total_pages=artifact_stats.get("total_pages", 0),
+            total_compounds=compound_stats.get("total_compounds", 0),
+            with_summary=artifact_stats.get("with_summary", 0),
+        )
+        _dashboard_cache[cache_key] = (now, stats)
+        return stats
 
     # ── TagBrowseReadModel implementation ────────────────────────────
 

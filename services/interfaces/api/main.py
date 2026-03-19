@@ -12,6 +12,7 @@ from infrastructure.config import settings
 from infrastructure.logging import setup_logging
 from interfaces.api.routes.artifact_routes import router as artifact_router
 from interfaces.api.routes.browse_routes import router as browse_router
+from interfaces.api.routes.dashboard_routes import router as dashboard_router
 from interfaces.api.routes.page_routes import router as page_router
 from interfaces.api.routes.search_routes import router as search_router
 from interfaces.api.routes.workspace_routes import router as workspace_router
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(artifact_router)
     app.include_router(browse_router)
+    app.include_router(dashboard_router)
     app.include_router(page_router)
     app.include_router(search_router)
     app.include_router(workspace_router)

@@ -7,12 +7,17 @@ import { queryKeys } from "@/lib/query-keys";
 import { getAuthzClient } from "@/lib/authz-client";
 import { API_URL } from "@/lib/constants";
 
-export function useArtifacts(skip = 0, limit = 50) {
+export function useArtifacts(
+  skip = 0,
+  limit = 50,
+  sort_by = "updated_at",
+  sort_order: -1 | 1 = -1,
+) {
   return useQuery({
-    queryKey: [...queryKeys.artifacts.list(), { skip, limit }],
+    queryKey: [...queryKeys.artifacts.list(), { skip, limit, sort_by, sort_order }],
     queryFn: async () => {
       const { data, error } = await apiClient.GET("/artifacts", {
-        params: { query: { skip, limit } },
+        params: { query: { skip, limit, sort_by, sort_order } },
       });
       if (error) throw new Error("Failed to fetch artifacts");
       return data;

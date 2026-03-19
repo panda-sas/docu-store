@@ -18,6 +18,7 @@ from application.ports.pdf_service import PDFService
 from application.ports.permission_registrar import PermissionRegistrar
 from application.ports.prompt_repository import PromptRepositoryPort
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
+from application.ports.repositories.dashboard_read_models import DashboardReadModel
 from application.ports.repositories.artifact_repository import ArtifactRepository
 from application.ports.repositories.page_read_models import PageReadModel
 from application.ports.repositories.page_repository import PageRepository
@@ -242,6 +243,7 @@ def create_container() -> Container:  # noqa: PLR0915
     from application.ports.repositories.tag_browse_read_model import TagBrowseReadModel  # noqa: PLC0415
 
     container[TagBrowseReadModel] = mongo_repository_factory
+    container[DashboardReadModel] = mongo_repository_factory
 
     # Register Pipeline Orchestrator (Temporal)
     container[WorkflowOrchestrator] = lambda _: TemporalWorkflowOrchestrator()

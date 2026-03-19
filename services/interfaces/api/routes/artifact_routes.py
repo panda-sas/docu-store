@@ -53,6 +53,8 @@ async def list_artifacts(
     auth: Annotated[RequestAuth, Depends(get_auth)],
     skip: Annotated[int, Query(...)] = 0,
     limit: Annotated[int, Query(...)] = 100,
+    sort_by: Annotated[str, Query(...)] = "updated_at",
+    sort_order: Annotated[int, Query(...)] = -1,
 ) -> list[ArtifactResponse]:
     """List all artifacts with pagination, filtered by permissions."""
     allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
@@ -62,6 +64,8 @@ async def list_artifacts(
         skip=skip,
         limit=limit,
         allowed_artifact_ids=allowed_artifact_ids,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 

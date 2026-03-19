@@ -39,6 +39,10 @@ export const queryKeys = {
       ["search", "hierarchical", query] as const,
     compound: (smiles: string) => ["search", "compound", smiles] as const,
   },
+  dashboard: {
+    all: ["dashboard"] as const,
+    stats: () => [...queryKeys.dashboard.all, "stats"] as const,
+  },
   browse: {
     all: ["browse"] as const,
     categories: () => [...queryKeys.browse.all, "categories"] as const,
