@@ -1,7 +1,12 @@
-from typing import Literal, Protocol
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal, Protocol
 from uuid import UUID
 
 from domain.value_objects.text_embedding import TextEmbedding
+
+if TYPE_CHECKING:
+    from application.ports.sparse_embedding_generator import SparseEmbedding
 
 
 class PageSearchResult:
@@ -78,10 +83,11 @@ class VectorStore(Protocol):
         self,
         page_id: UUID,
         artifact_id: UUID,
-        embeddings: list["TextEmbedding"],
+        embeddings: list[TextEmbedding],
         page_index: int,
         chunk_count: int,
         metadata: dict | None = None,
+        sparse_embeddings: list[SparseEmbedding] | None = None,
     ) -> None:
         """Store embeddings for multiple chunks of a single page.
 
@@ -149,6 +155,24 @@ class VectorStore(Protocol):
         Returns the best-scoring chunk per page using Qdrant group_by.
         Same args as search_similar_pages plus group_size.
         """
+        ...
+
+    async def search_hybrid_grouped(  # noqa: PLR0913
+        self,
+        dense_query: TextEmbedding,
+        sparse_query: SparseEmbedding,
+        limit: int = 10,
+        prefetch_limit: int = 100,
+        artifact_id_filter: UUID | None = None,
+        score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
+        group_size: int = 1,
+    ) -> list[PageSearchResult]:
+        """Hybrid search (dense + sparse RRF) with server-side dedup by page_id."""
         ...
 
     async def set_page_payload(

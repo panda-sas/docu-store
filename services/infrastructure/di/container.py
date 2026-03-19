@@ -65,7 +65,9 @@ from application.use_cases.page_use_cases import (
 from application.use_cases.search_use_cases import HierarchicalSearchUseCase, SearchSummariesUseCase
 from application.use_cases.smiles_embedding_use_cases import EmbedCompoundSmilesUseCase
 from application.use_cases.smiles_search_use_cases import SearchSimilarCompoundsUseCase
+from application.ports.sparse_embedding_generator import SparseEmbeddingGenerator
 from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
+from infrastructure.embeddings.tfidf_sparse_generator import TfidfSparseGenerator
 from application.use_cases.summarization_use_cases import (
     SummarizeArtifactUseCase,
     SummarizePageUseCase,
@@ -322,6 +324,10 @@ def create_container() -> Container:  # noqa: PLR0915
         chunk_overlap=settings.chunk_overlap,
     )
 
+    # Sparse Embedding Generator (TF-IDF for hybrid search)
+    sparse_generator_instance = TfidfSparseGenerator()
+    container[SparseEmbeddingGenerator] = sparse_generator_instance
+
     # Register Use Cases
     # Page Use Cases
     container[CreatePageUseCase] = lambda c: CreatePageUseCase(
@@ -357,6 +363,7 @@ def create_container() -> Container:  # noqa: PLR0915
         embedding_generator=c[EmbeddingGenerator],
         vector_store=c[VectorStore],
         text_chunker=c[TextChunker],
+        sparse_embedding_generator=c[SparseEmbeddingGenerator],
     )
 
     container[SearchSimilarPagesUseCase] = lambda c: SearchSimilarPagesUseCase(
@@ -364,6 +371,7 @@ def create_container() -> Container:  # noqa: PLR0915
         vector_store=c[VectorStore],
         page_read_model=c[PageReadModel],
         artifact_read_model=c[ArtifactReadModel],
+        sparse_embedding_generator=c[SparseEmbeddingGenerator],
     )
 
     # Artifact Use Cases

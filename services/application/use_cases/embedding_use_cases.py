@@ -15,6 +15,7 @@ from application.ports.embedding_generator import EmbeddingGenerator
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
 from application.ports.repositories.page_read_models import PageReadModel
 from application.ports.repositories.page_repository import PageRepository
+from application.ports.sparse_embedding_generator import SparseEmbeddingGenerator
 from application.ports.text_chunker import TextChunker
 from application.ports.vector_store import VectorStore
 from domain.exceptions import AggregateNotFoundError
@@ -40,11 +41,13 @@ class GeneratePageEmbeddingUseCase:
         embedding_generator: EmbeddingGenerator,
         vector_store: VectorStore,
         text_chunker: TextChunker,
+        sparse_embedding_generator: SparseEmbeddingGenerator | None = None,
     ) -> None:
         self.page_repository = page_repository
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
         self.text_chunker = text_chunker
+        self.sparse_embedding_generator = sparse_embedding_generator
 
     async def execute(
         self,
@@ -107,6 +110,13 @@ class GeneratePageEmbeddingUseCase:
                 texts=chunk_texts,
             )
 
+            # 5b. Generate sparse embeddings if generator is available
+            sparse_embeddings = None
+            if self.sparse_embedding_generator:
+                sparse_embeddings = self.sparse_embedding_generator.generate_batch_sparse_embeddings(
+                    chunk_texts,
+                )
+
             # 6. Store all chunk embeddings in vector store
             logger.info(
                 "storing_chunk_embeddings",
@@ -140,6 +150,7 @@ class GeneratePageEmbeddingUseCase:
                 page_index=page.index,
                 chunk_count=len(chunks),
                 metadata=upsert_metadata or None,
+                sparse_embeddings=sparse_embeddings,
             )
 
             # 7. Update domain aggregate with metadata (using first embedding as reference)
@@ -193,7 +204,7 @@ class SearchSimilarPagesUseCase:
 
     This use case:
     1. Generates an embedding for the query text
-    2. Searches the vector store for similar pages
+    2. Searches the vector store for similar pages (hybrid if sparse generator available)
     3. Enriches results with data from read models (text preview, artifact details)
     """
 
@@ -203,11 +214,13 @@ class SearchSimilarPagesUseCase:
         vector_store: VectorStore,
         page_read_model: PageReadModel,
         artifact_read_model: ArtifactReadModel,
+        sparse_embedding_generator: SparseEmbeddingGenerator | None = None,
     ) -> None:
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
         self.page_read_model = page_read_model
         self.artifact_read_model = artifact_read_model
+        self.sparse_embedding_generator = sparse_embedding_generator
 
     async def execute(
         self,
@@ -238,10 +251,8 @@ class SearchSimilarPagesUseCase:
                 text=request.query_text,
             )
 
-            # 2. Search with server-side dedup (group_by page_id)
-            search_results = await self.vector_store.search_pages_grouped(
-                query_embedding=query_embedding,
-                limit=request.limit,
+            # 2. Search with server-side dedup — hybrid if sparse available
+            filter_kwargs = dict(
                 artifact_id_filter=request.artifact_id,
                 score_threshold=request.score_threshold,
                 allowed_artifact_ids=allowed_artifact_ids,
@@ -250,6 +261,23 @@ class SearchSimilarPagesUseCase:
                 entity_types=request.entity_types,
                 tag_match_mode=request.tag_match_mode,
             )
+
+            if self.sparse_embedding_generator:
+                sparse_query = self.sparse_embedding_generator.generate_sparse_embedding(
+                    request.query_text,
+                )
+                search_results = await self.vector_store.search_hybrid_grouped(
+                    dense_query=query_embedding,
+                    sparse_query=sparse_query,
+                    limit=request.limit,
+                    **filter_kwargs,
+                )
+            else:
+                search_results = await self.vector_store.search_pages_grouped(
+                    query_embedding=query_embedding,
+                    limit=request.limit,
+                    **filter_kwargs,
+                )
 
             # 3. Enrich results with read model data
             result_dtos = []

@@ -3,8 +3,10 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 import structlog
 from qdrant_client import AsyncQdrantClient, models
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.http.exceptions import UnexpectedResponse
+from qdrant_client.models import Distance, PointStruct, SparseVectorParams, VectorParams
 
+from application.ports.sparse_embedding_generator import SparseEmbedding
 from application.ports.vector_store import PageSearchResult, VectorStore
 from domain.value_objects.text_embedding import TextEmbedding
 
@@ -64,7 +66,7 @@ class QdrantStore(VectorStore):
         """Ensure the collection exists with proper schema.
 
         Creates the collection if it doesn't exist.
-        Idempotent - safe to call multiple times.
+        Idempotent - safe to call multiple times (handles 409 race).
         """
         client = await self._get_client()
 
@@ -77,47 +79,42 @@ class QdrantStore(VectorStore):
                 logger.info("collection_already_exists", collection=self.collection_name)
                 return
 
-            # Create collection with cosine similarity
-            await client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=VectorParams(
-                    size=self.vector_size,
-                    distance=Distance.COSINE,  # Cosine similarity for text embeddings
-                ),
-            )
+            # Create collection with named dense vector + sparse vector
+            try:
+                await client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config={
+                        "dense": VectorParams(
+                            size=self.vector_size,
+                            distance=Distance.COSINE,
+                        ),
+                    },
+                    sparse_vectors_config={
+                        "sparse": SparseVectorParams(
+                            modifier=models.Modifier.IDF,
+                        ),
+                    },
+                )
+            except UnexpectedResponse as e:
+                if e.status_code == 409:
+                    # Race condition: another process created it between check and create
+                    logger.info("collection_created_by_another_process", collection=self.collection_name)
+                    return
+                raise
 
-            # Create index on artifact_id for filtering
-            await client.create_payload_index(
-                collection_name=self.collection_name,
-                field_name="artifact_id",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-
-            # Create index on page_id for chunk-level filtering/deletion
-            await client.create_payload_index(
-                collection_name=self.collection_name,
-                field_name="page_id",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-
-            # Create index on workspace_id for tenant isolation
-            await client.create_payload_index(
-                collection_name=self.collection_name,
-                field_name="workspace_id",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-
-            # Create indexes for tag-based filtering
-            await client.create_payload_index(
-                collection_name=self.collection_name,
-                field_name="tag_normalized",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-            await client.create_payload_index(
-                collection_name=self.collection_name,
-                field_name="entity_types",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
+            # Create payload indexes for filtering
+            for field, schema in [
+                ("artifact_id", models.PayloadSchemaType.KEYWORD),
+                ("page_id", models.PayloadSchemaType.KEYWORD),
+                ("workspace_id", models.PayloadSchemaType.KEYWORD),
+                ("tag_normalized", models.PayloadSchemaType.KEYWORD),
+                ("entity_types", models.PayloadSchemaType.KEYWORD),
+            ]:
+                await client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=field,
+                    field_schema=schema,
+                )
 
             logger.info(
                 "collection_created",
@@ -140,6 +137,7 @@ class QdrantStore(VectorStore):
         embedding: TextEmbedding,
         page_index: int,
         metadata: dict | None = None,
+        sparse_embedding: SparseEmbedding | None = None,
     ) -> None:
         """Store or update a page embedding in Qdrant.
 
@@ -149,11 +147,11 @@ class QdrantStore(VectorStore):
             embedding: The text embedding to store
             page_index: The index/position of this page in the artifact
             metadata: Optional additional metadata to store
+            sparse_embedding: Optional sparse vector for hybrid search
 
         """
         client = await self._get_client()
 
-        # Prepare payload (metadata stored alongside vector)
         payload = {
             "page_id": str(page_id),
             "artifact_id": str(artifact_id),
@@ -167,14 +165,16 @@ class QdrantStore(VectorStore):
         if metadata:
             payload.update(metadata)
 
-        # workspace_id comes from metadata (passed by use case)
-        # Already included via payload.update(metadata) above
+        vector: dict = {"dense": embedding.vector}
+        if sparse_embedding:
+            vector["sparse"] = models.SparseVector(
+                indices=sparse_embedding.indices,
+                values=sparse_embedding.values,
+            )
 
-        # Note: sentence-transformers embeddings are already L2-normalized
-        # Using them as-is ensures optimal similarity calculations in Qdrant
         point = PointStruct(
             id=str(page_id),
-            vector=embedding.vector,
+            vector=vector,
             payload=payload,
         )
 
@@ -206,6 +206,7 @@ class QdrantStore(VectorStore):
         page_index: int,
         chunk_count: int,
         metadata: dict | None = None,
+        sparse_embeddings: list[SparseEmbedding] | None = None,
     ) -> None:
         """Store embeddings for multiple chunks of a single page.
 
@@ -219,6 +220,7 @@ class QdrantStore(VectorStore):
             page_index: The index/position of this page in the artifact
             chunk_count: Total number of chunks for this page
             metadata: Optional additional metadata to store
+            sparse_embeddings: Optional sparse vectors (one per chunk) for hybrid search
 
         """
         client = await self._get_client()
@@ -229,8 +231,6 @@ class QdrantStore(VectorStore):
         # Build points for all chunks
         points = []
         for chunk_index, embedding in enumerate(embeddings):
-            # Qdrant requires UUID or int IDs — generate a deterministic UUID
-            # from (page_id, chunk_index) so it's reproducible
             point_id = str(uuid5(NAMESPACE_URL, f"{page_id}:chunk:{chunk_index}"))
 
             payload = {
@@ -248,12 +248,18 @@ class QdrantStore(VectorStore):
             if metadata:
                 payload.update(metadata)
 
-            # workspace_id comes from metadata (passed by use case)
+            vector: dict = {"dense": embedding.vector}
+            if sparse_embeddings and chunk_index < len(sparse_embeddings):
+                se = sparse_embeddings[chunk_index]
+                vector["sparse"] = models.SparseVector(
+                    indices=se.indices,
+                    values=se.values,
+                )
 
             points.append(
                 PointStruct(
                     id=point_id,
-                    vector=embedding.vector,
+                    vector=vector,
                     payload=payload,
                 ),
             )
@@ -424,6 +430,7 @@ class QdrantStore(VectorStore):
             search_result = await client.query_points(
                 collection_name=self.collection_name,
                 query=query_embedding.vector,
+                using="dense",
                 query_filter=query_filter,
                 limit=limit,
                 score_threshold=score_threshold,
@@ -433,17 +440,7 @@ class QdrantStore(VectorStore):
             logger.exception("search_failed", error=str(e))
             raise
         else:
-            results = [
-                PageSearchResult(
-                    page_id=UUID(point.payload["page_id"]),
-                    artifact_id=UUID(point.payload["artifact_id"]),
-                    score=point.score,
-                    page_index=point.payload["page_index"],
-                    metadata=point.payload,
-                )
-                for point in search_result.points
-            ]
-
+            results = self._points_to_results(search_result.points)
             logger.info(
                 "search_completed",
                 results_count=len(results),
@@ -485,6 +482,7 @@ class QdrantStore(VectorStore):
             grouped = await client.query_points_groups(
                 collection_name=self.collection_name,
                 query=query_embedding.vector,
+                using="dense",
                 group_by="page_id",
                 group_size=group_size,
                 limit=limit,
@@ -514,6 +512,151 @@ class QdrantStore(VectorStore):
                 results_count=len(results),
                 limit=limit,
                 has_filter=artifact_id_filter is not None,
+            )
+            return results
+
+    @staticmethod
+    def _points_to_results(points: list) -> list[PageSearchResult]:
+        """Convert Qdrant scored points to PageSearchResult list."""
+        return [
+            PageSearchResult(
+                page_id=UUID(p.payload["page_id"]),
+                artifact_id=UUID(p.payload["artifact_id"]),
+                score=p.score,
+                page_index=p.payload["page_index"],
+                metadata=p.payload,
+            )
+            for p in points
+        ]
+
+    async def search_hybrid(  # noqa: PLR0913
+        self,
+        dense_query: TextEmbedding,
+        sparse_query: SparseEmbedding,
+        limit: int = 10,
+        prefetch_limit: int = 100,
+        artifact_id_filter: UUID | None = None,
+        score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
+    ) -> list[PageSearchResult]:
+        """Hybrid search: dense + sparse, fused with Reciprocal Rank Fusion."""
+        client = await self._get_client()
+        query_filter = self._build_filter(
+            artifact_id_filter, allowed_artifact_ids, workspace_id,
+            tags, entity_types, tag_match_mode,
+        )
+
+        try:
+            result = await client.query_points(
+                collection_name=self.collection_name,
+                prefetch=[
+                    models.Prefetch(
+                        query=dense_query.vector,
+                        using="dense",
+                        limit=prefetch_limit,
+                        filter=query_filter,
+                    ),
+                    models.Prefetch(
+                        query=models.SparseVector(
+                            indices=sparse_query.indices,
+                            values=sparse_query.values,
+                        ),
+                        using="sparse",
+                        limit=prefetch_limit,
+                        filter=query_filter,
+                    ),
+                ],
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
+                limit=limit,
+                score_threshold=score_threshold,
+                with_payload=True,
+            )
+        except Exception as e:
+            logger.exception("hybrid_search_failed", error=str(e))
+            raise
+        else:
+            results = self._points_to_results(result.points)
+            logger.info(
+                "hybrid_search_completed",
+                results_count=len(results),
+                limit=limit,
+                prefetch_limit=prefetch_limit,
+            )
+            return results
+
+    async def search_hybrid_grouped(  # noqa: PLR0913
+        self,
+        dense_query: TextEmbedding,
+        sparse_query: SparseEmbedding,
+        limit: int = 10,
+        prefetch_limit: int = 100,
+        artifact_id_filter: UUID | None = None,
+        score_threshold: float | None = None,
+        allowed_artifact_ids: list[UUID] | None = None,
+        workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
+        group_size: int = 1,
+    ) -> list[PageSearchResult]:
+        """Hybrid search with server-side dedup by page_id via RRF fusion."""
+        client = await self._get_client()
+        query_filter = self._build_filter(
+            artifact_id_filter, allowed_artifact_ids, workspace_id,
+            tags, entity_types, tag_match_mode,
+        )
+
+        try:
+            grouped = await client.query_points_groups(
+                collection_name=self.collection_name,
+                prefetch=[
+                    models.Prefetch(
+                        query=dense_query.vector,
+                        using="dense",
+                        limit=prefetch_limit,
+                        filter=query_filter,
+                    ),
+                    models.Prefetch(
+                        query=models.SparseVector(
+                            indices=sparse_query.indices,
+                            values=sparse_query.values,
+                        ),
+                        using="sparse",
+                        limit=prefetch_limit,
+                        filter=query_filter,
+                    ),
+                ],
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
+                group_by="page_id",
+                group_size=group_size,
+                limit=limit,
+                score_threshold=score_threshold,
+                with_payload=True,
+            )
+        except Exception as e:
+            logger.exception("hybrid_grouped_search_failed", error=str(e))
+            raise
+        else:
+            results = []
+            for group in grouped.groups:
+                best = group.hits[0]
+                results.append(
+                    PageSearchResult(
+                        page_id=UUID(best.payload["page_id"]),
+                        artifact_id=UUID(best.payload["artifact_id"]),
+                        score=best.score,
+                        page_index=best.payload["page_index"],
+                        metadata=best.payload,
+                    ),
+                )
+            logger.info(
+                "hybrid_grouped_search_completed",
+                results_count=len(results),
+                limit=limit,
             )
             return results
 
