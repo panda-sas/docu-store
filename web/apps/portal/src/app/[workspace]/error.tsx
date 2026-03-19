@@ -1,0 +1,39 @@
+"use client";
+
+import { AlertTriangle } from "lucide-react";
+import { Button } from "primereact/button";
+
+export default function WorkspaceError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-ds-error/10">
+        <AlertTriangle className="h-6 w-6 text-ds-error" />
+      </div>
+      <h2 className="text-lg font-semibold text-text-primary">
+        Something went wrong
+      </h2>
+      <p className="mt-2 max-w-md text-sm text-text-secondary">
+        We couldn&apos;t load this page. The backend may be unreachable.
+      </p>
+      {process.env.NODE_ENV === "development" && (
+        <pre className="mt-4 max-w-lg overflow-auto rounded-lg border border-border-default bg-surface-sunken p-3 text-left text-xs text-ds-error">
+          {error.message}
+        </pre>
+      )}
+      <Button
+        label="Try again"
+        icon="pi pi-refresh"
+        onClick={reset}
+        className="mt-6"
+        severity="secondary"
+        outlined
+      />
+    </div>
+  );
+}

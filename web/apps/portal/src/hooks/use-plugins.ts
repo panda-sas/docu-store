@@ -2,8 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-import { getAuthzClient } from "@/lib/authz-client";
-import { API_URL } from "@/lib/constants";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface PluginManifest {
   name: string;
@@ -15,8 +14,7 @@ export function usePlugins() {
   const { data: plugins = [], isLoading } = useQuery<PluginManifest[]>({
     queryKey: queryKeys.plugins.all,
     queryFn: async () => {
-      const headers = getAuthzClient().getHeaders();
-      const res = await fetch(`${API_URL}/plugins`, { headers });
+      const res = await authFetch("/plugins");
       if (!res.ok) return [];
       return res.json();
     },

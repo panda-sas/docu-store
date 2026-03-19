@@ -2,10 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@docu-store/api-client";
-import type { WorkflowMap } from "@docu-store/types";
+import type { ArtifactResponse, WorkflowMap } from "@docu-store/types";
 import { queryKeys } from "@/lib/query-keys";
 import { getAuthzClient } from "@/lib/authz-client";
 import { API_URL } from "@/lib/constants";
+import { authFetch } from "@/lib/auth-fetch";
 
 export function useArtifacts(
   skip = 0,
@@ -20,7 +21,7 @@ export function useArtifacts(
         params: { query: { skip, limit, sort_by, sort_order } },
       });
       if (error) throw new Error("Failed to fetch artifacts");
-      return data;
+      return data as ArtifactResponse[];
     },
   });
 }
@@ -34,7 +35,9 @@ export function useArtifact(id: string) {
         { params: { path: { artifact_id: id } } },
       );
       if (error) throw new Error("Failed to fetch artifact");
-      return data;
+      // The OpenAPI schema is missing author_mentions, presentation_date, compound_mentions
+      // fields. The hand-typed ArtifactResponse includes them.
+      return data as ArtifactResponse;
     },
     enabled: !!id,
   });
@@ -190,11 +193,13 @@ export function useRerunArtifactWorkflow(artifactId: string) {
           return data;
         }
         case "doc_metadata_extraction": {
-          const { data, error } = await apiClient.POST(
-            "/artifacts/{artifact_id}/extract-metadata",
-            { params: { path: { artifact_id: artifactId } } },
+          // Not in OpenAPI schema — use authFetch directly
+          const res = await authFetch(
+            `/artifacts/${artifactId}/extract-metadata`,
+            { method: "POST" },
           );
-          if (error) throw new Error(`Failed to rerun ${workflowName}`);
+          if (!res.ok) throw new Error(`Failed to rerun ${workflowName}`);
+          const data = await res.json();
 
           if (process.env.NODE_ENV === "development") {
             console.log(

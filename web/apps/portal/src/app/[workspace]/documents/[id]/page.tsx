@@ -8,18 +8,17 @@ import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { Message } from "primereact/message";
-import { ProgressSpinner } from "primereact/progressspinner";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 import { FileText, ArrowLeft, CheckCircle2, Users, Calendar, Lock, Globe } from "lucide-react";
 
 import type { components } from "@docu-store/api-client";
-import type { WorkflowMap } from "@docu-store/types";
-import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EntityTagPanel } from "@/components/EntityTagPanel";
-import { WorkflowStatusBadge } from "@/components/WorkflowStatusBadge";
+import { PdfEmbed } from "@/components/PdfEmbed";
+import { WorkflowList, parseWorkflows } from "@/components/WorkflowList";
 import {
   useArtifact,
   useArtifactWorkflows,
@@ -30,38 +29,8 @@ import {
 import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { useArtifactPermissions } from "@/hooks/use-permissions";
 import { useSession } from "@/lib/auth";
-import { API_URL } from "@/lib/constants";
 
 type PageResponse = components["schemas"]["PageResponse"];
-
-function PdfEmbed({ artifactId }: { artifactId: string }) {
-  const { blobUrl, error } = useAuthBlobUrl(
-    `${API_URL}/artifacts/${artifactId}/pdf`,
-  );
-
-  if (error) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border border-ds-error/20 bg-ds-error/5">
-        <p className="text-sm text-ds-error">Failed to load PDF</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-border-default">
-      {!blobUrl && (
-        <div className="h-[80vh] w-full animate-pulse bg-surface-elevated" />
-      )}
-      {blobUrl && (
-        <iframe
-          src={blobUrl}
-          className="h-[80vh] w-full"
-          title="PDF Viewer"
-        />
-      )}
-    </div>
-  );
-}
 
 export default function ArtifactDetailPage() {
   const { workspace, id } = useParams<{ workspace: string; id: string }>();
@@ -78,14 +47,7 @@ export default function ArtifactDetailPage() {
     !!artifact?.owner_id && artifact.owner_id === user.id;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <ProgressSpinner
-          style={{ width: "2rem", height: "2rem" }}
-          strokeWidth="3"
-        />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error || !artifact) {
@@ -136,10 +98,7 @@ export default function ArtifactDetailPage() {
     });
   };
 
-  const workflowMap = (workflowData as WorkflowMap | undefined)?.workflows;
-  const workflows = workflowMap
-    ? Object.entries(workflowMap).map(([name, info]) => ({ name, ...info }))
-    : undefined;
+  const workflows = parseWorkflows(workflowData);
 
   return (
     <div>
@@ -386,57 +345,14 @@ export default function ArtifactDetailPage() {
         {/* Workflows Tab */}
         <TabPanel header="Workflows">
           <div className="pt-4">
-            {workflows && workflows.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {workflows.map((w) => (
-                  <Card key={w.name}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-text-primary">
-                        {w.name.replace(/_/g, " ")}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <WorkflowStatusBadge status={w.status} />
-                        {RERUNNABLE_ARTIFACT_WORKFLOWS.has(w.name) &&
-                          w.status !== "RUNNING" && (
-                            <Button
-                              icon="pi pi-replay"
-                              onClick={async () => {
-                                try {
-                                  await rerunMutation.mutateAsync(w.name);
-                                } catch {
-                                  toast.current?.show({
-                                    severity: "error",
-                                    summary: "Rerun failed",
-                                    detail: `Could not rerun ${w.name.replace(/_/g, " ")}`,
-                                    life: 5000,
-                                  });
-                                }
-                              }}
-                              loading={
-                                rerunMutation.isPending &&
-                                rerunMutation.variables === w.name
-                              }
-                              disabled={rerunMutation.isPending}
-                              text
-                              severity="secondary"
-                              rounded
-                              tooltip="Rerun"
-                              tooltipOptions={{ position: "top" }}
-                            />
-                          )}
-                      </div>
-                    </div>
-                    <p className="mt-2 truncate font-mono text-xs text-text-muted">
-                      {w.workflow_id}
-                    </p>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <p className="py-8 text-center text-sm text-text-muted">
-                No workflows found for this artifact.
-              </p>
-            )}
+            <WorkflowList
+              workflows={workflows}
+              rerunableWorkflows={RERUNNABLE_ARTIFACT_WORKFLOWS}
+              onRerun={(name) => rerunMutation.mutateAsync(name)}
+              isRerunning={rerunMutation.isPending}
+              rerunningName={rerunMutation.variables}
+              variant="cards"
+            />
           </div>
         </TabPanel>
       </TabView>

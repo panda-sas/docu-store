@@ -28,6 +28,8 @@ export interface ArtifactResponse {
   artifact_type: ArtifactType;
   mime_type: MimeType;
   storage_location: string;
+  workspace_id?: string | null;
+  owner_id?: string | null;
   // `pages` is a union because the backend returns either embedded PageResponse
   // objects (when ?include_pages=true) or bare page ID strings (default list).
   pages: string[] | PageResponse[] | null;

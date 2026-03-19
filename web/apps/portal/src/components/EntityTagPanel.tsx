@@ -3,18 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { components } from "@docu-store/api-client";
+import type { Bioactivity } from "@docu-store/types";
 import { Card } from "@/components/ui/Card";
 
 type TagMentionItem = NonNullable<
   components["schemas"]["ArtifactResponse"]["tag_mentions"]
 >[number];
-
-type Bioactivity = {
-  assay_type: string;
-  value: string;
-  unit: string;
-  raw_text: string;
-};
 
 const ENTITY_STYLE: Record<string, { label: string; dot: string; pill: string }> = {
   compound_name: { label: "Compounds", dot: "bg-emerald-500", pill: "border-emerald-500/30" },
@@ -154,6 +148,8 @@ export function EntityTagPanel({ tagMentions, workspace, artifactId }: EntityTag
                 <button
                   type="button"
                   onClick={() => setExpanded((v) => !v)}
+                  aria-expanded={expanded}
+                  aria-label={expanded ? "Hide compound activity details" : "Show compound activity details"}
                   className="inline-flex items-center gap-0.5 text-[10px] font-medium normal-case tracking-normal text-text-muted transition-colors hover:text-text-primary"
                 >
                   <svg

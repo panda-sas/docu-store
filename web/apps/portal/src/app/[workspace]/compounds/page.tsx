@@ -13,18 +13,8 @@ import { Card } from "@/components/ui/Card";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { CopySmiles } from "@/components/ui/CopySmiles";
 import { EmptyState } from "@/components/ui/EmptyState";
+import type { CompoundSearchResultDTO } from "@docu-store/types";
 import { useSearchCompounds } from "@/hooks/use-search";
-
-interface CompoundResult {
-  smiles: string;
-  extracted_id?: string | null;
-  similarity_score: number;
-  confidence?: number | null;
-  artifact_id: string;
-  page_id: string;
-  page_index: number;
-  artifact_name?: string | null;
-}
 
 export default function CompoundsPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -85,7 +75,7 @@ export default function CompoundsPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {(search.data.results as CompoundResult[]).map((r, i) => (
+            {(search.data.results as CompoundSearchResultDTO[]).map((r, i) => (
               <Card key={`${r.smiles}-${i}`}>
                 <div className="flex justify-center border-b border-border-subtle pb-3 mb-3">
                   <MoleculeStructure

@@ -8,7 +8,6 @@ import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Message } from "primereact/message";
-import { ProgressSpinner } from "primereact/progressspinner";
 import { SelectButton } from "primereact/selectbutton";
 
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -22,6 +21,7 @@ import {
   useHierarchicalSearch,
 } from "@/hooks/use-search";
 import { useSearchStore } from "@/lib/stores/search-store";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 type SearchMode = "text" | "summary" | "hierarchical";
 
@@ -147,12 +147,7 @@ export default function SearchPage() {
         )}
 
       {isPending && (
-        <div className="mt-12 flex items-center justify-center">
-          <ProgressSpinner
-            style={{ width: "1.5rem", height: "1.5rem" }}
-            strokeWidth="3"
-          />
-        </div>
+        <LoadingSpinner size="sm" className="mt-12 flex items-center justify-center" />
       )}
 
       {!hasResults && !isPending && (

@@ -10,6 +10,7 @@ import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useScopeStore } from "@/lib/stores/scope-store";
 import { SearchCommand } from "./SearchCommand";
+import { getInitials } from "@/lib/utils";
 
 export function Topbar() {
   const { user, workspace } = useSession();
@@ -56,12 +57,7 @@ export function Topbar() {
         ]
       : [];
 
-  const initials = user.name
-    ?.split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "?";
+  const initials = getInitials(user.name);
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-6 transition-colors duration-200">

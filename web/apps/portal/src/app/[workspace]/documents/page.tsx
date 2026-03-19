@@ -14,8 +14,7 @@ import { Tag } from "primereact/tag";
 import { FileText, Grid3X3, List } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { components } from "@docu-store/api-client";
-import type { TagCategoryDTO, TagFolderDTO } from "@docu-store/types";
+import type { ArtifactResponse, TagCategoryDTO, TagFolderDTO } from "@docu-store/types";
 import { useArtifacts } from "@/hooks/use-artifacts";
 import { useTagCategories, useTagFolders, useFolderArtifacts } from "@/hooks/use-browse";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -27,26 +26,15 @@ import { FolderGrid } from "@/components/browse/FolderGrid";
 import { FolderArtifactList } from "@/components/browse/FolderArtifactList";
 import { BrowseBreadcrumb } from "@/components/browse/BrowseBreadcrumb";
 import { queryKeys } from "@/lib/query-keys";
-import { API_URL } from "@/lib/constants";
-import { getAuthzClient } from "@/lib/authz-client";
+import { ARTIFACT_TYPE_LABELS } from "@/lib/constants";
+import { authFetchJson } from "@/lib/auth-fetch";
 
-type ArtifactResponse = components["schemas"]["ArtifactResponse"];
 type ViewMode = "browse" | "table";
 
 const VIEW_MODES = [
   { value: "browse" as ViewMode, icon: Grid3X3, label: "Browse by category" },
   { value: "table" as ViewMode, icon: List, label: "Table view" },
 ];
-
-const ARTIFACT_TYPE_LABELS: Record<string, string> = {
-  GENERIC_PRESENTATION: "Presentation",
-  SCIENTIFIC_PRESENTATION: "Scientific Presentation",
-  RESEARCH_ARTICLE: "Research Article",
-  SCIENTIFIC_DOCUMENT: "Scientific Document",
-  DISCLOSURE_DOCUMENT: "Disclosure",
-  MINUTE_OF_MEETING: "Minutes",
-  UNCLASSIFIED: "Unclassified",
-};
 
 export default function DocumentsPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -103,15 +91,8 @@ export default function DocumentsPage() {
   const handleCategoryHover = (entityType: string) => {
     queryClient.prefetchQuery({
       queryKey: queryKeys.browse.folders(entityType),
-      queryFn: async () => {
-        const headers = getAuthzClient().getHeaders();
-        const res = await fetch(
-          `${API_URL}/browse/categories/${encodeURIComponent(entityType)}/folders`,
-          { headers },
-        );
-        if (!res.ok) throw new Error("Prefetch failed");
-        return res.json();
-      },
+      queryFn: () =>
+        authFetchJson(`/browse/categories/${encodeURIComponent(entityType)}/folders`),
       staleTime: 60_000,
     });
   };

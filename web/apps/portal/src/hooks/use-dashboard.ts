@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ArtifactResponse } from "@docu-store/types";
 import { useArtifacts } from "./use-artifacts";
 import { queryKeys } from "@/lib/query-keys";
-import { API_URL } from "@/lib/constants";
-import { getAuthzClient } from "@/lib/authz-client";
+import { authFetchJson } from "@/lib/auth-fetch";
 
 export interface DashboardStats {
   totalArtifacts: number;
@@ -18,12 +17,7 @@ function useDashboardStats() {
   return useQuery({
     queryKey: queryKeys.dashboard.stats(),
     queryFn: async (): Promise<DashboardStats> => {
-      const authHeaders = getAuthzClient().getHeaders();
-      const res = await fetch(`${API_URL}/dashboard/stats`, {
-        headers: authHeaders,
-      });
-      if (!res.ok) throw new Error("Failed to fetch dashboard stats");
-      const data = await res.json();
+      const data = await authFetchJson<Record<string, number>>("/dashboard/stats");
       return {
         totalArtifacts: data.total_artifacts,
         totalPages: data.total_pages,
@@ -47,8 +41,7 @@ export function useDashboard() {
     error: artifactsError,
   } = useArtifacts(0, 10);
 
-  const recentArtifacts =
-    (artifactsData as ArtifactResponse[] | undefined) ?? [];
+  const recentArtifacts = (artifactsData ?? []) as ArtifactResponse[];
 
   return {
     stats: stats ?? {

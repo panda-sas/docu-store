@@ -83,6 +83,7 @@ export interface SummaryHit {
   score: number;
   summary_text: string | null;
   artifact_title: string | null;
+  page_index?: number | null;
 }
 
 export interface HierarchicalSearchResponse {

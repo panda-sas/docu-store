@@ -65,6 +65,13 @@ export interface SummaryCandidate extends ExtractionMetadata {
   hil_correction: string | null;
 }
 
+export interface Bioactivity {
+  assay_type: string;
+  value: string;
+  unit: string;
+  raw_text: string;
+}
+
 export interface EmbeddingMetadata {
   model_name: string | null;
   dimensions: number | null;

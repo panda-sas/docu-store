@@ -14,6 +14,7 @@ export function useArtifactPermissions(artifactId: string) {
         { params: { path: { artifact_id: artifactId } } },
       );
       if (error) throw new Error("Failed to fetch permissions");
+      // Schema type doesn't overlap with hand-typed ResourceACL — double cast needed
       return data as unknown as ResourceACL;
     },
     enabled: !!artifactId,

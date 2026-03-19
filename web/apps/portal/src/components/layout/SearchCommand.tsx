@@ -11,28 +11,11 @@ import {
   FileText,
   BookOpen,
 } from "lucide-react";
-import { ProgressSpinner } from "primereact/progressspinner";
 import { Tag } from "primereact/tag";
+import type { SummaryHit, ChunkHit } from "@docu-store/types";
 import { useHierarchicalSearch } from "@/hooks/use-search";
 import { useSearchStore } from "@/lib/stores/search-store";
-
-interface SummaryHit {
-  entity_type: "page" | "artifact";
-  entity_id: string;
-  artifact_id: string;
-  score: number;
-  summary_text?: string | null;
-  artifact_title?: string | null;
-  page_index?: number | null;
-}
-
-interface ChunkHit {
-  page_id: string;
-  artifact_id: string;
-  page_index: number;
-  score: number;
-  text_preview?: string | null;
-}
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 export function SearchCommand() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -178,12 +161,7 @@ export function SearchCommand() {
         <div className="absolute left-1/2 top-full z-50 mt-2 w-[32rem] -translate-x-1/2 rounded-xl border border-border-default bg-surface-elevated shadow-ds-md animate-[fadeSlideDown_150ms_ease-out]">
           {/* Loading */}
           {search.isPending && (
-            <div className="flex items-center justify-center py-8">
-              <ProgressSpinner
-                style={{ width: "1.5rem", height: "1.5rem" }}
-                strokeWidth="3"
-              />
-            </div>
+            <LoadingSpinner size="sm" className="flex items-center justify-center py-8" />
           )}
 
           {/* Error */}

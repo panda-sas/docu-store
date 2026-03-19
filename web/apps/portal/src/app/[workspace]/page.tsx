@@ -19,16 +19,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { useSession } from "@/lib/auth";
-
-const ARTIFACT_TYPE_LABELS: Record<string, string> = {
-  GENERIC_PRESENTATION: "Presentation",
-  SCIENTIFIC_PRESENTATION: "Sci. Presentation",
-  RESEARCH_ARTICLE: "Article",
-  SCIENTIFIC_DOCUMENT: "Sci. Document",
-  DISCLOSURE_DOCUMENT: "Disclosure",
-  MINUTE_OF_MEETING: "Minutes",
-  UNCLASSIFIED: "Unclassified",
-};
+import { ARTIFACT_TYPE_LABELS } from "@/lib/constants";
 
 export default function DashboardPage() {
   const { workspace } = useParams<{ workspace: string }>();

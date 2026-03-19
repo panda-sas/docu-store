@@ -7,20 +7,12 @@ import type {
   ArtifactBrowseItemDTO,
 } from "@docu-store/types";
 import { queryKeys } from "@/lib/query-keys";
-import { API_URL } from "@/lib/constants";
-import { getAuthzClient } from "@/lib/authz-client";
-
-async function browseFetch<T>(path: string): Promise<T> {
-  const headers = getAuthzClient().getHeaders();
-  const res = await fetch(`${API_URL}${path}`, { headers });
-  if (!res.ok) throw new Error(`Browse fetch failed: ${res.status}`);
-  return res.json();
-}
+import { authFetchJson } from "@/lib/auth-fetch";
 
 export function useTagCategories() {
   return useQuery({
     queryKey: queryKeys.browse.categories(),
-    queryFn: () => browseFetch<BrowseCategoriesResponse>("/browse/categories"),
+    queryFn: () => authFetchJson<BrowseCategoriesResponse>("/browse/categories"),
     staleTime: 120_000,
   });
 }
@@ -30,7 +22,7 @@ export function useTagFolders(entityType: string | null, parent?: string) {
   return useQuery({
     queryKey: queryKeys.browse.folders(entityType ?? "", parent),
     queryFn: () =>
-      browseFetch<BrowseFoldersResponse>(
+      authFetchJson<BrowseFoldersResponse>(
         `/browse/categories/${encodeURIComponent(entityType!)}/folders${params}`,
       ),
     enabled: !!entityType,
@@ -45,7 +37,7 @@ export function useFolderArtifacts(
   return useQuery({
     queryKey: queryKeys.browse.artifacts(entityType ?? "", tagValue ?? ""),
     queryFn: () =>
-      browseFetch<ArtifactBrowseItemDTO[]>(
+      authFetchJson<ArtifactBrowseItemDTO[]>(
         `/browse/categories/${encodeURIComponent(entityType!)}/folders/${encodeURIComponent(tagValue!)}/artifacts`,
       ),
     enabled: !!entityType && !!tagValue,
