@@ -17,9 +17,11 @@ class TriggerEmbeddingUseCase:
     async def execute(
         self,
         page_id: UUID,
-        text_mention: str | None,
+        text_mention: str | None = None,
+        *,
+        force_regenerate: bool = False,
     ) -> WorkflowStartedResponse | None:
-        if text_mention is None:
+        if text_mention is None and not force_regenerate:
             return None
         workflow_id = f"embedding-{page_id}"
         await self.workflow_orchestrator.start_embedding_workflow(page_id=page_id)

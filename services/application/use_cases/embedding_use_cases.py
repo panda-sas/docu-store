@@ -15,6 +15,7 @@ from application.dtos.errors import AppError
 from application.ports.embedding_generator import EmbeddingGenerator
 from application.ports.reranker import Reranker, RerankDocument
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
+from application.ports.repositories.artifact_repository import ArtifactRepository
 from application.ports.repositories.page_read_models import PageReadModel
 from application.ports.repositories.page_repository import PageRepository
 from application.ports.sparse_embedding_generator import SparseEmbeddingGenerator
@@ -37,19 +38,43 @@ class GeneratePageEmbeddingUseCase:
     5. Updates the domain aggregate with embedding metadata
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         page_repository: PageRepository,
         embedding_generator: EmbeddingGenerator,
         vector_store: VectorStore,
         text_chunker: TextChunker,
         sparse_embedding_generator: SparseEmbeddingGenerator | None = None,
+        artifact_repository: ArtifactRepository | None = None,
     ) -> None:
         self.page_repository = page_repository
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
         self.text_chunker = text_chunker
         self.sparse_embedding_generator = sparse_embedding_generator
+        self.artifact_repository = artifact_repository
+
+    @staticmethod
+    def _build_chunk_context(
+        artifact_title: str | None,
+        page_index: int,
+        tags: list[str] | None,
+        page_summary: str | None,
+    ) -> str:
+        """Build a context prefix to prepend to chunks before embedding.
+
+        The prefix gives each chunk awareness of its parent document,
+        improving retrieval for ambiguous passages like "IC50 was 2.3 uM".
+        """
+        parts = []
+        if artifact_title:
+            parts.append(f"Document: {artifact_title}")
+        if tags:
+            parts.append(f"Tags: {', '.join(tags[:10])}")
+        parts.append(f"Page {page_index + 1}")
+        if page_summary:
+            parts.append(f"Summary: {page_summary[:200]}")
+        return " | ".join(parts) + "\n\n" if parts else ""
 
     async def execute(
         self,
@@ -106,17 +131,47 @@ class GeneratePageEmbeddingUseCase:
                 text_length=len(page.text_mention.text),
             )
 
-            # 5. Generate embeddings for all chunks in a batch
-            chunk_texts = [chunk.text for chunk in chunks]
+            # 5. Build contextual chunk texts for embedding
+            #    Raw chunk text is used for sparse (exact-term) and display.
+            #    Contextual text (with doc title, tags, summary prefix) is used for dense embedding.
+            raw_chunk_texts = [chunk.text for chunk in chunks]
+
+            context_prefix = ""
+            if self.artifact_repository:
+                artifact_title = None
+                try:
+                    artifact = self.artifact_repository.get_by_id(page.artifact_id)
+                    if artifact.title_mention:
+                        artifact_title = artifact.title_mention.title
+                except AggregateNotFoundError:
+                    pass
+
+                tags = [tm.tag for tm in page.tag_mentions] if page.tag_mentions else None
+                summary = page.summary_candidate.summary if page.summary_candidate else None
+
+                context_prefix = self._build_chunk_context(
+                    artifact_title=artifact_title,
+                    page_index=page.index,
+                    tags=tags,
+                    page_summary=summary,
+                )
+
+            if context_prefix:
+                contextual_texts = [context_prefix + text for text in raw_chunk_texts]
+                logger.info("contextual_embedding", prefix_len=len(context_prefix))
+            else:
+                contextual_texts = raw_chunk_texts
+
+            # Generate dense embeddings on contextual texts
             embeddings = await self.embedding_generator.generate_batch_embeddings(
-                texts=chunk_texts,
+                texts=contextual_texts,
             )
 
-            # 5b. Generate sparse embeddings if generator is available
+            # 5b. Generate sparse embeddings on raw texts (exact-term matching)
             sparse_embeddings = None
             if self.sparse_embedding_generator:
                 sparse_embeddings = self.sparse_embedding_generator.generate_batch_sparse_embeddings(
-                    chunk_texts,
+                    raw_chunk_texts,
                 )
 
             # 6. Store all chunk embeddings in vector store

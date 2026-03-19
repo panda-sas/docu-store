@@ -241,6 +241,14 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                     page_id=domain_event.originator_id,
                                 )
 
+                                # Re-embed page chunks with full context (title + tags + summary)
+                                # By this point tags and summary are available, so contextual
+                                # embeddings get the complete prefix.
+                                await trigger_embedding_use_case.execute(
+                                    page_id=domain_event.originator_id,
+                                    force_regenerate=True,
+                                )
+
                                 logger.info(
                                     "pipeline_page_summary_workflows_triggered",
                                     page_id=str(domain_event.originator_id),

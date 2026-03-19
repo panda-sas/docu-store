@@ -375,6 +375,7 @@ def create_container() -> Container:  # noqa: PLR0915
         vector_store=c[VectorStore],
         text_chunker=c[TextChunker],
         sparse_embedding_generator=c[SparseEmbeddingGenerator],
+        artifact_repository=c[ArtifactRepository],
     )
 
     container[SearchSimilarPagesUseCase] = lambda c: SearchSimilarPagesUseCase(
