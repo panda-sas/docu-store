@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import type { components } from "@docu-store/api-client";
 import { Card } from "@/components/ui/Card";
@@ -97,6 +100,14 @@ function SourcePillSuffix({
 
 export function EntityTagPanel({ tagMentions, workspace, artifactId }: EntityTagPanelProps) {
   const { compounds, grouped } = groupTags(tagMentions);
+  const [expanded, setExpanded] = useState(false);
+
+  const hasDetails = compounds.some((tm) => {
+    const params = tm.additional_model_params as Record<string, unknown> | undefined;
+    const activities = params?.bioactivities as Bioactivity[] | undefined;
+    const synonyms = params?.synonyms as string | undefined;
+    return (activities && activities.length > 0) || synonyms;
+  });
 
   return (
     <Card>
@@ -139,6 +150,23 @@ export function EntityTagPanel({ tagMentions, workspace, artifactId }: EntityTag
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               Compounds
+              {hasDetails && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="inline-flex items-center gap-0.5 text-[10px] font-medium normal-case tracking-normal text-text-muted transition-colors hover:text-text-primary"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className={`h-3 w-3 transition-transform ${expanded ? "rotate-45" : ""}`}
+                  >
+                    <path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z" />
+                  </svg>
+                  {expanded ? "(hide activity)" : "(show activity)"}
+                </button>
+              )}
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {compounds.map((tm, i) => {
@@ -156,13 +184,13 @@ export function EntityTagPanel({ tagMentions, workspace, artifactId }: EntityTag
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-baseline gap-2 overflow-hidden">
                         <span className="text-sm font-semibold text-text-primary">{tm.tag}</span>
-                        {synonyms && (
+                        {expanded && synonyms && (
                           <span className="truncate text-xs text-text-muted">aka {synonyms}</span>
                         )}
                       </div>
                       <SourceBadges sources={sources} workspace={workspace} artifactId={artifactId} />
                     </div>
-                    {activities && activities.length > 0 && (
+                    {expanded && activities && activities.length > 0 && (
                       <div className="mt-2.5 overflow-hidden rounded-md border border-border-subtle">
                         <table className="w-full text-xs">
                           <thead>
