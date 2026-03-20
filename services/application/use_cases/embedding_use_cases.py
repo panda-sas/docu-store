@@ -81,12 +81,15 @@ class GeneratePageEmbeddingUseCase:
         page_id: UUID,
         *,
         force_regenerate: bool = False,
+        skip_sparse: bool = False,
     ) -> Result[EmbeddingDTO, AppError]:
         """Generate and store embeddings for a page (with chunking).
 
         Args:
             page_id: The ID of the page to generate embedding for
             force_regenerate: If True, regenerate even if embedding exists
+            skip_sparse: If True, skip sparse embedding regeneration (useful when
+                only the dense contextual prefix changed, e.g. after summarization)
 
         Returns:
             Result containing EmbeddingDTO on success or AppError on failure
@@ -168,8 +171,9 @@ class GeneratePageEmbeddingUseCase:
             )
 
             # 5b. Generate sparse embeddings on raw texts (exact-term matching)
+            # Skip when only the dense contextual prefix changed (e.g. re-embed after summary)
             sparse_embeddings = None
-            if self.sparse_embedding_generator:
+            if self.sparse_embedding_generator and not skip_sparse:
                 sparse_embeddings = (
                     self.sparse_embedding_generator.generate_batch_sparse_embeddings(
                         raw_chunk_texts,

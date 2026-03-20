@@ -61,6 +61,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             browse_read_model = container[TagBrowseReadModel]
             await browse_read_model.ensure_browse_indexes()
             logger.info("mongodb_browse_indexes_initialized")
+
+            # Warm up embedding models so first search request is fast
+            from application.ports.embedding_generator import EmbeddingGenerator  # noqa: PLC0415
+            from application.ports.reranker import Reranker  # noqa: PLC0415
+            from infrastructure.embeddings.chemberta_generator import (  # noqa: PLC0415
+                ChemBertaEmbeddingGenerator,
+            )
+
+            generator = container[EmbeddingGenerator]
+            await generator.get_model_info()
+            logger.info("embedding_model_warmed_up")
+
+            chemberta = container[ChemBertaEmbeddingGenerator]
+            await chemberta.get_model_info()
+            logger.info("chemberta_model_warmed_up")
+
+            reranker = container[Reranker]
+            if reranker:
+                reranker._ensure_model_loaded()
+                logger.info("reranker_model_warmed_up")
         except Exception as e:  # noqa: BLE001
             logger.warning("qdrant_initialization_failed", error=str(e))
             # Don't fail startup - embedding features will just be unavailable

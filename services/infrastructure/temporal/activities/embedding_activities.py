@@ -24,7 +24,7 @@ def create_generate_page_embedding_activity(
     """
 
     @activity.defn(name="generate_page_embedding")
-    async def generate_page_embedding_activity(page_id: str) -> dict:
+    async def generate_page_embedding_activity(input_data: dict | str) -> dict:
         """Temporal activity to generate and store a page embedding.
 
         This activity:
@@ -32,7 +32,8 @@ def create_generate_page_embedding_activity(
         2. Returns the result
 
         Args:
-            page_id: UUID of the page to generate embedding for
+            input_data: Either a page_id string (legacy) or a dict with
+                ``page_id`` and optional ``skip_sparse`` flag.
 
         Returns:
             Dictionary with embedding information or error details
@@ -41,11 +42,22 @@ def create_generate_page_embedding_activity(
             Exception: If embedding generation fails critically
 
         """
-        logger.info("generate_page_embedding_activity_start", page_id=page_id)
+        if isinstance(input_data, str):
+            page_id = input_data
+            skip_sparse = False
+        else:
+            page_id = input_data["page_id"]
+            skip_sparse = input_data.get("skip_sparse", False)
+
+        logger.info("generate_page_embedding_activity_start", page_id=page_id, skip_sparse=skip_sparse)
 
         try:
             page_uuid = UUID(page_id)
-            result = await use_case.execute(page_id=page_uuid, force_regenerate=True)
+            result = await use_case.execute(
+                page_id=page_uuid,
+                force_regenerate=True,
+                skip_sparse=skip_sparse,
+            )
         except Exception as e:
             logger.exception(
                 "generate_page_embedding_activity_exception",

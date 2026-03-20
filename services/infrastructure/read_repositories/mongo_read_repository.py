@@ -79,6 +79,13 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         pages.sort(key=lambda p: p.index)
         return pages
 
+    async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
+        """Count pages belonging to an artifact that have a non-empty summary."""
+        return await self.pages.count_documents({
+            "artifact_id": str(artifact_id),
+            "summary_candidate.summary": {"$exists": True, "$ne": ""},
+        })
+
     async def get_artifact_by_id(
         self,
         artifact_id: UUID,

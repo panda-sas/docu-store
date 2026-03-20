@@ -7,6 +7,7 @@ than independent bi-encoder embeddings. Used as Stage 2 after vector retrieval.
 from __future__ import annotations
 
 import math
+import threading
 from typing import TYPE_CHECKING, Literal
 
 import structlog
@@ -30,6 +31,7 @@ class CrossEncoderReranker(Reranker):
         self.model_name = model_name
         self.device = device
         self._model: _CrossEncoder | None = None
+        self._lock = threading.Lock()
 
         logger.info(
             "initializing_cross_encoder_reranker",
@@ -38,8 +40,12 @@ class CrossEncoderReranker(Reranker):
         )
 
     def _ensure_model_loaded(self) -> None:
-        """Lazy load the cross-encoder model on first use."""
-        if self._model is None:
+        """Lazy load the cross-encoder model on first use (thread-safe double-check locking)."""
+        if self._model is not None:
+            return
+        with self._lock:
+            if self._model is not None:
+                return
             from sentence_transformers import CrossEncoder  # noqa: PLC0415
 
             self._model = CrossEncoder(self.model_name, device=self.device)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 
 import structlog
@@ -26,9 +27,15 @@ class CserPipelineService(CserService):
     def __init__(self, blob_store: BlobStore) -> None:
         self._blob_store = blob_store
         self._pipeline = None
+        self._lock = threading.Lock()
 
     def _ensure_pipeline_loaded(self) -> None:
-        if self._pipeline is None:
+        """Lazy-load the ChemPipeline (thread-safe double-check locking)."""
+        if self._pipeline is not None:
+            return
+        with self._lock:
+            if self._pipeline is not None:
+                return
             from structflo.cser.pipeline import ChemPipeline  # noqa: PLC0415
 
             logger.info("cser_pipeline_loading")

@@ -20,9 +20,13 @@ class TriggerEmbeddingUseCase:
         text_mention: str | None = None,
         *,
         force_regenerate: bool = False,
+        skip_sparse: bool = False,
     ) -> WorkflowStartedResponse | None:
         if text_mention is None and not force_regenerate:
             return None
         workflow_id = f"embedding-{page_id}"
-        await self.workflow_orchestrator.start_embedding_workflow(page_id=page_id)
+        await self.workflow_orchestrator.start_embedding_workflow(
+            page_id=page_id,
+            skip_sparse=skip_sparse,
+        )
         return WorkflowStartedResponse(workflow_id=workflow_id)

@@ -171,6 +171,13 @@ class Settings(BaseSettings):
         description="Overlapping characters between chunks. Typically 10-20% of chunk_size.",
     )
 
+    # NER (structflo / langextract)
+    ner_max_char_buffer: int = Field(
+        default=5000,
+        validation_alias="NER_MAX_CHAR_BUFFER",
+        description="Max chars per LLM chunk in NER extraction. Higher = fewer LLM calls but more tokens per call.",
+    )
+
     # GLiNER2 (structured extraction for document metadata)
     gliner2_model_name: str = Field(
         default="fastino/gliner2-large-v1",

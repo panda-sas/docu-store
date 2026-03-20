@@ -450,6 +450,13 @@ class MockPageReadModel:
     async def list_pages(self, *args: Any, **kwargs: Any) -> list:
         return list(self._pages.values())
 
+    async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
+        return sum(
+            1 for p in self._pages.values()
+            if getattr(p, "artifact_id", None) == str(artifact_id)
+            and getattr(p, "summary_candidate", None)
+        )
+
 
 class MockArtifactReadModel:
     """Mock implementation of ArtifactReadModel."""
@@ -512,7 +519,7 @@ class MockWorkflowOrchestrator:
             {"artifact_id": artifact_id, "storage_location": storage_location}
         )
 
-    async def start_embedding_workflow(self, page_id: UUID) -> None:
+    async def start_embedding_workflow(self, page_id: UUID, *, skip_sparse: bool = False) -> None:
         if self.raise_on_call:
             raise self.raise_on_call
         self.embedding_calls.append(page_id)
@@ -531,6 +538,10 @@ class MockWorkflowOrchestrator:
         if self.raise_on_call:
             raise self.raise_on_call
         self.page_summarization_calls.append(page_id)
+
+    async def start_batch_reembed_workflow(self, artifact_id: UUID) -> None:
+        if self.raise_on_call:
+            raise self.raise_on_call
 
     async def get_page_workflow_statuses(self, page_id: UUID) -> dict:
         return {}

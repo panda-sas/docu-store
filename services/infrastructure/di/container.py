@@ -279,18 +279,20 @@ def create_container() -> Container:  # noqa: PLR0915
     container[NERExtractorPort] = lambda _: StructfloNERExtractor(
         model_id=settings.llm_model_name,
         model_url=settings.llm_base_url,
+        max_char_buffer=settings.ner_max_char_buffer,
     )
 
     # Register SMILES Validator
     container[SmilesValidator] = lambda _: RdkitSmilesValidator()
 
-    # Embedding Generator
-    container[EmbeddingGenerator] = lambda _: SentenceTransformerGenerator(
+    # Embedding Generator (singleton — model loaded once, reused across requests)
+    embedding_generator_instance = SentenceTransformerGenerator(
         model_name=settings.embedding_model_name,
         device=settings.embedding_device,
         query_prefix=settings.embedding_query_prefix,
         document_prefix=settings.embedding_document_prefix,
     )
+    container[EmbeddingGenerator] = embedding_generator_instance
 
     # Vector Store (text embeddings — page chunks)
     vector_store_instance = QdrantStore(
@@ -318,28 +320,31 @@ def create_container() -> Container:  # noqa: PLR0915
     )
     container[SummaryVectorStore] = summary_vector_store_instance
 
-    # ChemBERTa embedding generator (SMILES)
-    container[ChemBertaEmbeddingGenerator] = lambda _: ChemBertaEmbeddingGenerator(
+    # ChemBERTa embedding generator (SMILES) — singleton
+    chemberta_instance = ChemBertaEmbeddingGenerator(
         model_name=settings.smiles_embedding_model_name,
         device=settings.smiles_embedding_device,
     )
+    container[ChemBertaEmbeddingGenerator] = chemberta_instance
 
-    # Text Chunker
-    container[TextChunker] = lambda _: LangChainTextChunker(
+    # Text Chunker — singleton (stateless, no model)
+    text_chunker_instance = LangChainTextChunker(
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
     )
+    container[TextChunker] = text_chunker_instance
 
     # Sparse Embedding Generator (hashing-based for hybrid search)
     sparse_generator_instance = TfidfSparseGenerator()
     container[SparseEmbeddingGenerator] = sparse_generator_instance
 
-    # Cross-encoder reranker (Stage 2 — reranks retrieval candidates)
+    # Cross-encoder reranker (Stage 2 — reranks retrieval candidates) — singleton
     if settings.reranker_enabled:
-        container[Reranker] = lambda _: CrossEncoderReranker(
+        reranker_instance = CrossEncoderReranker(
             model_name=settings.reranker_model_name,
             device=settings.reranker_device,
         )
+        container[Reranker] = reranker_instance
     else:
         container[Reranker] = None  # type: ignore[assignment]
 
@@ -551,6 +556,26 @@ def create_container() -> Container:  # noqa: PLR0915
     container[TriggerArtifactSummarizationUseCase] = lambda c: TriggerArtifactSummarizationUseCase(
         artifact_repository=c[ArtifactRepository],
         page_repository=c[PageRepository],
+        page_read_model=c[PageReadModel],
+        workflow_orchestrator=c[WorkflowOrchestrator],
+    )
+
+    # Batch re-embed use cases
+    from application.use_cases.batch_reembed_use_cases import (  # noqa: PLC0415
+        BatchReEmbedArtifactPagesUseCase,
+    )
+    from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
+        TriggerBatchReEmbedUseCase,
+    )
+
+    container[BatchReEmbedArtifactPagesUseCase] = lambda c: BatchReEmbedArtifactPagesUseCase(
+        artifact_repository=c[ArtifactRepository],
+        page_repository=c[PageRepository],
+        embedding_generator=c[EmbeddingGenerator],
+        vector_store=c[VectorStore],
+        text_chunker=c[TextChunker],
+    )
+    container[TriggerBatchReEmbedUseCase] = lambda c: TriggerBatchReEmbedUseCase(
         workflow_orchestrator=c[WorkflowOrchestrator],
     )
 

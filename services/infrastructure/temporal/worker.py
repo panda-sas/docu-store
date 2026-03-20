@@ -15,6 +15,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from application.use_cases.aggregate_artifact_tags_use_case import AggregateArtifactTagsUseCase
+from application.use_cases.batch_reembed_use_cases import BatchReEmbedArtifactPagesUseCase
 from application.use_cases.compound_use_cases import ExtractCompoundMentionsUseCase
 from application.use_cases.embedding_use_cases import GeneratePageEmbeddingUseCase
 from application.use_cases.extract_document_metadata_use_case import ExtractDocumentMetadataUseCase
@@ -37,6 +38,9 @@ from infrastructure.temporal.activities.artifact_activities import (
 )
 from infrastructure.temporal.activities.artifact_summarization_activities import (
     create_summarize_artifact_activity,
+)
+from infrastructure.temporal.activities.batch_reembed_activities import (
+    create_batch_reembed_artifact_pages_activity,
 )
 from infrastructure.temporal.activities.compound_activities import (
     create_extract_compound_mentions_activity,
@@ -63,6 +67,9 @@ from infrastructure.temporal.activities.summary_embedding_activities import (
     create_embed_page_summary_activity,
 )
 from infrastructure.temporal.workflows.artifact_processing import ProcessArtifactWorkflow
+from infrastructure.temporal.workflows.batch_reembed_workflow import (
+    BatchReEmbedArtifactPagesWorkflow,
+)
 from infrastructure.temporal.workflows.artifact_summarization_workflow import (
     ArtifactSummarizationWorkflow,
 )
@@ -123,6 +130,7 @@ async def run() -> None:
     extract_page_entities_use_case = container[ExtractPageEntitiesUseCase]
     aggregate_artifact_tags_use_case = container[AggregateArtifactTagsUseCase]
     extract_document_metadata_use_case = container[ExtractDocumentMetadataUseCase]
+    batch_reembed_use_case = container[BatchReEmbedArtifactPagesUseCase]
 
     # Create activities with dependencies injected
     generate_page_embedding_activity = create_generate_page_embedding_activity(
@@ -155,6 +163,9 @@ async def run() -> None:
     extract_document_metadata_activity = create_extract_document_metadata_activity(
         use_case=extract_document_metadata_use_case,
     )
+    batch_reembed_activity = create_batch_reembed_artifact_pages_activity(
+        use_case=batch_reembed_use_case,
+    )
 
     client = await Client.connect(settings.temporal_address)
 
@@ -173,6 +184,7 @@ async def run() -> None:
             NERExtractionWorkflow,
             ArtifactTagAggregationWorkflow,
             DocumentMetadataExtractionWorkflow,
+            BatchReEmbedArtifactPagesWorkflow,
         ],
         activities=[
             log_mime_type_activity,
@@ -188,6 +200,7 @@ async def run() -> None:
             extract_page_entities_activity,
             aggregate_artifact_tags_activity,
             extract_document_metadata_activity,
+            batch_reembed_activity,
         ],
         max_concurrent_activities=settings.temporal_max_concurrent_activities,
     )

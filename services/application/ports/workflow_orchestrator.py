@@ -41,11 +41,14 @@ class WorkflowOrchestrator(Protocol):
     async def start_embedding_workflow(
         self,
         page_id: UUID,
+        *,
+        skip_sparse: bool = False,
     ) -> None:
         """Start the embedding generation workflow for a page.
 
         Args:
             page_id: Unique identifier of the page to generate embeddings for
+            skip_sparse: If True, skip sparse embedding regeneration (context-only re-embed)
 
         Raises:
             May raise implementation-specific exceptions on workflow start failure.
@@ -193,6 +196,21 @@ class WorkflowOrchestrator(Protocol):
         Args:
             artifact_id: Unique identifier of the artifact.
             page_id: Unique identifier of the first page (index 0).
+
+        """
+        ...
+
+    @abstractmethod
+    async def start_batch_reembed_workflow(
+        self,
+        artifact_id: UUID,
+    ) -> None:
+        """Start the batch re-embed workflow for an artifact.
+
+        Re-embeds all pages with full contextual prefixes in one batch.
+
+        Args:
+            artifact_id: Unique identifier of the artifact.
 
         """
         ...
