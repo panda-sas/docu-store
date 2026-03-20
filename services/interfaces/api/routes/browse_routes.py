@@ -24,6 +24,28 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/browse", tags=["browse"])
 
 
+@router.get("/tags/suggest")
+async def suggest_tags(
+    q: Annotated[str, Query(min_length=1, max_length=100)],
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    limit: Annotated[int, Query(ge=1, le=20)] = 10,
+) -> list[dict[str, str]]:
+    """Suggest tags matching a prefix query for autocomplete.
+
+    Returns distinct tag values (case-insensitive prefix match) with their
+    entity type. Searches both tag_mentions and author_mentions.
+    """
+    allowed = await _get_allowed_artifact_ids(auth)
+    read_model = container[TagBrowseReadModel]
+    return await read_model.suggest_tags(
+        query=q,
+        workspace_id=auth.workspace_id,
+        limit=limit,
+        allowed_artifact_ids=allowed,
+    )
+
+
 @router.get("/categories")
 async def get_categories(
     container: Annotated[Container, Depends(get_container)],

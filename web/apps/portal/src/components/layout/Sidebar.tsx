@@ -7,6 +7,7 @@ import {
   Search,
   Atom,
   MessageSquare,
+  BarChart3,
   Settings,
   Sun,
   Moon,
@@ -15,6 +16,7 @@ import {
   FlaskConical,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useAuthzHasRole } from "@sentinel-auth/react";
 
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useSidebarStore } from "@/lib/stores/sidebar-store";
@@ -25,6 +27,7 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   href: string;
+  requireAdmin?: boolean;
 }
 
 const mainNav: NavItem[] = [
@@ -33,12 +36,14 @@ const mainNav: NavItem[] = [
   { label: "Search", icon: Search, href: "/search" },
   { label: "Compounds", icon: Atom, href: "/compounds" },
   { label: "Chat", icon: MessageSquare, href: "/chat" },
+  { label: "Stats", icon: BarChart3, href: "/stats", requireAdmin: true },
 ];
 
 export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
   const pathname = usePathname();
   const { theme, toggleTheme } = useThemeStore();
   const { collapsed, toggleCollapsed } = useSidebarStore();
+  const isAdmin = useAuthzHasRole("admin");
 
   const isActive = (href: string) => {
     const fullHref = `/${workspaceSlug}${href}`;
@@ -78,7 +83,7 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
           </span>
         )}
         <div className="flex flex-col gap-0.5">
-          {mainNav.map((item) => (
+          {mainNav.filter((item) => !item.requireAdmin || isAdmin).map((item) => (
             <SidebarNavItem
               key={item.label}
               icon={item.icon}

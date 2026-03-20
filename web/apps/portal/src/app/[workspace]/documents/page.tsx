@@ -45,20 +45,9 @@ export default function DocumentsPage() {
   const { data: artifacts, isLoading: tableLoading, error: tableError } = useArtifacts();
   const { data: rawCategoriesData, isLoading: categoriesLoading } = useTagCategories();
 
-  // Ensure "target" category is always visible even if the API doesn't return it
-  const categoriesData = useMemo(() => {
-    if (!rawCategoriesData) return rawCategoriesData;
-    const cats = rawCategoriesData.categories;
-    const hasTarget = cats.some((c) => c.entity_type === "target");
-    if (hasTarget) return rawCategoriesData;
-    return {
-      ...rawCategoriesData,
-      categories: [
-        ...cats,
-        { entity_type: "target", display_name: "Target", artifact_count: 0, distinct_count: 0 },
-      ],
-    };
-  }, [rawCategoriesData]);
+  // Sticky categories (target, date) are guaranteed by the backend via
+  // BROWSE_STICKY_CATEGORIES config — no client-side injection needed.
+  const categoriesData = rawCategoriesData;
   const { data: foldersData, isLoading: foldersLoading } = useTagFolders(
     selectedCategory,
     dateParent,

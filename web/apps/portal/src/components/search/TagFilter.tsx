@@ -1,15 +1,21 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { InputText } from "primereact/inputtext";
+import { useState, useCallback, useRef } from "react";
+import { AutoComplete, type AutoCompleteCompleteEvent } from "primereact/autocomplete";
 import { Chip } from "primereact/chip";
 import { SelectButton } from "primereact/selectbutton";
 import { Tag, Filter } from "lucide-react";
+import { authFetchJson } from "@/lib/auth-fetch";
 
 const MATCH_MODES = [
   { label: "Any", value: "any" as const },
   { label: "All", value: "all" as const },
 ];
+
+interface TagSuggestion {
+  tag: string;
+  entity_type: string;
+}
 
 interface TagFilterProps {
   tags: string[];
@@ -25,6 +31,8 @@ export function TagFilter({
   onMatchModeChange,
 }: TagFilterProps) {
   const [inputValue, setInputValue] = useState("");
+  const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addTag = useCallback(
     (raw: string) => {
@@ -44,7 +52,37 @@ export function TagFilter({
     [tags, onTagsChange],
   );
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const searchTags = useCallback(async (event: AutoCompleteCompleteEvent) => {
+    const q = event.query.trim();
+    if (q.length < 1) {
+      setSuggestions([]);
+      return;
+    }
+
+    // Debounce: cancel previous request
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await authFetchJson<TagSuggestion[]>(
+          `/browse/tags/suggest?q=${encodeURIComponent(q)}&limit=10`,
+        );
+        setSuggestions(results);
+      } catch {
+        setSuggestions([]);
+      }
+    }, 200);
+  }, []);
+
+  const handleSelect = useCallback(
+    (e: { value: TagSuggestion | string }) => {
+      const val = typeof e.value === "string" ? e.value : e.value.tag;
+      addTag(val);
+    },
+    [addTag],
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       addTag(inputValue);
@@ -53,6 +91,29 @@ export function TagFilter({
       onTagsChange(tags.slice(0, -1));
     }
   };
+
+  const ENTITY_TYPE_LABELS: Record<string, string> = {
+    target: "Target",
+    compound_name: "Compound",
+    gene_name: "Gene",
+    disease: "Disease",
+    assay: "Assay",
+    author: "Author",
+    bioactivity: "Bioactivity",
+    mechanism_of_action: "MoA",
+    accession_number: "Accession",
+    screening_method: "Screen",
+    protein_name: "Protein",
+  };
+
+  const itemTemplate = (item: TagSuggestion) => (
+    <div className="flex items-center justify-between gap-3 px-1 py-0.5">
+      <span className="text-sm">{item.tag}</span>
+      <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+        {ENTITY_TYPE_LABELS[item.entity_type] ?? item.entity_type}
+      </span>
+    </div>
+  );
 
   return (
     <div className="rounded-lg border border-border-default bg-surface-raised p-3">
@@ -87,13 +148,20 @@ export function TagFilter({
             className="!bg-accent-subtle !text-xs !text-accent-text"
           />
         ))}
-        <InputText
+        <AutoComplete
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          suggestions={suggestions}
+          completeMethod={searchTags}
+          onChange={(e) => setInputValue(e.value ?? "")}
+          onSelect={handleSelect}
           onKeyDown={handleKeyDown}
-          onBlur={() => addTag(inputValue)}
-          placeholder={tags.length === 0 ? "Type a tag and press Enter..." : "Add tag..."}
-          className="min-w-[120px] flex-1 !border-0 !bg-transparent !p-1 !text-sm !shadow-none focus:!ring-0"
+          field="tag"
+          itemTemplate={itemTemplate}
+          placeholder={tags.length === 0 ? "Type to search tags..." : "Add tag..."}
+          className="min-w-[180px] flex-1 [&_.p-autocomplete-input]:!border-0 [&_.p-autocomplete-input]:!bg-transparent [&_.p-autocomplete-input]:!p-1 [&_.p-autocomplete-input]:!text-sm [&_.p-autocomplete-input]:!shadow-none"
+          inputClassName="!ring-0"
+          delay={0}
+          minLength={1}
         />
       </div>
 

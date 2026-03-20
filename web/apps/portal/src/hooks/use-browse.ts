@@ -12,7 +12,7 @@ import { authFetchJson } from "@/lib/auth-fetch";
 export function useTagCategories() {
   return useQuery({
     queryKey: queryKeys.browse.categories(),
-    queryFn: () => authFetchJson<BrowseCategoriesResponse>("/browse/categories"),
+    queryFn: () => authFetchJson<BrowseCategoriesResponse>("/browse/categories?limit=10"),
     staleTime: 120_000,
   });
 }

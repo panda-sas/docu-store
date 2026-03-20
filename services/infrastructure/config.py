@@ -240,7 +240,7 @@ class Settings(BaseSettings):
         default=5, validation_alias="BROWSE_DEFAULT_CATEGORY_LIMIT",
     )
     browse_sticky_categories: str = Field(
-        default="target", validation_alias="BROWSE_STICKY_CATEGORIES",
+        default="date,target", validation_alias="BROWSE_STICKY_CATEGORIES",
     )
 
     @property

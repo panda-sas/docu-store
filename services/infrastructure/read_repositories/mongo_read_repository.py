@@ -368,8 +368,20 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
                     distinct_count=0,
                 )
 
-        # Sort by artifact_count desc, apply limit
-        sorted_cats = sorted(categories.values(), key=lambda c: c.artifact_count, reverse=True)
+        # Sort: sticky categories first (in config order), then rest by artifact_count desc
+        sticky_set = set(sticky_categories or [])
+        sticky_order = {cat: i for i, cat in enumerate(sticky_categories or [])}
+
+        sticky_cats = sorted(
+            (c for c in categories.values() if c.entity_type in sticky_set),
+            key=lambda c: sticky_order.get(c.entity_type, 0),
+        )
+        rest_cats = sorted(
+            (c for c in categories.values() if c.entity_type not in sticky_set),
+            key=lambda c: c.artifact_count,
+            reverse=True,
+        )
+        sorted_cats = sticky_cats + rest_cats
         total = facets.get("total", [{}])[0].get("count", 0) if facets.get("total") else 0
 
         return BrowseCategoriesResponse(
@@ -716,6 +728,63 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
             presentation_date=pd_date,
             author_names=[a["name"] for a in doc.get("author_mentions", [])],
         )
+
+    async def suggest_tags(
+        self,
+        query: str,
+        workspace_id: UUID | None = None,
+        limit: int = 10,
+        allowed_artifact_ids: list[UUID] | None = None,
+    ) -> list[dict[str, str]]:
+        """Suggest tags matching a prefix query (case-insensitive)."""
+        import re  # noqa: PLC0415
+
+        base_match = self._browse_base_match(workspace_id, allowed_artifact_ids)
+        escaped = re.escape(query)
+
+        # Search both tag_mentions and author_mentions in parallel via $facet
+        pipeline: list[dict] = []
+        if base_match:
+            pipeline.append({"$match": base_match})
+
+        pipeline.append({
+            "$facet": {
+                "tags": [
+                    {"$unwind": "$tag_mentions"},
+                    {"$match": {"tag_mentions.tag": {"$regex": escaped, "$options": "i"}}},
+                    {"$group": {
+                        "_id": {"tag": {"$toLower": "$tag_mentions.tag"}, "type": "$tag_mentions.entity_type"},
+                        "display": {"$first": "$tag_mentions.tag"},
+                    }},
+                    {"$limit": limit},
+                    {"$project": {"_id": 0, "tag": "$display", "entity_type": "$_id.type"}},
+                ],
+                "authors": [
+                    {"$unwind": "$author_mentions"},
+                    {"$match": {"author_mentions.name": {"$regex": escaped, "$options": "i"}}},
+                    {"$group": {
+                        "_id": {"$toLower": "$author_mentions.name"},
+                        "display": {"$first": "$author_mentions.name"},
+                    }},
+                    {"$limit": limit},
+                    {"$project": {"_id": 0, "tag": "$display", "entity_type": {"$literal": "author"}}},
+                ],
+            },
+        })
+
+        results = await self.artifacts.aggregate(pipeline).to_list(1)
+        facets = results[0] if results else {}
+
+        suggestions = facets.get("tags", []) + facets.get("authors", [])
+        # Deduplicate by lowercase tag + entity_type
+        seen: set[tuple[str, str]] = set()
+        deduped = []
+        for s in suggestions:
+            key = (s["tag"].lower(), s.get("entity_type", ""))
+            if key not in seen:
+                seen.add(key)
+                deduped.append(s)
+        return deduped[:limit]
 
     async def ensure_browse_indexes(self) -> None:
         """Create indexes to support browse aggregation pipelines. Idempotent."""
