@@ -24,15 +24,15 @@ function AuthThumbnail({ src, href }: { src: string; href: string }) {
   if (error) return null;
 
   return (
-    <Link href={href} className="relative hidden h-40 w-32 shrink-0 sm:block">
+    <Link href={href} className="relative hidden h-32 w-32 shrink-0 sm:block">
       {!blobUrl && (
-        <Skeleton width="8rem" height="10rem" borderRadius="0.375rem" />
+        <Skeleton width="8rem" height="8rem" borderRadius="0.375rem" />
       )}
       {blobUrl && (
         <img
           src={blobUrl}
           alt=""
-          className="h-40 w-32 rounded-md border border-border-subtle object-cover object-top"
+          className="h-32 w-32 rounded-md border border-border-subtle object-cover object-top"
         />
       )}
     </Link>

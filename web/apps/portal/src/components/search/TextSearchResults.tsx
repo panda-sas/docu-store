@@ -66,7 +66,7 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
               href={`/${workspace}/documents/${r.artifact_id}/pages/${r.page_id}`}
               score={r.similarity_score}
               preview={r.text_preview ? highlightMatches(r.text_preview, data.query) : undefined}
-              thumbnailSrc={`${API_URL}/artifacts/${r.artifact_id}/pages/${r.page_index}/image`}
+              thumbnailSrc={`${API_URL}/artifacts/${r.artifact_id}/pages/${r.page_index}/image?size=thumb`}
               secondaryLink={{
                 label: "View document",
                 href: `/${workspace}/documents/${r.artifact_id}`,

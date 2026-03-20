@@ -386,15 +386,29 @@ async def stream_page_image(
     page_index: int,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
+    size: Annotated[str | None, Query(description="'thumb' for lightweight JPEG thumbnail")] = None,
 ) -> StreamingResponse:
-    """Stream the rendered PNG image for a specific page of an artifact.
+    """Stream the rendered page image for a specific page of an artifact.
 
     Returns the pre-rendered page image from blob storage. Page images
-    are generated during PDF ingestion.
+    are generated during PDF ingestion. Pass ?size=thumb for a lightweight
+    JPEG thumbnail (~200px wide) suitable for table/list views.
     """
     await require_workspace_artifact(artifact_id, auth, container)
     await require_artifact_permission(artifact_id, auth, "view")
     blob_store = container[BlobStore]
+
+    # Try thumbnail first if requested
+    if size == "thumb":
+        thumb_key = f"artifacts/{artifact_id}/pages/{page_index}_thumb.jpg"
+        if blob_store.exists(thumb_key):
+            thumb_bytes = blob_store.get_bytes(thumb_key)
+            return StreamingResponse(
+                BytesIO(thumb_bytes),
+                media_type="image/jpeg",
+            )
+        # Fall through to full PNG if thumbnail doesn't exist
+
     image_key = f"artifacts/{artifact_id}/pages/{page_index}.png"
 
     if not blob_store.exists(image_key):

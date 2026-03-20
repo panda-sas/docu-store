@@ -168,6 +168,7 @@ class ArtifactUploadSaga:
             return Success(page_ids)
 
         pages_png: list[io.BytesIO] = pdf_content.pages_png or []
+        pages_thumb: list[io.BytesIO] = pdf_content.pages_thumb or []
 
         for index, pdf_page in enumerate(pdf_content.pages):
             page_name = f"Page {index + 1}"
@@ -199,6 +200,20 @@ class ArtifactUploadSaga:
                 except Exception:  # noqa: BLE001
                     log.warning(
                         "saga.page_image_store_failed",
+                        artifact_id=artifact_id,
+                        page_index=index,
+                    )
+
+            # Persist lightweight JPEG thumbnail for UI display
+            if index < len(pages_thumb):
+                thumb_stream = pages_thumb[index]
+                thumb_stream.seek(0)
+                thumb_key = f"artifacts/{artifact_id}/pages/{index}_thumb.jpg"
+                try:
+                    self.blob_store.put_stream(thumb_key, thumb_stream, mime_type="image/jpeg")
+                except Exception:  # noqa: BLE001
+                    log.warning(
+                        "saga.page_thumbnail_store_failed",
                         artifact_id=artifact_id,
                         page_index=index,
                     )

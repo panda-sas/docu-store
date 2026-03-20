@@ -270,15 +270,15 @@ function AuthThumbnail({ src, href }: { src: string; href: string }) {
   if (error) return null;
 
   return (
-    <Link href={href} className="relative h-28 w-20 shrink-0 block">
+    <Link href={href} className="relative h-32 w-32 shrink-0 block">
       {!blobUrl && (
-        <Skeleton width="5rem" height="7rem" borderRadius="0.375rem" />
+        <Skeleton width="8rem" height="8rem" borderRadius="0.375rem" />
       )}
       {blobUrl && (
         <img
           src={blobUrl}
           alt=""
-          className="h-28 w-20 rounded-md border border-border-subtle object-cover object-top"
+          className="h-32 w-32 rounded-md border border-border-subtle object-cover object-top"
         />
       )}
     </Link>
@@ -317,7 +317,7 @@ function PageHitRow({
     <div className={`flex items-start gap-3 rounded-lg border border-border-default bg-surface-primary p-3 ${rankClass}`}>
       <div className="relative hidden shrink-0 sm:block">
         <AuthThumbnail
-          src={`${API_URL}/artifacts/${artifactId}/pages/${page.pageIndex}/image`}
+          src={`${API_URL}/artifacts/${artifactId}/pages/${page.pageIndex}/image?size=thumb`}
           href={pageHref}
         />
         <span className="absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-text-secondary bg-surface-elevated text-[10px] font-bold text-text-secondary">

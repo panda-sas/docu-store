@@ -57,7 +57,7 @@ export function SummarySearchResults({
             score={r.similarity_score}
             preview={r.summary_text ? highlightMatches(r.summary_text, data.query) : undefined}
             entityType={r.entity_type}
-            thumbnailSrc={`${API_URL}/artifacts/${r.artifact_id}/pages/${r.page_index ?? 0}/image`}
+            thumbnailSrc={`${API_URL}/artifacts/${r.artifact_id}/pages/${r.page_index ?? 0}/image?size=thumb`}
           />
         ))}
       </div>

@@ -1,11 +1,15 @@
 import io
 
 import fitz  # PyMuPDF
+from PIL import Image
 
 from application.dtos.pdf_dtos import PDFContent
 from application.ports.blob_store import BlobStore
 from application.ports.pdf_service import PDFService
 from domain.exceptions import InfrastructureError, ValidationError
+
+THUMBNAIL_MAX_WIDTH = 400
+THUMBNAIL_JPEG_QUALITY = 85
 
 
 class PageContent:
@@ -20,26 +24,52 @@ class PyMuPDFService(PDFService):
     def __init__(self, blob_store: BlobStore) -> None:
         self.blob_store = blob_store
 
+    @staticmethod
+    def _make_thumbnail(png_bytes: bytes) -> io.BytesIO:
+        """Resize a full-resolution PNG to a small JPEG thumbnail.
+
+        Args:
+            png_bytes: Raw PNG image bytes
+
+        Returns:
+            BytesIO stream of the JPEG thumbnail
+
+        """
+        with Image.open(io.BytesIO(png_bytes)) as img:
+            img = img.convert("RGB")
+            w, h = img.size
+            if w > THUMBNAIL_MAX_WIDTH:
+                ratio = THUMBNAIL_MAX_WIDTH / w
+                img = img.resize(
+                    (THUMBNAIL_MAX_WIDTH, int(h * ratio)),
+                    Image.LANCZOS,
+                )
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=THUMBNAIL_JPEG_QUALITY)
+            buf.seek(0)
+            return buf
+
     def _extract_pdf_content(
         self,
         pdf_path: str,
         dpi: int = 300,
-    ) -> tuple[list[PageContent], list[io.BytesIO]]:
-        """Extract both text and PNG images from PDF using PyMuPDF.
+    ) -> tuple[list[PageContent], list[io.BytesIO], list[io.BytesIO]]:
+        """Extract text, PNG images, and JPEG thumbnails from PDF using PyMuPDF.
 
-        Opens the PDF once and extracts both text content and renders pages to PNG
-        for efficiency.
+        Opens the PDF once and extracts text content, renders pages to full-res
+        PNG, and generates lightweight JPEG thumbnails for UI display.
 
         Args:
             pdf_path: Path to the PDF file
             dpi: Resolution for converting PDF pages (default: 300)
 
         Returns:
-            Tuple of (page_content_list, png_streams_list)
+            Tuple of (page_content_list, png_streams_list, thumbnail_streams_list)
 
         """
         page_contents = []
         png_streams = []
+        thumb_streams = []
 
         # Open PDF with PyMuPDF
         doc = fitz.open(pdf_path)
@@ -62,11 +92,14 @@ class PyMuPDFService(PDFService):
                 img_byte_arr = io.BytesIO(png_bytes)
                 img_byte_arr.seek(0)
                 png_streams.append(img_byte_arr)
+
+                # Generate lightweight thumbnail
+                thumb_streams.append(self._make_thumbnail(png_bytes))
         finally:
             # Always close the document to free resources
             doc.close()
 
-        return page_contents, png_streams
+        return page_contents, png_streams, thumb_streams
 
     def parse(self, storage_key: str) -> PDFContent:
         """Load PDF from blob store and returns its text content.
@@ -90,8 +123,8 @@ class PyMuPDFService(PDFService):
         try:
             # Get file path from blob store using context manager
             with self.blob_store.get_file(storage_key) as file_path:
-                # Extract text content and render PNG images using PyMuPDF
-                loaded_docs, pages_png = self._extract_pdf_content(str(file_path))
+                # Extract text content, render PNG images, and generate thumbnails
+                loaded_docs, pages_png, pages_thumb = self._extract_pdf_content(str(file_path))
         except Exception as e:
             msg = f"Error parsing PDF (key: {storage_key}): {e!s}"
             raise InfrastructureError(msg) from e
@@ -108,6 +141,7 @@ class PyMuPDFService(PDFService):
             file_path=storage_key,
             pages=loaded_docs,
             pages_png=pages_png,
+            pages_thumb=pages_thumb,
             combined_content=combined_content,
             first_page_content=first_page_content,
             last_page_content=last_page_content,
