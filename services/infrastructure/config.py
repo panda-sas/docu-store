@@ -65,6 +65,18 @@ class Settings(BaseSettings):
         default="read_model_tracking",
         validation_alias="MONGO_TRACKING_COLLECTION",
     )
+    mongo_tag_dictionary_collection: str = Field(
+        default="tag_dictionary",
+        validation_alias="MONGO_TAG_DICTIONARY_COLLECTION",
+    )
+    mongo_user_preferences_collection: str = Field(
+        default="user_preferences",
+        validation_alias="MONGO_USER_PREFERENCES_COLLECTION",
+    )
+    mongo_user_activity_collection: str = Field(
+        default="user_activity",
+        validation_alias="MONGO_USER_ACTIVITY_COLLECTION",
+    )
 
     # Blob Storage
     blob_base_url: str = Field(
@@ -171,6 +183,13 @@ class Settings(BaseSettings):
         description="Overlapping characters between chunks. Typically 10-20% of chunk_size.",
     )
 
+    # NER (structflo / langextract)
+    ner_max_char_buffer: int = Field(
+        default=5000,
+        validation_alias="NER_MAX_CHAR_BUFFER",
+        description="Max chars per LLM chunk in NER extraction. Higher = fewer LLM calls but more tokens per call.",
+    )
+
     # GLiNER2 (structured extraction for document metadata)
     gliner2_model_name: str = Field(
         default="fastino/gliner2-large-v1",
@@ -233,7 +252,7 @@ class Settings(BaseSettings):
         default=5, validation_alias="BROWSE_DEFAULT_CATEGORY_LIMIT",
     )
     browse_sticky_categories: str = Field(
-        default="target", validation_alias="BROWSE_STICKY_CATEGORIES",
+        default="date,target", validation_alias="BROWSE_STICKY_CATEGORIES",
     )
 
     @property

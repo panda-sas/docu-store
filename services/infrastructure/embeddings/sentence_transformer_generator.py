@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
@@ -57,6 +58,7 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
         # Lazy loading - will load on first use
         self._model: SentenceTransformer | None = None
         self._dimensions: int | None = None
+        self._lock = threading.Lock()
 
     def _resolve_device(self, device: str) -> str:
         """Resolve and validate the device."""
@@ -71,8 +73,12 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
         return device
 
     def _ensure_model_loaded(self) -> None:
-        """Lazy load the model on first use."""
-        if self._model is None:
+        """Lazy load the model on first use (thread-safe double-check locking)."""
+        if self._model is not None:
+            return
+        with self._lock:
+            if self._model is not None:
+                return
             from sentence_transformers import (  # noqa: PLC0415
                 SentenceTransformer,
             )  # heavy import — deferred until first use

@@ -75,7 +75,10 @@ from application.use_cases.summary_embedding_use_cases import (
     EmbedArtifactSummaryUseCase,
     EmbedPageSummaryUseCase,
 )
-from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
+from application.use_cases.vector_metadata_use_cases import (
+    SyncArtifactMetadataToVectorStoreUseCase,
+    SyncPageTagsToVectorStoreUseCase,
+)
 from application.workflow_use_cases.log_artifcat_sample_use_case import LogArtifactSampleUseCase
 from application.workflow_use_cases.trigger_artifact_summarization_use_case import (
     TriggerArtifactSummarizationUseCase,
@@ -248,9 +251,26 @@ def create_container() -> Container:  # noqa: PLR0915
     from application.ports.repositories.tag_browse_read_model import (
         TagBrowseReadModel,
     )
+    from application.ports.repositories.tag_dictionary_read_model import (
+        TagDictionaryReadModel,
+    )
 
     container[TagBrowseReadModel] = mongo_repository_factory
+    container[TagDictionaryReadModel] = mongo_repository_factory
     container[DashboardReadModel] = mongo_repository_factory
+
+    from application.ports.repositories.user_activity_store import UserActivityStore
+    from application.ports.repositories.user_preferences_store import UserPreferencesStore
+    from infrastructure.read_repositories.mongo_user_store import MongoUserStore
+
+    def user_store_factory(c: object) -> MongoUserStore:
+        return MongoUserStore(
+            client=c[AsyncIOMotorClient],
+            settings=settings,
+        )
+
+    container[UserPreferencesStore] = user_store_factory
+    container[UserActivityStore] = user_store_factory
 
     # Register Pipeline Orchestrator (Temporal)
     container[WorkflowOrchestrator] = lambda _: TemporalWorkflowOrchestrator()
@@ -279,18 +299,20 @@ def create_container() -> Container:  # noqa: PLR0915
     container[NERExtractorPort] = lambda _: StructfloNERExtractor(
         model_id=settings.llm_model_name,
         model_url=settings.llm_base_url,
+        max_char_buffer=settings.ner_max_char_buffer,
     )
 
     # Register SMILES Validator
     container[SmilesValidator] = lambda _: RdkitSmilesValidator()
 
-    # Embedding Generator
-    container[EmbeddingGenerator] = lambda _: SentenceTransformerGenerator(
+    # Embedding Generator (singleton — model loaded once, reused across requests)
+    embedding_generator_instance = SentenceTransformerGenerator(
         model_name=settings.embedding_model_name,
         device=settings.embedding_device,
         query_prefix=settings.embedding_query_prefix,
         document_prefix=settings.embedding_document_prefix,
     )
+    container[EmbeddingGenerator] = embedding_generator_instance
 
     # Vector Store (text embeddings — page chunks)
     vector_store_instance = QdrantStore(
@@ -318,28 +340,31 @@ def create_container() -> Container:  # noqa: PLR0915
     )
     container[SummaryVectorStore] = summary_vector_store_instance
 
-    # ChemBERTa embedding generator (SMILES)
-    container[ChemBertaEmbeddingGenerator] = lambda _: ChemBertaEmbeddingGenerator(
+    # ChemBERTa embedding generator (SMILES) — singleton
+    chemberta_instance = ChemBertaEmbeddingGenerator(
         model_name=settings.smiles_embedding_model_name,
         device=settings.smiles_embedding_device,
     )
+    container[ChemBertaEmbeddingGenerator] = chemberta_instance
 
-    # Text Chunker
-    container[TextChunker] = lambda _: LangChainTextChunker(
+    # Text Chunker — singleton (stateless, no model)
+    text_chunker_instance = LangChainTextChunker(
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
     )
+    container[TextChunker] = text_chunker_instance
 
     # Sparse Embedding Generator (hashing-based for hybrid search)
     sparse_generator_instance = TfidfSparseGenerator()
     container[SparseEmbeddingGenerator] = sparse_generator_instance
 
-    # Cross-encoder reranker (Stage 2 — reranks retrieval candidates)
+    # Cross-encoder reranker (Stage 2 — reranks retrieval candidates) — singleton
     if settings.reranker_enabled:
-        container[Reranker] = lambda _: CrossEncoderReranker(
+        reranker_instance = CrossEncoderReranker(
             model_name=settings.reranker_model_name,
             device=settings.reranker_device,
         )
+        container[Reranker] = reranker_instance
     else:
         container[Reranker] = None  # type: ignore[assignment]
 
@@ -551,6 +576,26 @@ def create_container() -> Container:  # noqa: PLR0915
     container[TriggerArtifactSummarizationUseCase] = lambda c: TriggerArtifactSummarizationUseCase(
         artifact_repository=c[ArtifactRepository],
         page_repository=c[PageRepository],
+        page_read_model=c[PageReadModel],
+        workflow_orchestrator=c[WorkflowOrchestrator],
+    )
+
+    # Batch re-embed use cases
+    from application.use_cases.batch_reembed_use_cases import (  # noqa: PLC0415
+        BatchReEmbedArtifactPagesUseCase,
+    )
+    from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
+        TriggerBatchReEmbedUseCase,
+    )
+
+    container[BatchReEmbedArtifactPagesUseCase] = lambda c: BatchReEmbedArtifactPagesUseCase(
+        artifact_repository=c[ArtifactRepository],
+        page_repository=c[PageRepository],
+        embedding_generator=c[EmbeddingGenerator],
+        vector_store=c[VectorStore],
+        text_chunker=c[TextChunker],
+    )
+    container[TriggerBatchReEmbedUseCase] = lambda c: TriggerBatchReEmbedUseCase(
         workflow_orchestrator=c[WorkflowOrchestrator],
     )
 
@@ -581,6 +626,13 @@ def create_container() -> Container:  # noqa: PLR0915
         vector_store=c[VectorStore],
         summary_vector_store=c[SummaryVectorStore],
     )
+    container[SyncArtifactMetadataToVectorStoreUseCase] = (
+        lambda c: SyncArtifactMetadataToVectorStoreUseCase(
+            artifact_repository=c[ArtifactRepository],
+            vector_store=c[VectorStore],
+            summary_vector_store=c[SummaryVectorStore],
+        )
+    )
 
     # Search Use Cases
     container[SearchSummariesUseCase] = lambda c: SearchSummariesUseCase(
@@ -595,6 +647,7 @@ def create_container() -> Container:  # noqa: PLR0915
         page_read_model=c[PageReadModel],
         artifact_read_model=c[ArtifactReadModel],
         reranker=c[Reranker],
+        sparse_embedding_generator=c[SparseEmbeddingGenerator],
     )
 
     return container

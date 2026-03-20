@@ -84,6 +84,7 @@ class SummaryQdrantStore(SummaryVectorStore):
                 ("artifact_id", models.PayloadSchemaType.KEYWORD),
                 ("workspace_id", models.PayloadSchemaType.KEYWORD),
                 ("tag_normalized", models.PayloadSchemaType.KEYWORD),
+                ("artifact_tag_normalized", models.PayloadSchemaType.KEYWORD),
                 ("entity_types", models.PayloadSchemaType.KEYWORD),
             ]:
                 await client.create_payload_index(
@@ -248,17 +249,33 @@ class SummaryQdrantStore(SummaryVectorStore):
             normalized = [t.lower() for t in tags]
             if tag_match_mode == "any":
                 conditions.append(
-                    models.FieldCondition(
-                        key="tag_normalized",
-                        match=models.MatchAny(any=normalized),
+                    models.Filter(
+                        should=[
+                            models.FieldCondition(
+                                key="tag_normalized",
+                                match=models.MatchAny(any=normalized),
+                            ),
+                            models.FieldCondition(
+                                key="artifact_tag_normalized",
+                                match=models.MatchAny(any=normalized),
+                            ),
+                        ],
                     ),
                 )
             else:
                 for tag in normalized:
                     conditions.append(
-                        models.FieldCondition(
-                            key="tag_normalized",
-                            match=models.MatchValue(value=tag),
+                        models.Filter(
+                            should=[
+                                models.FieldCondition(
+                                    key="tag_normalized",
+                                    match=models.MatchValue(value=tag),
+                                ),
+                                models.FieldCondition(
+                                    key="artifact_tag_normalized",
+                                    match=models.MatchValue(value=tag),
+                                ),
+                            ],
                         ),
                     )
         if entity_types:
@@ -369,9 +386,9 @@ class SummaryQdrantStore(SummaryVectorStore):
         else:
             return {
                 "collection_name": self.collection_name,
-                "vectors_count": info.vectors_count,
+                "indexed_vectors_count": info.indexed_vectors_count,
                 "points_count": info.points_count,
-                "status": info.status,
+                "status": str(info.status),
                 "vector_size": self.vector_size,
             }
 
@@ -405,6 +422,32 @@ class SummaryQdrantStore(SummaryVectorStore):
                 entity_id=str(entity_id),
                 error=str(e),
             )
+
+    async def set_artifact_pages_payload(
+        self,
+        artifact_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload on all summary points belonging to an artifact."""
+        client = await self._get_client()
+        try:
+            await client.set_payload(
+                collection_name=self.collection_name,
+                payload=payload,
+                points=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="artifact_id",
+                                match=models.MatchValue(value=str(artifact_id)),
+                            ),
+                        ],
+                    ),
+                ),
+            )
+            logger.info("artifact_pages_summary_payload_updated", artifact_id=str(artifact_id), fields=list(payload.keys()))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("failed_to_set_artifact_pages_summary_payload", artifact_id=str(artifact_id), error=str(e))
 
     async def close(self) -> None:
         if self._client:

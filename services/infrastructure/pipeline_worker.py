@@ -20,7 +20,10 @@ import structlog
 from eventsourcing.application import Application
 from eventsourcing.projection import ApplicationSubscription
 
-from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
+from application.use_cases.vector_metadata_use_cases import (
+    SyncArtifactMetadataToVectorStoreUseCase,
+    SyncPageTagsToVectorStoreUseCase,
+)
 from application.workflow_use_cases.log_artifcat_sample_use_case import LogArtifactSampleUseCase
 from application.workflow_use_cases.trigger_artifact_summarization_use_case import (
     TriggerArtifactSummarizationUseCase,
@@ -50,6 +53,7 @@ from application.workflow_use_cases.trigger_page_summary_embedding_use_case impo
 from application.workflow_use_cases.trigger_smiles_embedding_use_case import (
     TriggerSmilesEmbeddingUseCase,
 )
+from application.ports.repositories.page_repository import PageRepository
 from domain.aggregates.artifact import Artifact
 from domain.aggregates.page import Page
 from infrastructure.di.container import create_container
@@ -91,6 +95,13 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     trigger_artifact_tag_aggregation_use_case = container[TriggerArtifactTagAggregationUseCase]
     trigger_doc_metadata_extraction_use_case = container[TriggerDocMetadataExtractionUseCase]
     sync_page_tags_use_case = container[SyncPageTagsToVectorStoreUseCase]
+    sync_artifact_metadata_use_case = container[SyncArtifactMetadataToVectorStoreUseCase]
+
+    from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
+        TriggerBatchReEmbedUseCase,
+    )
+
+    trigger_batch_reembed_use_case = container[TriggerBatchReEmbedUseCase]
 
     # Setup signal handlers
     def handle_signal(signum: int, _frame: object) -> None:
@@ -107,9 +118,11 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
         f"{Page.Created.__module__}:{Page.Created.__qualname__}",
         f"{Page.TextMentionUpdated.__module__}:{Page.TextMentionUpdated.__qualname__}",
         f"{Page.CompoundMentionsUpdated.__module__}:{Page.CompoundMentionsUpdated.__qualname__}",
-        f"{Page.TextEmbeddingGenerated.__module__}:{Page.TextEmbeddingGenerated.__qualname__}",
         f"{Page.SummaryCandidateUpdated.__module__}:{Page.SummaryCandidateUpdated.__qualname__}",
         f"{Page.TagMentionsUpdated.__module__}:{Page.TagMentionsUpdated.__qualname__}",
+        f"{Artifact.TagMentionsUpdated.__module__}:{Artifact.TagMentionsUpdated.__qualname__}",
+        f"{Artifact.AuthorMentionsUpdated.__module__}:{Artifact.AuthorMentionsUpdated.__qualname__}",
+        f"{Artifact.PresentationDateUpdated.__module__}:{Artifact.PresentationDateUpdated.__qualname__}",
     ]
 
     logger.info("pipeline_worker_started", worker_name=worker_name, topics=topics)
@@ -186,12 +199,13 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                     tracking_id=tracking.notification_id,
                                 )
 
-                                await trigger_embedding_use_case.execute(
+                                # Summarization starts directly — no longer blocked behind embedding.
+                                # Embedding happens ONCE after all summaries complete (batch embed).
+                                await trigger_page_summarization_use_case.execute(
                                     page_id=domain_event.originator_id,
-                                    text_mention=domain_event.text_mention,
                                 )
 
-                                # NER runs in parallel with embedding — independent, no sequencing needed
+                                # NER runs in parallel with summarization
                                 await trigger_ner_extraction_use_case.execute(
                                     page_id=domain_event.originator_id,
                                 )
@@ -202,24 +216,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 )
 
                                 logger.info(
-                                    "pipeline_embedding_ner_metadata_workflows_triggered",
-                                    page_id=str(domain_event.originator_id),
-                                    tracking_id=tracking.notification_id,
-                                )
-
-                            case Page.TextEmbeddingGenerated():
-                                logger.info(
-                                    "pipeline_text_embedding_generated",
-                                    page_id=str(domain_event.originator_id),
-                                    tracking_id=tracking.notification_id,
-                                )
-
-                                await trigger_page_summarization_use_case.execute(
-                                    page_id=domain_event.originator_id,
-                                )
-
-                                logger.info(
-                                    "pipeline_summarization_workflow_triggered",
+                                    "pipeline_summarization_ner_metadata_workflows_triggered",
                                     page_id=str(domain_event.originator_id),
                                     tracking_id=tracking.notification_id,
                                 )
@@ -232,7 +229,8 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 )
 
                                 # Check if all pages are done → trigger artifact summarization
-                                await trigger_artifact_summarization_use_case.execute(
+                                # Returns non-None when all pages have summaries
+                                summarization_result = await trigger_artifact_summarization_use_case.execute(
                                     page_id=domain_event.originator_id,
                                 )
 
@@ -241,13 +239,16 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                     page_id=domain_event.originator_id,
                                 )
 
-                                # Re-embed page chunks with full context (title + tags + summary)
-                                # By this point tags and summary are available, so contextual
-                                # embeddings get the complete prefix.
-                                await trigger_embedding_use_case.execute(
-                                    page_id=domain_event.originator_id,
-                                    force_regenerate=True,
-                                )
+                                # When all page summaries are complete, batch re-embed ALL
+                                # pages with full contextual prefixes (title + tags + summary)
+                                # in a single workflow instead of 100 individual ones.
+                                if summarization_result is not None:
+                                    summary_page = container[PageRepository].get_by_id(
+                                        domain_event.originator_id,
+                                    )
+                                    await trigger_batch_reembed_use_case.execute(
+                                        artifact_id=summary_page.artifact_id,
+                                    )
 
                                 logger.info(
                                     "pipeline_page_summary_workflows_triggered",
@@ -308,6 +309,51 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 logger.info(
                                     "pipeline_artifact_tag_aggregation_triggered",
                                     page_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                            case Artifact.TagMentionsUpdated():
+                                logger.info(
+                                    "pipeline_artifact_tag_mentions_updated",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+                                await sync_artifact_metadata_use_case.execute(
+                                    artifact_id=domain_event.originator_id,
+                                )
+                                logger.info(
+                                    "pipeline_artifact_metadata_synced",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                            case Artifact.AuthorMentionsUpdated():
+                                logger.info(
+                                    "pipeline_artifact_author_mentions_updated",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+                                await sync_artifact_metadata_use_case.execute(
+                                    artifact_id=domain_event.originator_id,
+                                )
+                                logger.info(
+                                    "pipeline_artifact_metadata_synced",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                            case Artifact.PresentationDateUpdated():
+                                logger.info(
+                                    "pipeline_artifact_presentation_date_updated",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+                                await sync_artifact_metadata_use_case.execute(
+                                    artifact_id=domain_event.originator_id,
+                                )
+                                logger.info(
+                                    "pipeline_artifact_metadata_synced",
+                                    artifact_id=str(domain_event.originator_id),
                                     tracking_id=tracking.notification_id,
                                 )
 

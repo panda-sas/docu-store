@@ -110,25 +110,29 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
     async def start_embedding_workflow(
         self,
         page_id: UUID,
+        *,
+        skip_sparse: bool = False,
     ) -> None:
         """Start the embedding generation workflow for a page.
 
         Args:
             page_id: Unique identifier of the page to generate embeddings for
+            skip_sparse: If True, skip sparse embedding regeneration
 
         """
         await self._ensure_client()
 
         workflow_id = f"embedding-{page_id}"
+        input_data = {"page_id": str(page_id), "skip_sparse": skip_sparse}
 
         try:
             await self._client.start_workflow(
                 "GeneratePageEmbeddingWorkflow",
-                str(page_id),
+                input_data,
                 id=workflow_id,
                 task_queue="artifact_processing",  # Same queue as other workflows
             )
-            logger.info("embedding_workflow_started", page_id=str(page_id))
+            logger.info("embedding_workflow_started", page_id=str(page_id), skip_sparse=skip_sparse)
         except Exception as e:
             logger.exception(
                 "failed_to_start_embedding_workflow",
@@ -372,6 +376,36 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
         except Exception as e:
             logger.exception(
                 "failed_to_start_artifact_tag_aggregation_workflow",
+                artifact_id=str(artifact_id),
+                error=str(e),
+            )
+
+    async def start_batch_reembed_workflow(
+        self,
+        artifact_id: UUID,
+    ) -> None:
+        """Start the batch re-embed workflow for an artifact."""
+        await self._ensure_client()
+
+        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+
+        workflow_id = f"batch-reembed-{artifact_id}"
+
+        try:
+            await self._client.start_workflow(
+                "BatchReEmbedArtifactPagesWorkflow",
+                str(artifact_id),
+                id=workflow_id,
+                task_queue="artifact_processing",
+                id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+            )
+            logger.info(
+                "batch_reembed_workflow_started",
+                artifact_id=str(artifact_id),
+            )
+        except Exception as e:
+            logger.exception(
+                "failed_to_start_batch_reembed_workflow",
                 artifact_id=str(artifact_id),
                 error=str(e),
             )

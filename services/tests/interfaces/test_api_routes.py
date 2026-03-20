@@ -57,6 +57,9 @@ class FakePageReadModel(PageReadModel):
     async def get_pages_by_id(self, page_ids: list[UUID], workspace_id: UUID | None = None) -> list[PageResponse]:
         return [self._pages[pid] for pid in page_ids if pid in self._pages]
 
+    async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
+        return 0
+
 
 class FakeUseCase:
     def __init__(self, result: object) -> None:

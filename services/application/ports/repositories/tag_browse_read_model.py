@@ -42,3 +42,14 @@ class TagBrowseReadModel(ABC):
         allowed_artifact_ids: list[UUID] | None = None,
     ) -> list[ArtifactBrowseItemDTO]:
         pass
+
+    @abstractmethod
+    async def suggest_tags(
+        self,
+        query: str,
+        workspace_id: UUID | None = None,
+        limit: int = 10,
+        allowed_artifact_ids: list[UUID] | None = None,
+    ) -> list[dict[str, str]]:
+        """Suggest tags matching a prefix query for autocomplete."""
+        pass

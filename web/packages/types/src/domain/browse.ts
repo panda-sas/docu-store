@@ -29,6 +29,12 @@ export interface TagPageSource {
   page_index: number;
 }
 
+export interface PopularTagDTO {
+  tag: string;
+  entity_type: string;
+  artifact_count: number;
+}
+
 export interface ArtifactBrowseItemDTO {
   artifact_id: string;
   title: string | null;

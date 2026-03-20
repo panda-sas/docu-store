@@ -39,6 +39,9 @@ class FakeMaterializer:
     def delete_page(self, page_id: str, tracking: object) -> None:
         self.delete_page_calls.append((page_id, tracking))
 
+    def replace_artifact_tags(self, artifact_id: str, tags: list, tracking: object) -> None:
+        pass
+
 
 def _tracking() -> object:
     return SimpleNamespace(notification_id=1)

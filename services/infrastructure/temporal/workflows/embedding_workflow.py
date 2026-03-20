@@ -21,16 +21,23 @@ class GeneratePageEmbeddingWorkflow:
     """
 
     @workflow.run
-    async def run(self, page_id: str) -> dict:
+    async def run(self, input_data: dict | str) -> dict:
         """Execute the embedding generation workflow.
 
         Args:
-            page_id: UUID string of the page to process
+            input_data: Either a page_id string (legacy) or a dict with
+                ``page_id`` and optional ``skip_sparse`` flag.
 
         Returns:
             Dictionary with workflow result
 
         """
+        if isinstance(input_data, str):
+            page_id = input_data
+            input_data = {"page_id": page_id, "skip_sparse": False}
+        else:
+            page_id = input_data["page_id"]
+
         workflow.logger.info(
             f"Embedding workflow started for page_id={page_id}, workflow_id={workflow.info().workflow_id}",
         )
@@ -46,7 +53,7 @@ class GeneratePageEmbeddingWorkflow:
         # Step 1: Generate and store the embedding
         result = await workflow.execute_activity(
             "generate_page_embedding",
-            page_id,
+            input_data,
             start_to_close_timeout=timedelta(minutes=5),
             retry_policy=retry_policy,
         )

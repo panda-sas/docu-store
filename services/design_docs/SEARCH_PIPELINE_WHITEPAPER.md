@@ -194,6 +194,27 @@ The system stores structured metadata alongside every vector and supports filter
 
 Tags are synchronized to vector payloads without re-embedding -- when NER results become available (which may happen after initial embedding), the system patches the tag metadata onto existing vector points using a payload update operation. This takes less than 10 milliseconds per page and avoids the computational cost of regenerating embeddings.
 
+#### Dual-Field Tag Filtering: Page-Level and Artifact-Level Metadata
+
+Tag filtering operates across two independent payload fields to capture metadata at different granularities:
+
+- **`tag_normalized`** -- Page-level NER tags extracted from individual page text (compounds, targets, genes, diseases). Synced by `SyncPageTagsToVectorStoreUseCase` when page NER completes.
+
+- **`artifact_tag_normalized`** -- Artifact-level metadata: aggregated tags from all pages, author names, and publication year. Synced by `SyncArtifactMetadataToVectorStoreUseCase` when artifact-level events fire (`TagMentionsUpdated`, `AuthorMentionsUpdated`, `PresentationDateUpdated`).
+
+These two fields are separate to avoid cross-aggregate read dependencies and stomping risk between page-level and artifact-level sync operations. When a user filters by tag, the Qdrant filter uses an OR condition across both fields:
+
+```
+Filter(must=[
+    Filter(should=[
+        FieldCondition(key="tag_normalized", match=MatchAny(any=["inna krieger"])),
+        FieldCondition(key="artifact_tag_normalized", match=MatchAny(any=["inna krieger"])),
+    ])
+])
+```
+
+This ensures that a filter for an author name (which exists only in `artifact_tag_normalized`) matches all pages belonging to that author's document, even though individual pages don't carry author metadata in their page-level tags. The nested `should` inside `must` implements "at least one field must match" semantics.
+
 ### 3.8 Server-Side Deduplication: One Result Per Page
 
 When searching the text chunk collection, multiple chunks from the same page often match a query. Returning all of them is redundant and clutters the result list. The system uses server-side deduplication to return only the best-scoring chunk per page.
@@ -210,7 +231,73 @@ ChemBERTa maps SMILES strings to 384-dimensional vectors that capture structural
 
 This collection uses dense-only search (no sparse vectors) because term matching is not meaningful for SMILES strings -- the relationship between molecular structure and SMILES character sequences is non-trivial and not captured by string-level tokenization.
 
-### 3.10 Scalar Quantization: Performance at Scale
+### 3.10 Cross-Collection Document Ranking with Reciprocal Rank Fusion
+
+Deep Search queries two Qdrant collections in parallel: `page_embeddings` (raw text chunks) and `summary_embeddings` (page and artifact summaries). Each collection returns a ranked list using a different retrieval strategy. The challenge is merging these two incomparable result sets into a single document ranking for the user.
+
+#### The Problem with Naïve Approaches
+
+**Hard tiering** -- always ranking documents with chunk hits above documents with only summary hits -- was the initial approach. This fails because a document with a weak chunk match (cosine 0.3) would outrank a document with a near-perfect summary match (cosine 0.95). Summary-only documents become permanently second-class.
+
+**Score mixing** -- taking `Math.max(chunk_score, summary_score)` -- fails because cosine similarities from different vector spaces are not comparable. A 0.7 in `page_embeddings` (noisy raw text, sparse+dense hybrid) has a fundamentally different meaning than 0.7 in `summary_embeddings` (concentrated LLM-distilled text, dense only). The distributions have different means and variances.
+
+#### The Solution: Two-Level RRF
+
+The system applies the same Reciprocal Rank Fusion technique used for dense+sparse fusion (Section 3.3), but at the collection level:
+
+```
+doc_score = chunk_weight / (k + best_chunk_rank) + summary_weight / (k + best_summary_rank)
+```
+
+Where:
+- `best_chunk_rank` is the document's best page position in the reranked chunk results (array index)
+- `best_summary_rank` is the document's best hit position in the summary results (array index)
+- `k = 60` (standard RRF constant)
+- Both weights default to 1.0
+
+If a document has no chunk hits, its chunk contribution is 0. If no summary hits, its summary contribution is 0.
+
+```
+                        chunk_hits (reranked)        summary_hits (cosine)
+                        ┌───────────────────┐        ┌──────────────────┐
+                        │ #0  Doc A page 5  │        │ #0  Doc C (art)  │
+                        │ #1  Doc B page 2  │        │ #1  Doc A (art)  │
+                        │ #2  Doc A page 8  │        │ #2  Doc A page 3 │
+                        │ #3  Doc D page 1  │        │ #3  Doc D (art)  │
+                        │ #4  Doc E page 3  │        │ #4  Doc B page 1 │
+                        └───────────────────┘        └──────────────────┘
+                                 │                            │
+                                 └──────────┬─────────────────┘
+                                            ▼
+                             RRF Fusion (per document)
+                        ┌──────────────────────────────────┐
+                        │ Doc A: 1/60 + 1/61 = 0.0330      │  ← multi-hit, rank 1
+                        │ Doc D: 1/63 + 1/63 = 0.0317      │  ← multi-hit, rank 2
+                        │ Doc B: 1/61 + 1/64 = 0.0320      │  ← multi-hit, rank 3
+                        │ Doc C: 0    + 1/60 = 0.0167      │  ← summary-only, rank 4
+                        │ Doc E: 1/64 + 0    = 0.0156      │  ← chunk-only, rank 5
+                        └──────────────────────────────────┘
+```
+
+**Key properties:**
+
+1. **Multi-hit documents naturally rank highest.** A document appearing in both collections accumulates score from both sources, roughly doubling its score compared to single-source documents. This is a strong relevance signal -- if a document matches at both the raw text level and the summarized semantic level, it is very likely relevant.
+
+2. **No hard tiering.** A top summary-only document (rank 0, score 1/60 = 0.0167) outranks a weak chunk-only document (rank 8, score 1/68 = 0.0147). Summary-only documents compete fairly.
+
+3. **Rerank quality is implicit.** The chunk results arrive pre-sorted by the cross-encoder, so chunk rank 0 is the cross-encoder's top pick. RRF preserves this ordering without needing to normalize or compare cross-encoder scores with cosine scores.
+
+4. **Configurable.** The scoring parameters (`k`, `chunkWeight`, `summaryWeight`, and a `mode` toggle between RRF and legacy tiering) are exposed as a frontend configuration object for experimentation.
+
+#### Page Ordering Within Documents
+
+Within a document, pages are sorted by the highest-fidelity available signal:
+
+1. **Rerank score descending** (cross-encoder magnitude) -- if available, this is the most reliable page-level signal. Using the actual score value (not just position) captures magnitude gaps: a page with rerank score 0.95 vs 0.12 shows a clear quality difference.
+2. **Chunk cosine descending** -- fallback for pages with chunks but no rerank scores.
+3. **Summary cosine descending** -- summary-only pages sort last within the document.
+
+### 3.11 Scalar Quantization: Performance at Scale
 
 As collections grow, storing full-precision (32-bit floating point) vectors for every chunk becomes memory-intensive. The system applies scalar quantization to the text chunk collection -- the largest collection -- reducing each vector component from 32-bit to 8-bit integer representation.
 
@@ -253,25 +340,205 @@ All indexing operations are idempotent -- running the same operation twice produ
 
 The system exposes four search endpoints, each serving a distinct research workflow:
 
-### 5.1 Text Search
+### 5.1 Exact Match (`POST /search/pages`) — UI: "Exact Match"
 
-The primary search endpoint queries the text chunk collection using the full hybrid pipeline (dense + sparse retrieval, RRF fusion, cross-encoder reranking, metadata filtering). This is the "power search" that handles everything from simple keyword lookups to complex multi-concept queries.
+The primary search endpoint queries the `page_embeddings` collection using the full hybrid pipeline. This is the highest-precision search mode, optimized for queries where the user has specific terms or phrases in mind.
 
-Researchers use this endpoint when they know what they're looking for and want specific passages: "What was the IC50 of compound X against target Y?" or "Find mentions of drug resistance mechanisms in this document."
+```
+Query: "diverse clinical isolates"
+  │
+  ├─ Dense embedding (nomic-embed-text-v1.5, 384-dim)
+  ├─ Sparse embedding (HashingVectorizer, bigrams)
+  │
+  ▼
+┌─────────────────────────────────────────────────┐
+│  page_embeddings (Qdrant)                       │
+│                                                 │
+│  search_hybrid_grouped()                        │
+│  ├─ Prefetch: dense cosine → 100 candidates     │
+│  ├─ Prefetch: sparse IDF   → 100 candidates     │
+│  ├─ Fusion: Reciprocal Rank Fusion (RRF)        │
+│  ├─ Group by: page_id (best chunk per page)     │
+│  └─ Limit: request.limit × 3 (over-fetch)      │
+└────────────────────┬────────────────────────────┘
+                     ▼
+┌─────────────────────────────────────────────────┐
+│  Cross-Encoder Rerank (ms-marco-MiniLM-L-12-v2) │
+│  • Fetch page text from MongoDB (up to 2000ch)  │
+│  • Score each (query, text) pair jointly         │
+│  • Return top-K by rerank score                  │
+└────────────────────┬────────────────────────────┘
+                     ▼
+          Enriched page-level results
+          (flat list, not grouped by document)
+```
 
-Results include the original text passage, the parent document's title and metadata, similarity and reranking scores, and a text preview for quick scanning.
+**Collections hit:** `page_embeddings` only.
+**Retrieval:** Hybrid (dense + sparse RRF).
+**Reranking:** Yes — cross-encoder on chunk text.
 
-### 5.2 Summary Search
+Researchers use this endpoint when they know what they're looking for and want specific passages: "What was the IC50 of compound X against target Y?" or "Find mentions of drug resistance mechanisms in this document." The sparse component guarantees that exact identifiers like "SACC-111" or "NadD" achieve perfect recall even when the dense model cannot represent them.
 
-Queries the summary collection for high-level results. Researchers use this endpoint for exploratory queries: "What do we know about NadD as a drug target?" or "Which documents discuss tuberculosis treatment?"
+### 5.2 Overview Search (`POST /search/summaries`) — UI: "Overview Search"
 
-Results can be filtered by granularity (page summaries only, document summaries only, or both) and by tags. Each result includes the full summary text, eliminating the need for additional database lookups.
+Queries the `summary_embeddings` collection for high-level results. This mode searches LLM-generated summaries rather than raw text, making it suited for conceptual or exploratory queries.
 
-### 5.3 Hierarchical Search
+```
+Query: "NadD as a drug target"
+  │
+  ├─ Dense embedding (nomic-embed-text-v1.5, 384-dim)
+  │  (no sparse — summary collection has no sparse vectors)
+  │
+  ▼
+┌─────────────────────────────────────────────────┐
+│  summary_embeddings (Qdrant)                    │
+│                                                 │
+│  search_summaries()                             │
+│  ├─ Dense cosine similarity                     │
+│  ├─ Returns page + artifact summaries (mixed)   │
+│  └─ Limit: request.limit                        │
+└────────────────────┬────────────────────────────┘
+                     ▼
+          Enriched summary-level results
+          (flat list: page summaries + artifact summaries)
+```
 
-Queries both collections in parallel and returns results grouped by granularity. This endpoint is designed for search UIs that want to present a multi-level view: document-level matches as cards, with page-level summaries and specific passage hits nested beneath.
+**Collections hit:** `summary_embeddings` only.
+**Retrieval:** Dense cosine only.
+**Reranking:** None.
 
-The client receives summary hits and chunk hits as separate lists, giving the frontend complete control over how to merge and present them. This separation of concerns keeps the search backend focused on retrieval quality while allowing the frontend to experiment with presentation.
+Results can be filtered by granularity (page summaries only, document summaries only, or both) and by tags. Each result includes the full summary text, eliminating the need for additional database lookups. Because summaries are LLM-distilled semantic concentrations of the source text, cosine similarity alone is a strong relevance signal -- cross-encoder reranking would add latency with marginal quality gain (see Section 3.10 rationale).
+
+### 5.3 Deep Search (`POST /search/hierarchical`) — UI: "Deep Search"
+
+The most comprehensive search mode. Queries both collections in parallel, applies cross-encoder reranking to chunk results, and returns both result sets for frontend-side fusion and document grouping.
+
+```
+Query: "diverse clinical isolates" + tag filter: ["inna krieger"]
+  │
+  ├─ Dense embedding (nomic-embed-text-v1.5, 384-dim)
+  ├─ Sparse embedding (HashingVectorizer, bigrams)
+  │
+  ├───────────────────────────────────┬──────────────────────────────────────┐
+  │                                   │                                      │
+  ▼                                   ▼                                      │
+┌──────────────────────────┐  ┌────────────────────────────────────┐         │
+│  summary_embeddings      │  │  page_embeddings                   │         │
+│                          │  │                                    │         │
+│  search_summaries()      │  │  search_hybrid_grouped()           │         │
+│  • Dense cosine only     │  │  • Dense + Sparse RRF              │         │
+│  • Page + artifact       │  │  • Group by page_id                │         │
+│    summaries (mixed)     │  │  • Over-fetch: limit × 3           │         │
+│  • Tag filter: OR across │  │  • Tag filter: OR across           │         │
+│    tag_normalized &      │  │    tag_normalized &                │         │
+│    artifact_tag_norm.    │  │    artifact_tag_norm.              │         │
+│                          │  │                                    │         │
+│  Returns: limit results  │  └──────────────┬─────────────────────┘         │
+│  sorted by cosine sim    │                 │                               │
+│  (array index = rank)    │                 ▼                               │
+└────────────┬─────────────┘  ┌────────────────────────────────────┐         │
+             │                │  Cross-Encoder Rerank               │         │
+             │                │  (ms-marco-MiniLM-L-12-v2)          │         │
+             │                │                                    │         │
+             │                │  • Fetch page text from MongoDB    │         │
+             │                │  • Score (query, text) jointly     │         │
+             │                │  • Return top-K by rerank score    │         │
+             │                │  (array index = reranked position) │         │
+             │                └──────────────┬─────────────────────┘         │
+             │                               │                               │
+             ▼                               ▼                               │
+┌─────────────────────────────────────────────────────────────────────────────┘
+│                        BACKEND RESPONSE
+│
+│  {
+│    summary_hits: [ ... ]        ← sorted by cosine (index = summary rank)
+│    chunk_hits: [ ... ]          ← sorted by rerank score (index = chunk rank)
+│    chunk_rerank_info: { ... }   ← diagnostics
+│  }
+└─────────────────────┬───────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   FRONTEND: buildDocumentGroups()                            │
+│                                                                             │
+│  Step 1: Group all hits by artifact_id                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  • summary_hits → track bestSummaryRank per document (array index)  │    │
+│  │  • chunk_hits   → track bestChunkPosition per document (array index)│    │
+│  │  • Correlate page-level summaries with chunks by page_id            │    │
+│  │  • Leftover page summaries → summary-only PageGroups                │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Step 2: Compute RRF fusion score per document                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                                                                     │    │
+│  │  fusionScore = chunkWeight/(k + bestChunkRank)                      │    │
+│  │              + summaryWeight/(k + bestSummaryRank)                   │    │
+│  │                                                                     │    │
+│  │  Config: { mode: "rrf", k: 60, chunkWeight: 1.0, summaryWeight: 1.0}│   │
+│  │                                                                     │    │
+│  │  Example:                                                           │    │
+│  │  Doc A: chunk#0 + summary#1 → 1/60 + 1/61 = 0.0330  (multi-hit)   │    │
+│  │  Doc B: chunk#1 only        → 1/61 + 0    = 0.0164  (chunk-only)   │    │
+│  │  Doc C: summary#0 only      → 0    + 1/60 = 0.0167  (summary-only) │    │
+│  │                                                                     │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Step 3: Sort documents by fusionScore descending                           │
+│                                                                             │
+│  Step 4: Sort pages within each document                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  1. rerank_score descending (cross-encoder magnitude)               │    │
+│  │  2. chunk cosine descending (if no rerank)                          │    │
+│  │  3. summary cosine descending (summary-only pages last)             │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Render: Document cards (sorted by fusion) → Page rows (sorted by rerank)   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Collections hit:** `page_embeddings` AND `summary_embeddings` (parallel).
+**Retrieval:** Hybrid (dense + sparse RRF) for chunks; dense cosine for summaries.
+**Reranking:** Chunks only — cross-encoder on page text.
+**Document ranking:** Frontend RRF fusion across both result sets (Section 3.10).
+
+The separation of backend retrieval and frontend ranking is deliberate. The backend returns two independent result arrays, each with its own scoring semantics. The frontend applies RRF fusion for document ordering, giving the team a low-risk surface to experiment with ranking parameters (`k`, weights, mode toggle) without backend redeployment.
+
+### 5.3.1 Search Mode Comparison
+
+```
+┌────────────────┬──────────────────┬──────────────────┬──────────────────────┐
+│                │  Exact Match     │  Overview Search │  Deep Search          │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Endpoint       │ POST /search/    │ POST /search/    │ POST /search/         │
+│                │ pages            │ summaries        │ hierarchical          │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Collections    │ page_embeddings  │ summary_         │ page_embeddings       │
+│                │                  │ embeddings       │ + summary_embeddings  │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Retrieval      │ Hybrid           │ Dense only       │ Hybrid (chunks)       │
+│                │ (dense+sparse    │ (cosine)         │ + Dense (summaries)   │
+│                │  RRF)            │                  │                       │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Reranking      │ Yes — cross-     │ None             │ Chunks only —         │
+│                │ encoder          │                  │ cross-encoder         │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Document       │ N/A — flat       │ N/A — flat       │ RRF fusion across     │
+│ ranking        │ page list        │ result list      │ chunk + summary ranks │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Page ranking   │ Rerank score     │ Cosine score     │ Rerank score (within  │
+│                │ descending       │ descending       │ each document group)  │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Best for       │ Exact phrases,   │ Conceptual,      │ Comprehensive —       │
+│                │ specific IDs,    │ exploratory,     │ combines exact +      │
+│                │ known passages   │ "big picture"    │ conceptual signals    │
+├────────────────┼──────────────────┼──────────────────┼──────────────────────┤
+│ Signal quality │ ████████████ 12  │ ██████ 6         │ ██████████████ 14     │
+│ (relative)     │ dense+sparse+    │ dense cosine     │ dense+sparse+rerank   │
+│                │ rerank           │ on summaries     │ on chunks + dense     │
+│                │                  │                  │ cosine on summaries   │
+└────────────────┴──────────────────┴──────────────────┴──────────────────────┘
+```
 
 ### 5.4 Compound Search
 
@@ -355,9 +622,13 @@ The architecture anticipates several extensions that can be added without restru
 
 **Discovery and Recommendation** -- "Find more like these, but not like those" interactions, where researchers iteratively refine search results by providing positive and negative examples. The vector database already supports these operations natively.
 
-**Hybrid Summary Search** -- Extending sparse vectors to the summary collection, enabling exact-term recall at the summary level. This follows the same pattern already implemented for text chunks.
+**Hybrid Summary Search** -- Extending sparse vectors to the summary collection, enabling exact-term recall at the summary level. This would follow the same pattern already implemented for text chunks. Currently, Overview Search uses dense-only retrieval against summaries, which is adequate because summaries are semantically concentrated, but adding sparse support would improve recall for identifier-heavy queries at the summary level.
 
 **Learned Sparse Models** -- If IDF-quality term weighting becomes a measurable gap, SPLADE or similar learned sparse representations could be evaluated. The existing sparse embedding port abstracts this cleanly. However, any learned model must be evaluated against the custom tokenization requirements for scientific identifiers -- BERT-based tokenizers split compound codes into subwords, which may degrade exact-term recall.
+
+**Backend-Side Fusion** -- The current RRF document ranking is computed in the frontend, giving the team fast iteration on ranking parameters. Once the scoring configuration stabilizes, moving the fusion computation to the backend (`HierarchicalSearchUseCase`) would provide a cleaner API — the backend could return a single merged, document-grouped response instead of two independent arrays. This would also enable server-side optimizations like early termination and cross-collection score normalization.
+
+**RRF Parameter Tuning** -- The current configuration (k=60, equal weights) is the standard starting point from Cormack et al. (2009). Domain-specific tuning may improve results: lowering k (e.g., 10-20) increases rank separation for small result sets, and adjusting weights could favor chunk signals (cross-encoder validated) over summary signals for precision-oriented use cases. The frontend's configurable `SCORING_CONFIG` enables A/B testing of these parameters.
 
 ---
 
@@ -375,7 +646,24 @@ The architecture anticipates several extensions that can be added without restru
 | Read model database | MongoDB | Materialized views for enrichment |
 | Application framework | FastAPI | HTTP API layer |
 
-## Appendix B: Glossary
+## Appendix B: Qdrant Payload Index Schema
+
+Both `page_embeddings` and `summary_embeddings` collections carry the following indexed payload fields:
+
+| Field | Type | Collection(s) | Purpose |
+|-------|------|---------------|---------|
+| `artifact_id` | KEYWORD | Both | Document scoping |
+| `page_id` | KEYWORD | `page_embeddings` | Page scoping, grouping |
+| `workspace_id` | KEYWORD | Both | Multi-tenant isolation |
+| `tag_normalized` | KEYWORD | Both | Page-level NER tags (lowercased) |
+| `artifact_tag_normalized` | KEYWORD | Both | Artifact-level tags, authors, year (lowercased) |
+| `entity_types` | KEYWORD | Both | NER entity type filter (target, compound_name, etc.) |
+| `entity_type` | KEYWORD | `summary_embeddings` | Discriminator: "page" or "artifact" |
+| `entity_id` | KEYWORD | `summary_embeddings` | Page ID or artifact ID |
+
+The dual tag fields (`tag_normalized` + `artifact_tag_normalized`) are queried with OR semantics inside a `must` filter, ensuring that both page-level and artifact-level metadata contribute to tag filtering.
+
+## Appendix C: Glossary
 
 | Term | Definition |
 |------|-----------|
@@ -393,3 +681,6 @@ The architecture anticipates several extensions that can be added without restru
 | **Named vector** | A vector stored under a specific name within a multi-vector point. Enables storing dense and sparse vectors on the same data point. |
 | **Prefetch** | A vector database operation that retrieves initial candidates from one vector channel before fusion or further processing. |
 | **Idempotent** | An operation that produces the same result regardless of how many times it is executed. Essential for reliability in event-driven systems. |
+| **Cross-collection fusion** | Merging ranked results from multiple vector collections (e.g., chunks + summaries) into a single unified ranking. The system uses RRF for this. |
+| **Hard tiering** | A ranking strategy where all results from one source always rank above all results from another source, regardless of score quality. An anti-pattern for multi-collection search. |
+| **Multi-hit** | A document that appears in results from multiple collections (e.g., both chunk hits and summary hits). A strong relevance signal in cross-collection search. |

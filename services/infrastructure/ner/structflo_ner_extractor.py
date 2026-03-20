@@ -36,17 +36,23 @@ class StructfloNERExtractor(NERExtractorPort):
 
     """
 
-    def __init__(self, model_id: str, model_url: str) -> None:
+    def __init__(self, model_id: str, model_url: str, max_char_buffer: int = 5000) -> None:
         from structflo.ner import TB, NERExtractor  # noqa: PLC0415
         from structflo.ner.fast import FastNERExtractor  # noqa: PLC0415
 
-        self._llm_extractor = NERExtractor(model_id=model_id, model_url=model_url, profile=TB)
+        self._llm_extractor = NERExtractor(
+            model_id=model_id,
+            model_url=model_url,
+            profile=TB,
+            langextract_kwargs={"max_char_buffer": max_char_buffer},
+        )
         self._fast_extractor = FastNERExtractor(fuzzy_threshold=0)
         self._tb_profile = TB
         logger.info(
             "structflo_ner_extractor_initialized",
             model_id=model_id,
             model_url=model_url,
+            max_char_buffer=max_char_buffer,
         )
 
     async def extract(self, text: str) -> list[NEREntity]:

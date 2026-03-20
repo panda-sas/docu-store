@@ -191,6 +191,23 @@ class VectorStore(Protocol):
         """
         ...
 
+    async def set_artifact_payload(
+        self,
+        artifact_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload fields on ALL points for a given artifact.
+
+        Used to update artifact-level metadata (e.g. aggregated tags, authors)
+        without re-embedding.
+
+        Args:
+            artifact_id: The artifact whose points should be updated
+            payload: Payload fields to set/overwrite
+
+        """
+        ...
+
     async def get_collection_info(self) -> dict:
         """Get information about the vector collection.
 

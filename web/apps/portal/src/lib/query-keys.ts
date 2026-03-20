@@ -43,6 +43,20 @@ export const queryKeys = {
     all: ["dashboard"] as const,
     stats: () => [...queryKeys.dashboard.all, "stats"] as const,
   },
+  stats: {
+    all: ["stats"] as const,
+    workflows: () => [...queryKeys.stats.all, "workflows"] as const,
+    pipeline: () => [...queryKeys.stats.all, "pipeline"] as const,
+    vectors: () => [...queryKeys.stats.all, "vectors"] as const,
+  },
+  user: {
+    all: ["user"] as const,
+    preferences: () => [...queryKeys.user.all, "preferences"] as const,
+    activity: {
+      searches: () => [...queryKeys.user.all, "activity", "searches"] as const,
+      documents: () => [...queryKeys.user.all, "activity", "documents"] as const,
+    },
+  },
   browse: {
     all: ["browse"] as const,
     categories: () => [...queryKeys.browse.all, "categories"] as const,
@@ -50,5 +64,7 @@ export const queryKeys = {
       [...queryKeys.browse.all, "folders", entityType, parent ?? "root"] as const,
     artifacts: (entityType: string, tagValue: string) =>
       [...queryKeys.browse.all, "artifacts", entityType, tagValue] as const,
+    popularTags: (entityType?: string) =>
+      [...queryKeys.browse.all, "popularTags", entityType ?? "all"] as const,
   },
 };

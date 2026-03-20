@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
@@ -9,7 +9,7 @@ import { Message } from "primereact/message";
 import { FileText, Grid3X3, List } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { TagCategoryDTO, TagFolderDTO } from "@docu-store/types";
+import type { TagFolderDTO } from "@docu-store/types";
 import { useArtifacts } from "@/hooks/use-artifacts";
 import { useTagCategories, useTagFolders, useFolderArtifacts } from "@/hooks/use-browse";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -33,40 +33,49 @@ const VIEW_MODES = [
 
 export default function DocumentsPage() {
   const { workspace } = useParams<{ workspace: string }>();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  const [viewMode, setViewMode] = useState<ViewMode>("browse");
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedCategoryMeta, setSelectedCategoryMeta] = useState<TagCategoryDTO | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<TagFolderDTO | null>(null);
-  const [dateParent, setDateParent] = useState<string | undefined>();
+  // ── Read navigation state from URL ────────────────────────────────────────
+  const viewMode = (searchParams.get("view") ?? "browse") as ViewMode;
+  const selectedCategory = searchParams.get("cat");
+  const dateParent = searchParams.get("dp") ?? undefined;
+  const selectedFolderValue = searchParams.get("folder");
+
+  // Transient filter (not in URL — not meaningful to history)
   const [folderFilter, setFolderFilter] = useState("");
 
+  // ── Data fetching ─────────────────────────────────────────────────────────
   const { data: artifacts, isLoading: tableLoading, error: tableError } = useArtifacts();
-  const { data: rawCategoriesData, isLoading: categoriesLoading } = useTagCategories();
+  const { data: categoriesData, isLoading: categoriesLoading } = useTagCategories();
 
-  // Ensure "target" category is always visible even if the API doesn't return it
-  const categoriesData = useMemo(() => {
-    if (!rawCategoriesData) return rawCategoriesData;
-    const cats = rawCategoriesData.categories;
-    const hasTarget = cats.some((c) => c.entity_type === "target");
-    if (hasTarget) return rawCategoriesData;
-    return {
-      ...rawCategoriesData,
-      categories: [
-        ...cats,
-        { entity_type: "target", display_name: "Target", artifact_count: 0, distinct_count: 0 },
-      ],
-    };
-  }, [rawCategoriesData]);
+  // Effective category: URL param, or fall back to first loaded category
+  const effectiveCategory = selectedCategory ?? (categoriesData?.categories?.[0]?.entity_type ?? null);
+
   const { data: foldersData, isLoading: foldersLoading } = useTagFolders(
-    selectedCategory,
+    effectiveCategory,
     dateParent,
   );
   const { data: folderArtifacts, isLoading: folderArtifactsLoading } = useFolderArtifacts(
-    selectedCategory,
-    selectedFolder?.tag_value ?? null,
+    effectiveCategory,
+    selectedFolderValue,
   );
+
+  // Derive category metadata from loaded data
+  const selectedCategoryMeta = useMemo(
+    () => categoriesData?.categories?.find((c) => c.entity_type === effectiveCategory) ?? null,
+    [categoriesData, effectiveCategory],
+  );
+
+  // Derive folder display info from loaded folders data
+  const selectedFolderMeta = useMemo(() => {
+    if (!selectedFolderValue) return null;
+    const match = foldersData?.folders?.find((f) => f.tag_value === selectedFolderValue);
+    return match
+      ? { tag_value: match.tag_value, display_name: match.display_name }
+      : { tag_value: selectedFolderValue, display_name: selectedFolderValue };
+  }, [selectedFolderValue, foldersData]);
 
   const filteredFolders = useMemo(() => {
     const folders = foldersData?.folders;
@@ -75,13 +84,29 @@ export default function DocumentsPage() {
     return folders.filter((f) => f.display_name.toLowerCase().includes(q));
   }, [foldersData?.folders, folderFilter]);
 
-  useEffect(() => {
-    if (categoriesData?.categories?.length && !selectedCategory) {
-      const first = categoriesData.categories[0];
-      setSelectedCategory(first.entity_type);
-      setSelectedCategoryMeta(first);
+  // ── URL navigation helpers ────────────────────────────────────────────────
+
+  const buildUrl = (params: Record<string, string | undefined>) => {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined) sp.set(k, v);
     }
-  }, [categoriesData, selectedCategory]);
+    const qs = sp.toString();
+    return `/${workspace}/documents${qs ? `?${qs}` : ""}`;
+  };
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    if (mode === "table") {
+      router.push(buildUrl({ view: "table" }));
+    } else {
+      router.push(buildUrl({})); // browse is default, no params needed
+    }
+  };
+
+  const handleSelectCategory = (entityType: string) => {
+    setFolderFilter("");
+    router.push(buildUrl({ cat: entityType }));
+  };
 
   const handleCategoryHover = (entityType: string) => {
     queryClient.prefetchQuery({
@@ -92,43 +117,41 @@ export default function DocumentsPage() {
     });
   };
 
-  const handleSelectCategory = (entityType: string) => {
-    const meta = categoriesData?.categories?.find((c) => c.entity_type === entityType) ?? null;
-    setSelectedCategory(entityType);
-    setSelectedCategoryMeta(meta);
-    setSelectedFolder(null);
-    setDateParent(undefined);
-    setFolderFilter("");
-  };
-
   const handleSelectFolder = (folder: TagFolderDTO) => {
     setFolderFilter("");
     if (folder.has_children) {
-      setDateParent(folder.tag_value);
-      setSelectedFolder(null);
+      // Drill into date parent (e.g., year → months)
+      router.push(buildUrl({
+        cat: effectiveCategory ?? undefined,
+        dp: folder.tag_value,
+      }));
     } else {
-      setSelectedFolder(folder);
+      // Show artifacts in this folder
+      router.push(buildUrl({
+        cat: effectiveCategory ?? undefined,
+        dp: dateParent,
+        folder: folder.tag_value,
+      }));
     }
   };
 
   const handleBreadcrumbNavigate = (level: "root" | "category" | "dateParent") => {
     setFolderFilter("");
     if (level === "root") {
-      setSelectedCategory(null);
-      setSelectedCategoryMeta(null);
-      setSelectedFolder(null);
-      setDateParent(undefined);
+      router.push(buildUrl({}));
     } else if (level === "category") {
-      setSelectedFolder(null);
-      setDateParent(undefined);
+      router.push(buildUrl({ cat: effectiveCategory ?? undefined }));
     } else if (level === "dateParent") {
-      setSelectedFolder(null);
+      router.push(buildUrl({
+        cat: effectiveCategory ?? undefined,
+        dp: dateParent,
+      }));
     }
   };
 
   const isEmpty = !tableLoading && (!artifacts || artifacts.length === 0) && !tableError;
-  const showFolderArtifacts = !!selectedFolder;
-  const showFolders = !!selectedCategory && !showFolderArtifacts;
+  const showFolderArtifacts = !!selectedFolderValue;
+  const showFolders = !!(effectiveCategory) && !showFolderArtifacts;
 
   return (
     <div>
@@ -138,7 +161,7 @@ export default function DocumentsPage() {
         subtitle="Manage your uploaded documents"
         actions={
           <div className="flex items-center gap-2">
-            <ViewToggle value={viewMode} options={VIEW_MODES} onChange={setViewMode} />
+            <ViewToggle value={viewMode} options={VIEW_MODES} onChange={handleViewModeChange} />
             <LinkButton href={`/${workspace}/documents/upload`} label="Upload" icon="pi pi-upload" />
           </div>
         }
@@ -158,7 +181,7 @@ export default function DocumentsPage() {
           <div className="space-y-3">
             <CategoryBar
               categories={categoriesData?.categories}
-              selected={selectedCategory}
+              selected={effectiveCategory}
               onSelect={handleSelectCategory}
               onHover={handleCategoryHover}
               isLoading={categoriesLoading}
@@ -168,7 +191,7 @@ export default function DocumentsPage() {
               <div className="flex items-center justify-between gap-4">
                 <BrowseBreadcrumb
                   category={selectedCategoryMeta}
-                  folder={selectedFolder}
+                  folder={selectedFolderMeta}
                   dateParent={dateParent}
                   onNavigate={handleBreadcrumbNavigate}
                 />
@@ -188,7 +211,7 @@ export default function DocumentsPage() {
             {showFolderArtifacts && (
               <BrowseBreadcrumb
                 category={selectedCategoryMeta}
-                folder={selectedFolder}
+                folder={selectedFolderMeta}
                 dateParent={dateParent}
                 onNavigate={handleBreadcrumbNavigate}
               />
@@ -206,7 +229,7 @@ export default function DocumentsPage() {
               folders={filteredFolders}
               onSelect={handleSelectFolder}
               isLoading={foldersLoading}
-              entityType={selectedCategory ?? undefined}
+              entityType={(effectiveCategory) ?? undefined}
             />
           ) : (
             !categoriesLoading && (

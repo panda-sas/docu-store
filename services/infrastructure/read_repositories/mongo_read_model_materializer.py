@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -44,6 +45,7 @@ class MongoReadModelMaterializer(MongoReadModelTracking):
         # Main read model collections
         self.pages: Collection = self.db[settings.mongo_pages_collection]
         self.artifacts: Collection = self.db[settings.mongo_artifacts_collection]
+        self.tag_dictionary: Collection = self.db[settings.mongo_tag_dictionary_collection]
 
         super().__init__(
             mongo_uri=settings.mongo_uri,
@@ -140,5 +142,68 @@ class MongoReadModelMaterializer(MongoReadModelTracking):
         logger.info(
             "read_model_artifact_deleted",
             artifact_id=artifact_id,
+            tracking_id=tracking.notification_id,
+        )
+
+    def replace_artifact_tags(
+        self,
+        artifact_id: str,
+        tags: list[dict[str, str]],
+        tracking: Tracking,
+    ) -> None:
+        """Replace all tag dictionary entries for an artifact."""
+
+        def _handler(session: object) -> None:
+            # Look up workspace_id from artifact read model
+            artifact = self.artifacts.find_one(
+                {"artifact_id": artifact_id},
+                {"workspace_id": 1},
+                session=session,
+            )
+            workspace_id = artifact.get("workspace_id") if artifact else None
+
+            # 1. Pull this artifact from ALL existing tag entries
+            self.tag_dictionary.update_many(
+                {"artifact_ids": artifact_id},
+                {"$pull": {"artifact_ids": artifact_id}},
+                session=session,
+            )
+
+            # 2. Upsert each tag with $addToSet
+            now = datetime.now(UTC)
+            for tag_info in tags:
+                self.tag_dictionary.update_one(
+                    {
+                        "workspace_id": workspace_id,
+                        "entity_type": tag_info["entity_type"],
+                        "tag_normalized": tag_info["tag_normalized"],
+                    },
+                    {
+                        "$addToSet": {"artifact_ids": artifact_id},
+                        "$set": {"tag": tag_info["tag"], "last_seen": now},
+                        "$setOnInsert": {"workspace_id": workspace_id},
+                    },
+                    upsert=True,
+                    session=session,
+                )
+
+            # 3. Recompute artifact_count on affected docs
+            self.tag_dictionary.update_many(
+                {"artifact_ids": artifact_id} if tags else {"workspace_id": workspace_id},
+                [{"$set": {"artifact_count": {"$size": {"$ifNull": ["$artifact_ids", []]}}}}],
+                session=session,
+            )
+
+            # 4. Clean up empty entries
+            self.tag_dictionary.delete_many(
+                {"artifact_count": 0},
+                session=session,
+            )
+
+        self._run_in_transaction(tracking, _handler)
+        logger.info(
+            "tag_dictionary_replaced",
+            artifact_id=artifact_id,
+            tag_count=len(tags),
             tracking_id=tracking.notification_id,
         )

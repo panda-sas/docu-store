@@ -281,9 +281,9 @@ class CompoundQdrantStore(CompoundVectorStore):
         else:
             return {
                 "collection_name": self.collection_name,
-                "vectors_count": info.vectors_count,
+                "indexed_vectors_count": info.indexed_vectors_count,
                 "points_count": info.points_count,
-                "status": info.status,
+                "status": str(info.status),
                 "vector_size": self.VECTOR_SIZE,
             }
 

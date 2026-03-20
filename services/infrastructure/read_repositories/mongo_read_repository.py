@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorClient
-
 from application.dtos.artifact_dtos import ArtifactResponse
 from application.dtos.browse_dtos import (
     ArtifactBrowseItemDTO,
@@ -19,6 +18,7 @@ from application.ports.repositories.artifact_read_models import ArtifactReadMode
 from application.ports.repositories.dashboard_read_models import DashboardReadModel
 from application.ports.repositories.page_read_models import PageReadModel
 from application.ports.repositories.tag_browse_read_model import TagBrowseReadModel
+from application.ports.repositories.tag_dictionary_read_model import TagDictionaryReadModel
 from infrastructure.config import Settings
 
 _dashboard_cache: dict[tuple, tuple[float, DashboardStatsResponse]] = {}
@@ -36,12 +36,13 @@ ENTITY_TYPE_DISPLAY_NAMES: dict[str, str] = {
 }
 
 
-class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, TagBrowseReadModel):
+class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, TagBrowseReadModel, TagDictionaryReadModel):
     def __init__(self, client: AsyncIOMotorClient, settings: Settings) -> None:
         self.client = client
         self.db = self.client[settings.mongo_db]
         self.pages = self.db[settings.mongo_pages_collection]
         self.artifacts = self.db[settings.mongo_artifacts_collection]
+        self.tag_dictionary = self.db[settings.mongo_tag_dictionary_collection]
 
     async def get_page_by_id(
         self,
@@ -78,6 +79,13 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         # Sort by index to maintain page order
         pages.sort(key=lambda p: p.index)
         return pages
+
+    async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
+        """Count pages belonging to an artifact that have a non-empty summary."""
+        return await self.pages.count_documents({
+            "artifact_id": str(artifact_id),
+            "summary_candidate.summary": {"$exists": True, "$ne": ""},
+        })
 
     async def get_artifact_by_id(
         self,
@@ -241,110 +249,51 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         sticky_categories: list[str] | None = None,
         allowed_artifact_ids: list[UUID] | None = None,
     ) -> BrowseCategoriesResponse:
-        base_match = self._browse_base_match(workspace_id, allowed_artifact_ids)
+        # Use tag dictionary for category stats (fast indexed query)
+        dict_match: dict = {}
+        if workspace_id is not None:
+            dict_match["workspace_id"] = str(workspace_id)
 
         pipeline: list[dict] = []
-        if base_match:
-            pipeline.append({"$match": base_match})
+        if dict_match:
+            pipeline.append({"$match": dict_match})
 
-        pipeline.append(
-            {
-                "$facet": {
-                    # Branch 1: tag_mentions grouped by entity_type
-                    "tag_mentions": [
-                        {"$unwind": "$tag_mentions"},
-                        {"$match": {"tag_mentions.entity_type": {"$ne": None}}},
-                        {
-                            "$group": {
-                                "_id": "$tag_mentions.entity_type",
-                                "artifact_ids": {"$addToSet": "$artifact_id"},
-                                "distinct_tags": {
-                                    "$addToSet": {"$toLower": "$tag_mentions.tag"},
-                                },
-                            },
-                        },
-                        {
-                            "$project": {
-                                "entity_type": "$_id",
-                                "artifact_count": {"$size": "$artifact_ids"},
-                                "distinct_count": {"$size": "$distinct_tags"},
-                            },
-                        },
-                    ],
-                    # Branch 2: authors
-                    "authors": [
-                        {"$match": {"author_mentions.0": {"$exists": True}}},
-                        {"$unwind": "$author_mentions"},
-                        {
-                            "$group": {
-                                "_id": None,
-                                "artifact_ids": {"$addToSet": "$artifact_id"},
-                                "distinct_names": {
-                                    "$addToSet": {"$toLower": "$author_mentions.name"},
-                                },
-                            },
-                        },
-                        {
-                            "$project": {
-                                "artifact_count": {"$size": "$artifact_ids"},
-                                "distinct_count": {"$size": "$distinct_names"},
-                            },
-                        },
-                    ],
-                    # Branch 3: dates
-                    "dates": [
-                        {"$match": {"presentation_date.date": {"$ne": None}}},
-                        {
-                            "$group": {
-                                "_id": None,
-                                "artifact_ids": {"$addToSet": "$artifact_id"},
-                                "distinct_years": {
-                                    "$addToSet": {"$year": {"$toDate": "$presentation_date.date"}},
-                                },
-                            },
-                        },
-                        {
-                            "$project": {
-                                "artifact_count": {"$size": "$artifact_ids"},
-                                "distinct_count": {"$size": "$distinct_years"},
-                            },
-                        },
-                    ],
-                    # Total artifact count
-                    "total": [{"$count": "count"}],
+        pipeline.append({
+            "$group": {
+                "_id": "$entity_type",
+                "artifact_ids": {"$addToSet": {"$arrayElemAt": ["$artifact_ids", 0]}},
+                "all_artifact_ids": {"$push": "$artifact_ids"},
+                "distinct_count": {"$sum": 1},
+            },
+        })
+        # Flatten and count unique artifact ids
+        pipeline.append({
+            "$addFields": {
+                "flat_ids": {
+                    "$reduce": {
+                        "input": "$all_artifact_ids",
+                        "initialValue": [],
+                        "in": {"$setUnion": ["$$value", "$$this"]},
+                    },
                 },
             },
-        )
+        })
+        pipeline.append({
+            "$project": {
+                "entity_type": "$_id",
+                "artifact_count": {"$size": "$flat_ids"},
+                "distinct_count": 1,
+            },
+        })
 
-        results = await self.artifacts.aggregate(pipeline).to_list(1)
-        facets = results[0] if results else {}
+        raw_stats = await self.tag_dictionary.aggregate(pipeline).to_list(100)
 
         categories: dict[str, TagCategoryDTO] = {}
-
-        # Merge tag_mentions facet
-        for item in facets.get("tag_mentions", []):
+        for item in raw_stats:
             et = item["entity_type"]
             categories[et] = TagCategoryDTO(
                 entity_type=et,
                 display_name=ENTITY_TYPE_DISPLAY_NAMES.get(et, et.replace("_", " ").title()),
-                artifact_count=item["artifact_count"],
-                distinct_count=item["distinct_count"],
-            )
-
-        # Merge author facet
-        for item in facets.get("authors", []):
-            categories["author"] = TagCategoryDTO(
-                entity_type="author",
-                display_name="Author",
-                artifact_count=item["artifact_count"],
-                distinct_count=item["distinct_count"],
-            )
-
-        # Merge date facet
-        for item in facets.get("dates", []):
-            categories["date"] = TagCategoryDTO(
-                entity_type="date",
-                display_name="Date",
                 artifact_count=item["artifact_count"],
                 distinct_count=item["distinct_count"],
             )
@@ -361,9 +310,26 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
                     distinct_count=0,
                 )
 
-        # Sort by artifact_count desc, apply limit
-        sorted_cats = sorted(categories.values(), key=lambda c: c.artifact_count, reverse=True)
-        total = facets.get("total", [{}])[0].get("count", 0) if facets.get("total") else 0
+        # Sort: sticky categories first (in config order), then rest by artifact_count desc
+        sticky_set = set(sticky_categories or [])
+        sticky_order = {cat: i for i, cat in enumerate(sticky_categories or [])}
+
+        sticky_cats = sorted(
+            (c for c in categories.values() if c.entity_type in sticky_set),
+            key=lambda c: sticky_order.get(c.entity_type, 0),
+        )
+        rest_cats = sorted(
+            (c for c in categories.values() if c.entity_type not in sticky_set),
+            key=lambda c: c.artifact_count,
+            reverse=True,
+        )
+        sorted_cats = sticky_cats + rest_cats
+
+        # Total artifacts: count distinct across all categories
+        total_match: dict = {}
+        if workspace_id is not None:
+            total_match["workspace_id"] = str(workspace_id)
+        total = await self.artifacts.count_documents(total_match)
 
         return BrowseCategoriesResponse(
             categories=sorted_cats[:limit],
@@ -710,6 +676,30 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
             author_names=[a["name"] for a in doc.get("author_mentions", [])],
         )
 
+    async def suggest_tags(
+        self,
+        query: str,
+        workspace_id: UUID | None = None,
+        limit: int = 10,
+        allowed_artifact_ids: list[UUID] | None = None,
+    ) -> list[dict[str, str]]:
+        """Suggest tags matching a prefix query (case-insensitive) from tag dictionary."""
+        import re  # noqa: PLC0415
+
+        escaped = re.escape(query)
+        match: dict = {"tag_normalized": {"$regex": escaped, "$options": "i"}}
+        if workspace_id is not None:
+            match["workspace_id"] = str(workspace_id)
+
+        cursor = (
+            self.tag_dictionary
+            .find(match, {"tag": 1, "entity_type": 1, "_id": 0})
+            .sort("artifact_count", -1)
+            .limit(limit)
+        )
+
+        return [doc async for doc in cursor]
+
     async def ensure_browse_indexes(self) -> None:
         """Create indexes to support browse aggregation pipelines. Idempotent."""
         await self.artifacts.create_index(
@@ -732,3 +722,64 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
             [("workspace_id", 1), ("presentation_date.date", 1)],
             name="idx_browse_dates",
         )
+
+        # Tag dictionary indexes
+        await self.tag_dictionary.create_index(
+            [("workspace_id", 1), ("tag_normalized", 1)],
+            name="idx_tagdict_autocomplete",
+        )
+        await self.tag_dictionary.create_index(
+            [("workspace_id", 1), ("entity_type", 1), ("artifact_count", -1)],
+            name="idx_tagdict_popular",
+        )
+        await self.tag_dictionary.create_index(
+            [("workspace_id", 1), ("entity_type", 1), ("tag_normalized", 1)],
+            unique=True,
+            name="idx_tagdict_unique",
+        )
+
+    # ── TagDictionaryReadModel implementation ────────────────────────
+
+    async def get_popular_tags(
+        self,
+        workspace_id: UUID | None = None,
+        entity_type: str | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Return the most popular tags, optionally filtered by entity_type."""
+        match: dict = {}
+        if workspace_id is not None:
+            match["workspace_id"] = str(workspace_id)
+        if entity_type is not None:
+            match["entity_type"] = entity_type
+
+        cursor = (
+            self.tag_dictionary
+            .find(match, {"tag": 1, "entity_type": 1, "artifact_count": 1, "_id": 0})
+            .sort("artifact_count", -1)
+            .limit(limit)
+        )
+        return [doc async for doc in cursor]
+
+    async def get_category_stats(
+        self,
+        workspace_id: UUID | None = None,
+    ) -> list[dict]:
+        """Aggregate category stats from the tag dictionary."""
+        match: dict = {}
+        if workspace_id is not None:
+            match["workspace_id"] = str(workspace_id)
+
+        pipeline: list[dict] = []
+        if match:
+            pipeline.append({"$match": match})
+
+        pipeline.append({
+            "$group": {
+                "_id": "$entity_type",
+                "total_artifact_count": {"$sum": "$artifact_count"},
+                "distinct_count": {"$sum": 1},
+            },
+        })
+
+        return await self.tag_dictionary.aggregate(pipeline).to_list(100)

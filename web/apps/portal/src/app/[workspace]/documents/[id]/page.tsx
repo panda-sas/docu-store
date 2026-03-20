@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "primereact/button";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Message } from "primereact/message";
@@ -25,6 +25,7 @@ import {
 import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { useArtifactPermissions } from "@/hooks/use-permissions";
 import { useSession } from "@/lib/auth";
+import { authFetch } from "@/lib/auth-fetch";
 import { getErrorMessage } from "@/lib/api-error";
 
 export default function ArtifactDetailPage() {
@@ -37,6 +38,20 @@ export default function ArtifactDetailPage() {
   const { data: acl } = useArtifactPermissions(id);
   const deleteMutation = useDeleteArtifact();
   const rerunMutation = useRerunArtifactWorkflow(id);
+
+  // Record document open for activity tracking (fire-and-forget)
+  useEffect(() => {
+    if (artifact) {
+      authFetch("/user/activity/document", {
+        method: "POST",
+        body: JSON.stringify({
+          artifact_id: artifact.artifact_id,
+          artifact_title: artifact.title_mention?.title ?? artifact.source_filename ?? null,
+        }),
+        headers: { "Content-Type": "application/json" },
+      }).catch(() => {});
+    }
+  }, [artifact?.artifact_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOwnerOrAdmin =
     !!artifact?.owner_id && artifact.owner_id === user.id;

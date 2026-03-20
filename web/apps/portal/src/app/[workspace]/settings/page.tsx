@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, Sun, Moon, Globe, Lock, Plug, CheckCircle } from "lucide-react";
+import { Settings, Sun, Moon, Globe, Lock, Plug, CheckCircle, Code } from "lucide-react";
 import { ProgressSpinner } from "primereact/progressspinner";
 import { SelectButton } from "primereact/selectbutton";
 
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useScopeStore } from "@/lib/stores/scope-store";
+import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { useSession } from "@/lib/auth";
 import { usePlugins } from "@/plugins";
 
@@ -24,6 +25,7 @@ const SCOPE_OPTIONS = [
 export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
   const { defaultScope, setDefaultScope } = useScopeStore();
+  const { enabled: devMode, setEnabled: setDevMode } = useDevModeStore();
   const { workspace } = useSession();
   const { plugins, isLoading: pluginsLoading } = usePlugins();
 
@@ -52,6 +54,30 @@ export default function SettingsPage() {
                 ) : (
                   <Moon className="h-4 w-4" />
                 )}
+                {option.label}
+              </span>
+            )}
+          />
+        </Card>
+
+        {/* Developer Mode */}
+        <Card>
+          <CardHeader title="Developer Mode" />
+          <p className="mb-3 text-xs text-text-muted">
+            Show debug overlays with scoring details, RRF breakdowns, and pipeline diagnostics across the UI.
+          </p>
+          <SelectButton
+            value={devMode ? "on" : "off"}
+            options={[
+              { label: "Off", value: "off" as const },
+              { label: "On", value: "on" as const },
+            ]}
+            onChange={(e) => {
+              if (e.value) setDevMode(e.value === "on");
+            }}
+            itemTemplate={(option) => (
+              <span className="flex items-center gap-2">
+                <Code className="h-4 w-4" />
                 {option.label}
               </span>
             )}

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from application.ports.reranker import Reranker
     from application.ports.repositories.artifact_read_models import ArtifactReadModel
     from application.ports.repositories.page_read_models import PageReadModel
+    from application.ports.sparse_embedding_generator import SparseEmbeddingGenerator
     from application.ports.summary_vector_store import SummarySearchResult, SummaryVectorStore
     from application.ports.vector_store import VectorStore
 
@@ -199,6 +200,7 @@ class HierarchicalSearchUseCase:
         page_read_model: PageReadModel,
         artifact_read_model: ArtifactReadModel,
         reranker: Reranker | None = None,
+        sparse_embedding_generator: SparseEmbeddingGenerator | None = None,
     ) -> None:
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
@@ -206,6 +208,7 @@ class HierarchicalSearchUseCase:
         self.page_read_model = page_read_model
         self.artifact_read_model = artifact_read_model
         self.reranker = reranker
+        self.sparse_embedding_generator = sparse_embedding_generator
 
     async def execute(
         self,
@@ -324,16 +327,30 @@ class HierarchicalSearchUseCase:
         """Query the raw chunk collection with server-side dedup, rerank, then enrich."""
         retrieval_limit = request.limit * 3 if self.reranker else request.limit
 
-        grouped_results = await self.vector_store.search_pages_grouped(
-            query_embedding=query_embedding,
-            limit=retrieval_limit,
-            score_threshold=request.score_threshold,
-            allowed_artifact_ids=allowed_artifact_ids,
-            workspace_id=workspace_id,
-            tags=request.tags,
-            entity_types=request.entity_types_filter,
-            tag_match_mode=request.tag_match_mode,
-        )
+        filter_kwargs = {
+            "limit": retrieval_limit,
+            "score_threshold": request.score_threshold,
+            "allowed_artifact_ids": allowed_artifact_ids,
+            "workspace_id": workspace_id,
+            "tags": request.tags,
+            "entity_types": request.entity_types_filter,
+            "tag_match_mode": request.tag_match_mode,
+        }
+
+        if self.sparse_embedding_generator:
+            sparse_query = self.sparse_embedding_generator.generate_sparse_embedding(
+                request.query_text,
+            )
+            grouped_results = await self.vector_store.search_hybrid_grouped(
+                dense_query=query_embedding,
+                sparse_query=sparse_query,
+                **filter_kwargs,
+            )
+        else:
+            grouped_results = await self.vector_store.search_pages_grouped(
+                query_embedding=query_embedding,
+                **filter_kwargs,
+            )
 
         rerank_info: RerankInfoDTO | None = None
         rerank_scores: dict[str, tuple[float, int]] = {}
