@@ -4478,7 +4478,7 @@ wheels = [
 
 [[package]]
 name = "sentinel-auth-sdk"
-version = "0.9.9"
+version = "0.10.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -4488,9 +4488,9 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "starlette" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/77/06/6b80cec015dd5d8cf9b66baa624c412ee71af51d76d08156798772a96a87/sentinel_auth_sdk-0.9.9.tar.gz", hash = "sha256:95188e97d1252a9b81819f150fa798a8902712cbb5e755a884a130a230538b03", size = 19228, upload-time = "2026-03-18T15:05:46.895Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/73/08/ba44b8667bbeb770fb1efec4846ef0728fe5a096971ceb6ad4b30d7b8b89/sentinel_auth_sdk-0.10.2.tar.gz", hash = "sha256:8f15103d5086cd3f17c989b112cd73dea0508e1e062ccb75c18428ac0695b550", size = 21788, upload-time = "2026-03-20T21:18:43.949Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ea/dc/b6e18992e1f81262035dfc46642436c706882f702476c133f259eb1280fc/sentinel_auth_sdk-0.9.9-py3-none-any.whl", hash = "sha256:ac5ad1e4d2d5189e2348f44b4b180caa3cbab0f60bea1b2345ddd07625d45d73", size = 18962, upload-time = "2026-03-18T15:05:45.744Z" },
+    { url = "https://files.pythonhosted.org/packages/15/65/eb103c63949716ec931362c645cf43ca9534b2427ea203e66145e5092bf5/sentinel_auth_sdk-0.10.2-py3-none-any.whl", hash = "sha256:d3c3c073f264367906f9392f3fca3231bf0f3ba4d97e68cf1bfdf93c52b95d4a", size = 20404, upload-time = "2026-03-20T21:18:42.617Z" },
 ]
 
 [[package]]

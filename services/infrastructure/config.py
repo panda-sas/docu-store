@@ -246,6 +246,11 @@ class Settings(BaseSettings):
         default="https://www.googleapis.com/oauth2/v3/certs",
         validation_alias="SENTINEL_IDP_JWKS_URL",
     )
+    sentinel_cache_ttl: float = Field(
+        default=120,
+        validation_alias="SENTINEL_CACHE_TTL",
+        description="Seconds to cache permission check results (accessible/can). 0 disables.",
+    )
 
     # Browse (tag-based document browser)
     browse_default_category_limit: int = Field(

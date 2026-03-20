@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
 import { Skeleton } from "primereact/skeleton";
 
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { highlightMatches } from "./highlight-matches";
-import { getAuthzClient } from "@/lib/authz-client";
+import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { API_URL } from "@/lib/constants";
 
@@ -261,38 +261,11 @@ function buildDocumentGroups(
 }
 
 // ---------------------------------------------------------------------------
-// Authenticated thumbnail (reused from SearchResultCard pattern)
+// Authenticated thumbnail
 // ---------------------------------------------------------------------------
 
 function AuthThumbnail({ src, href }: { src: string; href: string }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let revoke: string | null = null;
-    const headers = getAuthzClient().getHeaders();
-
-    fetch(src, { headers, signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.blob();
-      })
-      .then((blob) => {
-        if (controller.signal.aborted) return;
-        revoke = URL.createObjectURL(blob);
-        setBlobUrl(revoke);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(true);
-      });
-
-    return () => {
-      controller.abort();
-      if (revoke) URL.revokeObjectURL(revoke);
-    };
-  }, [src]);
+  const { blobUrl, error } = useAuthBlobUrl(src);
 
   if (error) return null;
 
