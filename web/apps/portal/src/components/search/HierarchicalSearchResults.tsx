@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Skeleton } from "primereact/skeleton";
+import { ChevronDown } from "lucide-react";
 
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { highlightMatches } from "./highlight-matches";
@@ -404,99 +405,143 @@ function DocumentGroupCard({
   nextScore: number | null;
   devMode: boolean;
 }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const metaLine = [
+    group.authors.length > 0 ? group.authors.join(", ") : null,
+    group.presentationDate
+      ? new Date(group.presentationDate).getFullYear()
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div className="rounded-xl border border-border-default bg-surface-elevated p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <Link
-          href={`/${workspace}/documents/${group.artifactId}`}
-          className="text-sm font-semibold text-accent-text hover:underline"
-        >
-          {group.artifactTitle || "Untitled Document"}
-        </Link>
-        <ScoreBadge score={group.bestScore} />
-      </div>
-
-      {/* Authors & date */}
-      {(group.authors.length > 0 || group.presentationDate) && (
-        <div className="mt-1 text-xs text-text-muted">
-          {group.authors.length > 0 ? group.authors.join(", ") : null}
-          {group.authors.length > 0 && group.presentationDate ? " · " : null}
-          {group.presentationDate
-            ? new Date(group.presentationDate).getFullYear()
-            : null}
-        </div>
-      )}
-
-      {/* RRF scoring debug — gated by Developer Mode in Settings */}
-      {devMode && (() => {
-        const { k, chunkWeight, summaryWeight } = SCORING_CONFIG;
-        const chunkRRF = group.bestChunkPosition !== null
-          ? chunkWeight / (k + group.bestChunkPosition)
-          : 0;
-        const summaryRRF = group.bestSummaryRank !== null
-          ? summaryWeight / (k + group.bestSummaryRank)
-          : 0;
-        const gap = nextScore !== null ? group.fusionScore - nextScore : null;
-
-        return (
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded bg-surface-primary px-2 py-1 text-[10px] font-mono text-text-muted">
-            <span className="font-semibold text-text-secondary">
-              #{rank + 1}
-            </span>
-            <span>
-              fusion: {group.fusionScore.toFixed(5)}
-            </span>
-            {group.bestChunkPosition !== null && (
-              <span className="text-blue-500">
-                chunk#{group.bestChunkPosition} → {chunkRRF.toFixed(5)}
-              </span>
-            )}
-            {group.bestSummaryRank !== null && (
-              <span className="text-purple-500">
-                summary#{group.bestSummaryRank} → {summaryRRF.toFixed(5)}
-              </span>
-            )}
-            {group.bestChunkPosition !== null && group.bestSummaryRank !== null && (
-              <span className="text-green-500">multi-hit</span>
-            )}
-            {group.bestChunkPosition === null && (
-              <span className="text-orange-400">summary-only</span>
-            )}
-            {group.bestSummaryRank === null && (
-              <span className="text-orange-400">chunk-only</span>
-            )}
-            {gap !== null && (
-              <span className="text-text-muted">
-                gap to #{rank + 2}: +{gap.toFixed(5)}
+      {/* Header — always visible */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/${workspace}/documents/${group.artifactId}`}
+              className="text-sm font-semibold text-accent-text hover:underline"
+            >
+              {group.artifactTitle || "Untitled Document"}
+            </Link>
+            <ScoreBadge score={group.bestScore} />
+            {!expanded && group.pages.length > 0 && (
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] tabular-nums text-text-muted">
+                {group.pages.length} {group.pages.length === 1 ? "page" : "pages"}
               </span>
             )}
           </div>
-        );
-      })()}
-
-      {/* Artifact-level summary */}
-      {group.artifactSummary?.summary_text && (
-        <p className="mt-2 text-sm leading-relaxed text-text-secondary line-clamp-3">
-          {highlightMatches(group.artifactSummary.summary_text, query)}
-        </p>
-      )}
-
-      {/* Page rows */}
-      {group.pages.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {group.pages.map((p, i) => (
-            <PageHitRow
-              key={p.pageId ?? `page-${p.pageIndex}-${i}`}
-              page={p}
-              artifactId={group.artifactId}
-              workspace={workspace}
-              query={query}
-              rank={i}
-              devMode={devMode}
-            />
-          ))}
+          {metaLine && (
+            <p className="mt-0.5 text-xs text-text-muted">{metaLine}</p>
+          )}
+          {/* Collapsed: show best matching context to jog memory */}
+          {!expanded && (() => {
+            const topPage = group.pages[0];
+            const snippets: string[] = [];
+            if (group.artifactSummary?.summary_text)
+              snippets.push(group.artifactSummary.summary_text);
+            if (topPage?.summary?.summary_text)
+              snippets.push(topPage.summary.summary_text);
+            if (topPage?.chunk?.text_preview)
+              snippets.push(topPage.chunk.text_preview);
+            const preview = snippets[0];
+            return preview ? (
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary line-clamp-2">
+                {highlightMatches(preview, query)}
+              </p>
+            ) : null;
+          })()}
         </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-0.5 shrink-0 rounded-md p-1 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
+          aria-label={expanded ? "Collapse" : "Expand"}
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+      </div>
+
+      {/* Expanded content */}
+      {expanded && (
+        <>
+          {/* RRF scoring debug — gated by Developer Mode in Settings */}
+          {devMode && (() => {
+            const { k, chunkWeight, summaryWeight } = SCORING_CONFIG;
+            const chunkRRF = group.bestChunkPosition !== null
+              ? chunkWeight / (k + group.bestChunkPosition)
+              : 0;
+            const summaryRRF = group.bestSummaryRank !== null
+              ? summaryWeight / (k + group.bestSummaryRank)
+              : 0;
+            const gap = nextScore !== null ? group.fusionScore - nextScore : null;
+
+            return (
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded bg-surface-primary px-2 py-1 text-[10px] font-mono text-text-muted">
+                <span className="font-semibold text-text-secondary">
+                  #{rank + 1}
+                </span>
+                <span>
+                  fusion: {group.fusionScore.toFixed(5)}
+                </span>
+                {group.bestChunkPosition !== null && (
+                  <span className="text-blue-500">
+                    chunk#{group.bestChunkPosition} → {chunkRRF.toFixed(5)}
+                  </span>
+                )}
+                {group.bestSummaryRank !== null && (
+                  <span className="text-purple-500">
+                    summary#{group.bestSummaryRank} → {summaryRRF.toFixed(5)}
+                  </span>
+                )}
+                {group.bestChunkPosition !== null && group.bestSummaryRank !== null && (
+                  <span className="text-green-500">multi-hit</span>
+                )}
+                {group.bestChunkPosition === null && (
+                  <span className="text-orange-400">summary-only</span>
+                )}
+                {group.bestSummaryRank === null && (
+                  <span className="text-orange-400">chunk-only</span>
+                )}
+                {gap !== null && (
+                  <span className="text-text-muted">
+                    gap to #{rank + 2}: +{gap.toFixed(5)}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Artifact-level summary */}
+          {group.artifactSummary?.summary_text && (
+            <p className="mt-2 text-sm leading-relaxed text-text-secondary line-clamp-3">
+              {highlightMatches(group.artifactSummary.summary_text, query)}
+            </p>
+          )}
+
+          {/* Page rows */}
+          {group.pages.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {group.pages.map((p, i) => (
+                <PageHitRow
+                  key={p.pageId ?? `page-${p.pageIndex}-${i}`}
+                  page={p}
+                  artifactId={group.artifactId}
+                  workspace={workspace}
+                  query={query}
+                  rank={i}
+                  devMode={devMode}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
