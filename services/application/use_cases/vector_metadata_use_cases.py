@@ -8,6 +8,7 @@ from uuid import UUID
 
 import structlog
 
+from application.ports.repositories.artifact_repository import ArtifactRepository
 from application.ports.repositories.page_repository import PageRepository
 from application.ports.summary_vector_store import SummaryVectorStore
 from application.ports.vector_store import VectorStore
@@ -67,4 +68,54 @@ class SyncPageTagsToVectorStoreUseCase:
             "page_tags_synced_to_vector_stores",
             page_id=str(page_id),
             tag_count=len(tag_payload["tags"]),
+        )
+
+
+def _build_artifact_metadata_payload(artifact: object) -> dict:
+    """Build the artifact-level tag payload from artifact metadata."""
+    tags: list[str] = []
+    if artifact.tag_mentions:
+        tags.extend(tm.tag.lower() for tm in artifact.tag_mentions)
+    if artifact.author_mentions:
+        tags.extend(am.name.lower() for am in artifact.author_mentions)
+    if artifact.presentation_date and artifact.presentation_date.date:
+        tags.append(str(artifact.presentation_date.date.year))
+    return {"artifact_tag_normalized": tags}
+
+
+class SyncArtifactMetadataToVectorStoreUseCase:
+    """Sync artifact-level metadata (tags, authors, date) to Qdrant payloads.
+
+    Triggered by Artifact.TagMentionsUpdated, Artifact.AuthorMentionsUpdated,
+    or Artifact.PresentationDateUpdated. Writes to a separate
+    ``artifact_tag_normalized`` field so page-level and artifact-level syncs
+    don't stomp each other.
+    """
+
+    def __init__(
+        self,
+        artifact_repository: ArtifactRepository,
+        vector_store: VectorStore,
+        summary_vector_store: SummaryVectorStore,
+    ) -> None:
+        self.artifact_repository = artifact_repository
+        self.vector_store = vector_store
+        self.summary_vector_store = summary_vector_store
+
+    async def execute(self, artifact_id: UUID) -> None:
+        try:
+            artifact = self.artifact_repository.get_by_id(artifact_id)
+        except AggregateNotFoundError:
+            logger.warning("sync_artifact_metadata_not_found", artifact_id=str(artifact_id))
+            return
+
+        payload = _build_artifact_metadata_payload(artifact)
+
+        await self.vector_store.set_artifact_payload(artifact_id, payload)
+        await self.summary_vector_store.set_artifact_pages_payload(artifact_id, payload)
+
+        logger.info(
+            "artifact_metadata_synced_to_vector_stores",
+            artifact_id=str(artifact_id),
+            tag_count=len(payload["artifact_tag_normalized"]),
         )

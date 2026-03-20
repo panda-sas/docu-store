@@ -20,7 +20,10 @@ import structlog
 from eventsourcing.application import Application
 from eventsourcing.projection import ApplicationSubscription
 
-from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
+from application.use_cases.vector_metadata_use_cases import (
+    SyncArtifactMetadataToVectorStoreUseCase,
+    SyncPageTagsToVectorStoreUseCase,
+)
 from application.workflow_use_cases.log_artifcat_sample_use_case import LogArtifactSampleUseCase
 from application.workflow_use_cases.trigger_artifact_summarization_use_case import (
     TriggerArtifactSummarizationUseCase,
@@ -92,6 +95,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     trigger_artifact_tag_aggregation_use_case = container[TriggerArtifactTagAggregationUseCase]
     trigger_doc_metadata_extraction_use_case = container[TriggerDocMetadataExtractionUseCase]
     sync_page_tags_use_case = container[SyncPageTagsToVectorStoreUseCase]
+    sync_artifact_metadata_use_case = container[SyncArtifactMetadataToVectorStoreUseCase]
 
     from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
         TriggerBatchReEmbedUseCase,
@@ -116,6 +120,9 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
         f"{Page.CompoundMentionsUpdated.__module__}:{Page.CompoundMentionsUpdated.__qualname__}",
         f"{Page.SummaryCandidateUpdated.__module__}:{Page.SummaryCandidateUpdated.__qualname__}",
         f"{Page.TagMentionsUpdated.__module__}:{Page.TagMentionsUpdated.__qualname__}",
+        f"{Artifact.TagMentionsUpdated.__module__}:{Artifact.TagMentionsUpdated.__qualname__}",
+        f"{Artifact.AuthorMentionsUpdated.__module__}:{Artifact.AuthorMentionsUpdated.__qualname__}",
+        f"{Artifact.PresentationDateUpdated.__module__}:{Artifact.PresentationDateUpdated.__qualname__}",
     ]
 
     logger.info("pipeline_worker_started", worker_name=worker_name, topics=topics)
@@ -302,6 +309,51 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 logger.info(
                                     "pipeline_artifact_tag_aggregation_triggered",
                                     page_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                            case Artifact.TagMentionsUpdated():
+                                logger.info(
+                                    "pipeline_artifact_tag_mentions_updated",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+                                await sync_artifact_metadata_use_case.execute(
+                                    artifact_id=domain_event.originator_id,
+                                )
+                                logger.info(
+                                    "pipeline_artifact_metadata_synced",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                            case Artifact.AuthorMentionsUpdated():
+                                logger.info(
+                                    "pipeline_artifact_author_mentions_updated",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+                                await sync_artifact_metadata_use_case.execute(
+                                    artifact_id=domain_event.originator_id,
+                                )
+                                logger.info(
+                                    "pipeline_artifact_metadata_synced",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+
+                            case Artifact.PresentationDateUpdated():
+                                logger.info(
+                                    "pipeline_artifact_presentation_date_updated",
+                                    artifact_id=str(domain_event.originator_id),
+                                    tracking_id=tracking.notification_id,
+                                )
+                                await sync_artifact_metadata_use_case.execute(
+                                    artifact_id=domain_event.originator_id,
+                                )
+                                logger.info(
+                                    "pipeline_artifact_metadata_synced",
+                                    artifact_id=str(domain_event.originator_id),
                                     tracking_id=tracking.notification_id,
                                 )
 

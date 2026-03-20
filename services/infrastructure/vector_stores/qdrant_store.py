@@ -117,6 +117,7 @@ class QdrantStore(VectorStore):
                 ("page_id", models.PayloadSchemaType.KEYWORD),
                 ("workspace_id", models.PayloadSchemaType.KEYWORD),
                 ("tag_normalized", models.PayloadSchemaType.KEYWORD),
+                ("artifact_tag_normalized", models.PayloadSchemaType.KEYWORD),
                 ("entity_types", models.PayloadSchemaType.KEYWORD),
             ]:
                 await client.create_payload_index(
@@ -355,17 +356,33 @@ class QdrantStore(VectorStore):
             normalized = [t.lower() for t in tags]
             if tag_match_mode == "any":
                 conditions.append(
-                    models.FieldCondition(
-                        key="tag_normalized",
-                        match=models.MatchAny(any=normalized),
+                    models.Filter(
+                        should=[
+                            models.FieldCondition(
+                                key="tag_normalized",
+                                match=models.MatchAny(any=normalized),
+                            ),
+                            models.FieldCondition(
+                                key="artifact_tag_normalized",
+                                match=models.MatchAny(any=normalized),
+                            ),
+                        ],
                     ),
                 )
             else:
                 for tag in normalized:
                     conditions.append(
-                        models.FieldCondition(
-                            key="tag_normalized",
-                            match=models.MatchValue(value=tag),
+                        models.Filter(
+                            should=[
+                                models.FieldCondition(
+                                    key="tag_normalized",
+                                    match=models.MatchValue(value=tag),
+                                ),
+                                models.FieldCondition(
+                                    key="artifact_tag_normalized",
+                                    match=models.MatchValue(value=tag),
+                                ),
+                            ],
                         ),
                     )
         if entity_types:
@@ -743,6 +760,32 @@ class QdrantStore(VectorStore):
             logger.info("page_payload_updated", page_id=str(page_id), fields=list(payload.keys()))
         except Exception as e:  # noqa: BLE001
             logger.warning("failed_to_set_page_payload", page_id=str(page_id), error=str(e))
+
+    async def set_artifact_payload(
+        self,
+        artifact_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload fields on all points for a given artifact without re-embedding."""
+        client = await self._get_client()
+        try:
+            await client.set_payload(
+                collection_name=self.collection_name,
+                payload=payload,
+                points=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="artifact_id",
+                                match=models.MatchValue(value=str(artifact_id)),
+                            ),
+                        ],
+                    ),
+                ),
+            )
+            logger.info("artifact_payload_updated", artifact_id=str(artifact_id), fields=list(payload.keys()))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("failed_to_set_artifact_payload", artifact_id=str(artifact_id), error=str(e))
 
     async def close(self) -> None:
         """Close the Qdrant client connection."""

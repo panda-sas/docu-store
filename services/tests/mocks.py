@@ -241,6 +241,9 @@ class MockVectorStore:
     async def set_page_payload(self, page_id: UUID, payload: dict) -> None:
         pass
 
+    async def set_artifact_payload(self, artifact_id: UUID, payload: dict) -> None:
+        pass
+
     async def get_collection_info(self) -> dict:
         return {}
 

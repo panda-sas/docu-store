@@ -80,6 +80,19 @@ class ReadModelMaterializer(Protocol):
         """
         ...
 
+    def replace_artifact_tags(
+        self,
+        artifact_id: str,
+        tags: list[dict[str, str]],
+        tracking: Tracking,
+    ) -> None:
+        """Replace all tag dictionary entries for an artifact.
+
+        Atomically: pull artifact_id from all existing entries,
+        addToSet artifact_id on each new tag, remove empty entries.
+        """
+        ...
+
     def max_tracking_id(self, application_name: str) -> int | None:
         """Get the highest notification ID processed for an application.
 

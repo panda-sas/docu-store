@@ -5,6 +5,7 @@ import { Skeleton } from "primereact/skeleton";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { highlightMatches } from "./highlight-matches";
 import { getAuthzClient } from "@/lib/authz-client";
+import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { API_URL } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
@@ -78,13 +79,51 @@ interface DocumentGroup {
   bestScore: number;
   /** Lowest (best) position in the reranked chunk_hits array. null = summary-only group. */
   bestChunkPosition: number | null;
+  /** Lowest (best) position in the summary_hits array. null = chunk-only group. */
+  bestSummaryRank: number | null;
+  /** RRF fusion score — used for document ordering when RRF mode is active. */
+  fusionScore: number;
   authors: string[];
   presentationDate: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Scoring configuration — tweak these to experiment with ranking behaviour
+// ---------------------------------------------------------------------------
+
+interface ScoringConfig {
+  /** Ranking strategy: "rrf" (reciprocal rank fusion) or "tiered" (legacy hard tiering) */
+  mode: "rrf" | "tiered";
+  /** RRF k constant — lower = more aggressive rank separation. Standard: 60. */
+  k: number;
+  /** Weight for chunk RRF contribution (cross-encoder validated). */
+  chunkWeight: number;
+  /** Weight for summary RRF contribution. */
+  summaryWeight: number;
+}
+
+const SCORING_CONFIG: ScoringConfig = {
+  mode: "rrf",
+  k: 60,
+  chunkWeight: 1.0,
+  summaryWeight: 1.0,
+};
+
+function computeFusionScore(
+  bestChunkPosition: number | null,
+  bestSummaryRank: number | null,
+  config: ScoringConfig = SCORING_CONFIG,
+): number {
+  const { k, chunkWeight, summaryWeight } = config;
+  const chunkRRF = bestChunkPosition !== null ? 1 / (k + bestChunkPosition) : 0;
+  const summaryRRF = bestSummaryRank !== null ? 1 / (k + bestSummaryRank) : 0;
+  return chunkWeight * chunkRRF + summaryWeight * summaryRRF;
 }
 
 function buildDocumentGroups(
   summaryHits: SummaryHit[],
   chunkHits: ChunkHit[],
+  config: ScoringConfig = SCORING_CONFIG,
 ): DocumentGroup[] {
   const groups = new Map<string, DocumentGroup>();
 
@@ -98,6 +137,8 @@ function buildDocumentGroups(
         pages: [],
         bestScore: 0,
         bestChunkPosition: null,
+        bestSummaryRank: null,
+        fusionScore: 0,
         authors: [],
         presentationDate: null,
       };
@@ -112,8 +153,15 @@ function buildDocumentGroups(
   // Index page-level summaries by entity_id for correlation
   const pageSummaryMap = new Map<string, SummaryHit>();
 
-  for (const sh of summaryHits) {
+  for (let i = 0; i < summaryHits.length; i++) {
+    const sh = summaryHits[i];
     const g = getOrCreate(sh.artifact_id, sh.artifact_title ?? "");
+
+    // Track best summary rank per document (array index = rank)
+    if (g.bestSummaryRank === null || i < g.bestSummaryRank) {
+      g.bestSummaryRank = i;
+    }
+
     if (sh.entity_type === "artifact") {
       g.artifactSummary = sh;
       g.bestScore = Math.max(g.bestScore, sh.score);
@@ -173,29 +221,41 @@ function buildDocumentGroups(
     }
   }
 
-  // Sort pages within each group, then groups by best score
+  // Compute fusion scores for all groups
+  for (const g of groups.values()) {
+    g.fusionScore = computeFusionScore(g.bestChunkPosition, g.bestSummaryRank, config);
+  }
+
+  // Sort pages within each group
   for (const g of groups.values()) {
     g.pages.sort((a, b) => {
-      // Pages with reranked chunks first, ordered by chunk position (lower = better)
-      if (a.chunkRerankPosition !== null && b.chunkRerankPosition !== null) {
-        return a.chunkRerankPosition - b.chunkRerankPosition;
-      }
-      if (a.chunkRerankPosition !== null) return -1;
-      if (b.chunkRerankPosition !== null) return 1;
+      // Pages with rerank scores: sort by rerank score descending (magnitude matters)
+      const aRerank = a.chunk?.rerank_score;
+      const bRerank = b.chunk?.rerank_score;
+      if (aRerank != null && bRerank != null) return bRerank - aRerank;
+      if (aRerank != null) return -1;
+      if (bRerank != null) return 1;
+      // Pages with chunks but no rerank: sort by chunk cosine
+      if (a.chunk && b.chunk) return b.chunk.score - a.chunk.score;
+      if (a.chunk) return -1;
+      if (b.chunk) return 1;
       // Summary-only pages: rank by score
       return b.bestScore - a.bestScore;
     });
   }
 
+  // Sort document groups
+  if (config.mode === "rrf") {
+    return Array.from(groups.values()).sort((a, b) => b.fusionScore - a.fusionScore);
+  }
+
+  // Legacy: hard tiering (chunk docs above summary-only docs)
   return Array.from(groups.values()).sort((a, b) => {
-    // Documents with reranked chunks first, ordered by best chunk position (lower = better)
     if (a.bestChunkPosition !== null && b.bestChunkPosition !== null) {
       return a.bestChunkPosition - b.bestChunkPosition;
     }
-    // Documents with chunks rank above summary-only documents
     if (a.bestChunkPosition !== null) return -1;
     if (b.bestChunkPosition !== null) return 1;
-    // Summary-only documents: rank by score
     return b.bestScore - a.bestScore;
   });
 }
@@ -262,12 +322,14 @@ function PageHitRow({
   workspace,
   query,
   rank,
+  devMode,
 }: {
   page: PageGroup;
   artifactId: string;
   query: string;
   workspace: string;
   rank: number;
+  devMode: boolean;
 }) {
   const pageHref = page.pageId
     ? `/${workspace}/documents/${artifactId}/pages/${page.pageId}`
@@ -315,8 +377,8 @@ function PageHitRow({
           </p>
         )}
 
-        {/* Rerank scores */}
-        {page.chunk?.rerank_score != null && (() => {
+        {/* Rerank scores — gated by Developer Mode */}
+        {devMode && page.chunk?.rerank_score != null && (() => {
           const displacement =
             page.chunk.original_rank != null && page.chunkRerankPosition != null
               ? page.chunk.original_rank - page.chunkRerankPosition
@@ -359,11 +421,15 @@ function DocumentGroupCard({
   workspace,
   query,
   rank,
+  nextScore,
+  devMode,
 }: {
   group: DocumentGroup;
   workspace: string;
   query: string;
   rank: number;
+  nextScore: number | null;
+  devMode: boolean;
 }) {
   return (
     <div className="rounded-xl border border-border-default bg-surface-elevated p-4">
@@ -389,6 +455,53 @@ function DocumentGroupCard({
         </div>
       )}
 
+      {/* RRF scoring debug — gated by Developer Mode in Settings */}
+      {devMode && (() => {
+        const { k, chunkWeight, summaryWeight } = SCORING_CONFIG;
+        const chunkRRF = group.bestChunkPosition !== null
+          ? chunkWeight / (k + group.bestChunkPosition)
+          : 0;
+        const summaryRRF = group.bestSummaryRank !== null
+          ? summaryWeight / (k + group.bestSummaryRank)
+          : 0;
+        const gap = nextScore !== null ? group.fusionScore - nextScore : null;
+
+        return (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded bg-surface-primary px-2 py-1 text-[10px] font-mono text-text-muted">
+            <span className="font-semibold text-text-secondary">
+              #{rank + 1}
+            </span>
+            <span>
+              fusion: {group.fusionScore.toFixed(5)}
+            </span>
+            {group.bestChunkPosition !== null && (
+              <span className="text-blue-500">
+                chunk#{group.bestChunkPosition} → {chunkRRF.toFixed(5)}
+              </span>
+            )}
+            {group.bestSummaryRank !== null && (
+              <span className="text-purple-500">
+                summary#{group.bestSummaryRank} → {summaryRRF.toFixed(5)}
+              </span>
+            )}
+            {group.bestChunkPosition !== null && group.bestSummaryRank !== null && (
+              <span className="text-green-500">multi-hit</span>
+            )}
+            {group.bestChunkPosition === null && (
+              <span className="text-orange-400">summary-only</span>
+            )}
+            {group.bestSummaryRank === null && (
+              <span className="text-orange-400">chunk-only</span>
+            )}
+            {gap !== null && (
+              <span className="text-text-muted">
+                gap to #{rank + 2}: +{gap.toFixed(5)}
+              </span>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Artifact-level summary */}
       {group.artifactSummary?.summary_text && (
         <p className="mt-2 text-sm leading-relaxed text-text-secondary line-clamp-3">
@@ -407,6 +520,7 @@ function DocumentGroupCard({
               workspace={workspace}
               query={query}
               rank={i}
+              devMode={devMode}
             />
           ))}
         </div>
@@ -423,6 +537,7 @@ export function HierarchicalSearchResults({
   data,
   workspace,
 }: HierarchicalSearchResultsProps) {
+  const devMode = useDevModeStore((s) => s.enabled);
   const groups = useMemo(
     () => buildDocumentGroups(data.summary_hits, data.chunk_hits),
     [data.summary_hits, data.chunk_hits],
@@ -445,7 +560,8 @@ export function HierarchicalSearchResults({
         </span>
       </div>
 
-      {data.chunk_rerank_info && console.log("[rerank:hierarchical]", data.chunk_rerank_info)}
+      {devMode && data.chunk_rerank_info && console.log("[rerank:hierarchical]", data.chunk_rerank_info)}
+      {devMode && console.log("[scoring]", { mode: SCORING_CONFIG.mode, k: SCORING_CONFIG.k, chunkWeight: SCORING_CONFIG.chunkWeight, summaryWeight: SCORING_CONFIG.summaryWeight })}
 
       <div className="space-y-4">
         {groups.map((g, i) => (
@@ -455,6 +571,8 @@ export function HierarchicalSearchResults({
             workspace={workspace}
             query={data.query}
             rank={i}
+            nextScore={i < groups.length - 1 ? groups[i + 1].fusionScore : null}
+            devMode={devMode}
           />
         ))}
       </div>

@@ -56,5 +56,7 @@ export const queryKeys = {
       [...queryKeys.browse.all, "folders", entityType, parent ?? "root"] as const,
     artifacts: (entityType: string, tagValue: string) =>
       [...queryKeys.browse.all, "artifacts", entityType, tagValue] as const,
+    popularTags: (entityType?: string) =>
+      [...queryKeys.browse.all, "popularTags", entityType ?? "all"] as const,
   },
 };

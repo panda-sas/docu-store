@@ -1,5 +1,6 @@
 import { SearchResultCard } from "./SearchResultCard";
 import { highlightMatches } from "./highlight-matches";
+import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { API_URL } from "@/lib/constants";
 
 interface TextResult {
@@ -37,6 +38,7 @@ interface TextSearchResultsProps {
 }
 
 export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
+  const devMode = useDevModeStore((s) => s.enabled);
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
@@ -51,7 +53,7 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
         </span>
       </div>
 
-      {data.rerank_info && console.log("[rerank]", data.rerank_info)}
+      {devMode && data.rerank_info && console.log("[rerank]", data.rerank_info)}
 
       <div className="space-y-3">
         {data.results.map((r, index) => {
@@ -83,7 +85,7 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
                     : null}
                 </div>
               )}
-              {r.rerank_score != null && (
+              {devMode && r.rerank_score != null && (
                 <div className="mt-1.5 flex items-center gap-2 text-xs text-text-muted">
                   <span>vector: {r.similarity_score.toFixed(3)}</span>
                   <span>→ rerank: {r.rerank_score.toFixed(3)}</span>

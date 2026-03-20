@@ -65,6 +65,10 @@ class Settings(BaseSettings):
         default="read_model_tracking",
         validation_alias="MONGO_TRACKING_COLLECTION",
     )
+    mongo_tag_dictionary_collection: str = Field(
+        default="tag_dictionary",
+        validation_alias="MONGO_TAG_DICTIONARY_COLLECTION",
+    )
 
     # Blob Storage
     blob_base_url: str = Field(

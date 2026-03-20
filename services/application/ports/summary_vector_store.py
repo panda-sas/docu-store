@@ -130,6 +130,17 @@ class SummaryVectorStore(Protocol):
         """
         ...
 
+    async def set_artifact_pages_payload(
+        self,
+        artifact_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload on all summary points (page + artifact) belonging to an artifact.
+
+        Used to update artifact-level metadata across all related summary points.
+        """
+        ...
+
     async def get_collection_info(self) -> dict:
         """Return collection stats (point count, vector size, etc.)."""
         ...

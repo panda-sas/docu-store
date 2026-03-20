@@ -89,6 +89,17 @@ class ArtifactProjector:
             tracking=tracking,  # type: ignore[arg-type]
         )
 
+        # Project to tag dictionary
+        tags = [
+            {"tag": tm.tag, "tag_normalized": tm.tag.lower(), "entity_type": tm.entity_type}
+            for tm in event.tag_mentions  # type: ignore[attr-defined]
+        ]
+        self._materializer.replace_artifact_tags(
+            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            tags=tags,
+            tracking=tracking,  # type: ignore[arg-type]
+        )
+
     def author_mentions_updated(self, event: object, tracking: object) -> None:
         """Project AuthorMentionsUpdated event to read model."""
         author_mentions_data = [
@@ -103,6 +114,17 @@ class ArtifactProjector:
             tracking=tracking,  # type: ignore[arg-type]
         )
 
+        # Project authors to tag dictionary
+        tags = [
+            {"tag": am.name, "tag_normalized": am.name.lower(), "entity_type": "author"}
+            for am in event.author_mentions  # type: ignore[attr-defined]
+        ]
+        self._materializer.replace_artifact_tags(
+            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            tags=tags,
+            tracking=tracking,  # type: ignore[arg-type]
+        )
+
     def presentation_date_updated(self, event: object, tracking: object) -> None:
         """Project PresentationDateUpdated event to read model."""
         presentation_date_data = (
@@ -113,6 +135,20 @@ class ArtifactProjector:
             fields={
                 "presentation_date": presentation_date_data,
             },
+            tracking=tracking,  # type: ignore[arg-type]
+        )
+
+        # Project date year to tag dictionary
+        if event.presentation_date and event.presentation_date.date:  # type: ignore[attr-defined]
+            from datetime import datetime as dt  # noqa: PLC0415
+
+            year = dt.fromisoformat(event.presentation_date.date).year  # type: ignore[attr-defined]
+            tags = [{"tag": str(year), "tag_normalized": str(year), "entity_type": "date"}]
+        else:
+            tags = []
+        self._materializer.replace_artifact_tags(
+            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            tags=tags,
             tracking=tracking,  # type: ignore[arg-type]
         )
 
@@ -132,6 +168,12 @@ class ArtifactProjector:
 
     def artifact_deleted(self, event: object, tracking: object) -> None:
         """Project ArtifactDeleted event to read model."""
+        # Remove from tag dictionary before deleting artifact read model
+        self._materializer.replace_artifact_tags(
+            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            tags=[],
+            tracking=tracking,  # type: ignore[arg-type]
+        )
         self._materializer.delete_artifact(
             artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
             tracking=tracking,  # type: ignore[arg-type]

@@ -13,6 +13,7 @@ from application.dtos.browse_dtos import (
     BrowseFoldersResponse,
 )
 from application.ports.repositories.tag_browse_read_model import TagBrowseReadModel
+from application.ports.repositories.tag_dictionary_read_model import TagDictionaryReadModel
 from infrastructure.config import settings
 from interfaces.api.routes.helpers import (
     get_allowed_artifact_ids as _get_allowed_artifact_ids,
@@ -43,6 +44,22 @@ async def suggest_tags(
         workspace_id=auth.workspace_id,
         limit=limit,
         allowed_artifact_ids=allowed,
+    )
+
+
+@router.get("/tags/popular")
+async def get_popular_tags(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    entity_type: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> list[dict]:
+    """Return the most popular tags, optionally filtered by entity_type."""
+    read_model = container[TagDictionaryReadModel]
+    return await read_model.get_popular_tags(
+        workspace_id=auth.workspace_id,
+        entity_type=entity_type,
+        limit=limit,
     )
 
 

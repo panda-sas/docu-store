@@ -75,7 +75,10 @@ from application.use_cases.summary_embedding_use_cases import (
     EmbedArtifactSummaryUseCase,
     EmbedPageSummaryUseCase,
 )
-from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
+from application.use_cases.vector_metadata_use_cases import (
+    SyncArtifactMetadataToVectorStoreUseCase,
+    SyncPageTagsToVectorStoreUseCase,
+)
 from application.workflow_use_cases.log_artifcat_sample_use_case import LogArtifactSampleUseCase
 from application.workflow_use_cases.trigger_artifact_summarization_use_case import (
     TriggerArtifactSummarizationUseCase,
@@ -248,8 +251,12 @@ def create_container() -> Container:  # noqa: PLR0915
     from application.ports.repositories.tag_browse_read_model import (
         TagBrowseReadModel,
     )
+    from application.ports.repositories.tag_dictionary_read_model import (
+        TagDictionaryReadModel,
+    )
 
     container[TagBrowseReadModel] = mongo_repository_factory
+    container[TagDictionaryReadModel] = mongo_repository_factory
     container[DashboardReadModel] = mongo_repository_factory
 
     # Register Pipeline Orchestrator (Temporal)
@@ -606,6 +613,13 @@ def create_container() -> Container:  # noqa: PLR0915
         vector_store=c[VectorStore],
         summary_vector_store=c[SummaryVectorStore],
     )
+    container[SyncArtifactMetadataToVectorStoreUseCase] = (
+        lambda c: SyncArtifactMetadataToVectorStoreUseCase(
+            artifact_repository=c[ArtifactRepository],
+            vector_store=c[VectorStore],
+            summary_vector_store=c[SummaryVectorStore],
+        )
+    )
 
     # Search Use Cases
     container[SearchSummariesUseCase] = lambda c: SearchSummariesUseCase(
@@ -620,6 +634,7 @@ def create_container() -> Container:  # noqa: PLR0915
         page_read_model=c[PageReadModel],
         artifact_read_model=c[ArtifactReadModel],
         reranker=c[Reranker],
+        sparse_embedding_generator=c[SparseEmbeddingGenerator],
     )
 
     return container
