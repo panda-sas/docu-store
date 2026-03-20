@@ -39,7 +39,9 @@ class EventProjector:
             Artifact.PagesAdded: artifact_projector.pages_added,
             Artifact.PagesRemoved: artifact_projector.pages_removed,
             Artifact.TitleMentionUpdated: artifact_projector.title_mention_updated,
-            Artifact.TagsUpdated: artifact_projector.tags_updated,
+            Artifact.TagMentionsUpdated: artifact_projector.tag_mentions_updated,
+            Artifact.AuthorMentionsUpdated: artifact_projector.author_mentions_updated,
+            Artifact.PresentationDateUpdated: artifact_projector.presentation_date_updated,
             Artifact.SummaryCandidateUpdated: artifact_projector.summary_candidate_updated,
             Artifact.Deleted: artifact_projector.artifact_deleted,
         }

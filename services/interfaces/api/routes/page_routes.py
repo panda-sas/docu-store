@@ -6,7 +6,7 @@ from lagom import Container
 from sentinel_auth import RequestAuth
 
 from application.dtos.page_dtos import AddCompoundMentionsRequest, CreatePageRequest, PageResponse
-from application.dtos.workflow_dtos import WorkflowStartedResponse
+from application.dtos.workflow_dtos import SummaryDetailResponse, WorkflowStartedResponse, WorkflowStatusMapResponse
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
 from application.use_cases.page_use_cases import (
     AddCompoundMentionsUseCase,
@@ -20,6 +20,9 @@ from application.workflow_use_cases.trigger_compound_extraction_use_case import 
     TriggerCompoundExtractionUseCase,
 )
 from application.workflow_use_cases.trigger_embedding_use_case import TriggerEmbeddingUseCase
+from application.workflow_use_cases.trigger_ner_extraction_use_case import (
+    TriggerNERExtractionUseCase,
+)
 from application.workflow_use_cases.trigger_page_summarization_use_case import (
     TriggerPageSummarizationUseCase,
 )
@@ -234,12 +237,35 @@ async def trigger_page_summarization(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
+@router.post("/{page_id}/ner/extract", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_ner_extraction(
+    page_id: UUID,
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+) -> WorkflowStartedResponse:
+    """Trigger NER extraction for a page (non-blocking).
+
+    Starts the named-entity recognition Temporal workflow and returns immediately
+    with the initial workflow status. Extracts compound names, targets, diseases,
+    and other entities from the page text.
+
+    Re-triggering is safe — uses ALLOW_DUPLICATE reuse policy.
+    """
+    page = await require_workspace_page(page_id, auth, container)
+    await require_page_permission(page, auth, "edit")
+    use_case = container[TriggerNERExtractionUseCase]
+    try:
+        return await use_case.execute(page_id=page_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
 @router.get("/{page_id}/summary", status_code=status.HTTP_200_OK)
 async def get_page_summary(
     page_id: UUID,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> SummaryDetailResponse:
     """Get the current summary for a page from the read model.
 
     Returns the summary_candidate field from the page read model.
@@ -254,14 +280,14 @@ async def get_page_summary(
             detail="No summary available for this page yet",
         )
 
-    return {
-        "page_id": str(page_id),
-        "summary": page.summary_candidate.summary,
-        "model_name": page.summary_candidate.model_name,
-        "date_extracted": page.summary_candidate.date_extracted,
-        "is_locked": page.summary_candidate.is_locked,
-        "hil_correction": page.summary_candidate.hil_correction,
-    }
+    return SummaryDetailResponse(
+        entity_id=str(page_id),
+        summary=page.summary_candidate.summary,
+        model_name=page.summary_candidate.model_name,
+        date_extracted=page.summary_candidate.date_extracted,
+        is_locked=page.summary_candidate.is_locked,
+        hil_correction=page.summary_candidate.hil_correction,
+    )
 
 
 @router.get("/{page_id}/workflows", status_code=status.HTTP_200_OK)
@@ -269,7 +295,7 @@ async def get_page_workflows(
     page_id: UUID,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> WorkflowStatusMapResponse:
     """Get Temporal workflow statuses for a page.
 
     Proxies to Temporal to return the current status of all workflows
@@ -280,4 +306,4 @@ async def get_page_workflows(
     await require_page_permission(page, auth, "view")
     orchestrator = container[WorkflowOrchestrator]
     workflows = await orchestrator.get_page_workflow_statuses(page_id)
-    return {"page_id": str(page_id), "workflows": workflows}
+    return WorkflowStatusMapResponse(entity_id=str(page_id), workflows=workflows)

@@ -388,6 +388,33 @@ Add to dev workflow: regenerate when backend models change.
 - [ ] Workspace management UI (create, invite, switch)
 - [ ] Access control + ownership model (RBAC: owner, editor, viewer)
 
+### Phase 7 — Server Component Conversion (Deferred)
+
+**Status:** Planned, not started.
+**Deferred on:** 2026-03-19, during code review refactor session.
+
+**What:** Convert page shells from `"use client"` to server components, pushing client interactivity into dedicated `"use client"` island components. Every page.tsx currently starts with `"use client"`.
+
+**Why deferred — poor effort-to-benefit ratio for this codebase today:**
+
+1. **Auth tokens live in `localStorage`, not cookies.** Server components can't access `localStorage`, so data fetching can't move server-side. Even with server component shells, all meaningful content still waits for client-side TanStack Query fetches. The UX is nearly identical.
+2. **80-90% of each page is data-dependent.** The server shell would only render headings and static structure — a thin wrapper. The client island would contain almost everything.
+3. **No SEO need.** This is an authenticated workspace app. Search engines never see these pages.
+4. **No streaming benefit.** Without server-side data fetching, there's nothing to stream through Suspense boundaries.
+
+**When it becomes worth it:**
+- Auth moves to HTTP-only cookies (enabling server-side data fetching + real SSR)
+- Public-facing pages are added (SEO matters)
+- Bundle size becomes a problem on slow networks
+- TanStack Query is replaced with server-side data patterns (React Server Functions, etc.)
+
+**Scope when we do it:**
+- [ ] Split each page into `page.tsx` (server shell) + `*Client.tsx` (client island)
+- [ ] Move static content (PageHeader, metadata cards, layout structure) into server shells
+- [ ] Keep hooks, state, interactivity in client islands
+- [ ] Verify auth still works (AuthGuardWrapper in layout protects all children)
+- [ ] Measure bundle size delta before/after
+
 ---
 
 ## 12. Developer Workflow

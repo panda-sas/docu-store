@@ -10,7 +10,7 @@ interface SearchResultCardProps {
   title: string;
   href: string;
   score: number;
-  preview?: string | null;
+  preview?: ReactNode;
   entityType?: "artifact" | "page";
   secondaryLink?: { label: string; href: string };
   /** URL to a page thumbnail image (lazy-loaded with auth) */

@@ -8,7 +8,6 @@ import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Message } from "primereact/message";
-import { ProgressSpinner } from "primereact/progressspinner";
 import { SelectButton } from "primereact/selectbutton";
 
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -16,25 +15,29 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { TextSearchResults } from "@/components/search/TextSearchResults";
 import { SummarySearchResults } from "@/components/search/SummarySearchResults";
 import { HierarchicalSearchResults } from "@/components/search/HierarchicalSearchResults";
+import { TagFilter } from "@/components/search/TagFilter";
 import {
   useSearchPages,
   useSearchSummaries,
   useHierarchicalSearch,
 } from "@/hooks/use-search";
 import { useSearchStore } from "@/lib/stores/search-store";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 type SearchMode = "text" | "summary" | "hierarchical";
 
 const SEARCH_MODES = [
-  { label: "Text Chunks", value: "text" as SearchMode },
-  { label: "Summaries", value: "summary" as SearchMode },
-  { label: "Hierarchical", value: "hierarchical" as SearchMode },
+  { label: "Exact Match", value: "text" as SearchMode },
+  { label: "Overview Search", value: "summary" as SearchMode },
+  { label: "Deep Search", value: "hierarchical" as SearchMode },
 ];
 
 export default function SearchPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("hierarchical");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [tagMatchMode, setTagMatchMode] = useState<"any" | "all">("any");
 
   // Track whether we need to auto-search after prefill
   const [shouldAutoSearch, setShouldAutoSearch] = useState(false);
@@ -59,7 +62,7 @@ export default function SearchPage() {
   useEffect(() => {
     if (shouldAutoSearch && query) {
       setShouldAutoSearch(false);
-      hierarchicalSearch.mutate({ query_text: query, include_chunks: true });
+      hierarchicalSearch.mutate({ query_text: query, include_chunks: true, ...tagParams });
     }
   }, [shouldAutoSearch, query]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -73,16 +76,20 @@ export default function SearchPage() {
     (mode === "summary" && summarySearch.data) ||
     (mode === "hierarchical" && hierarchicalSearch.data);
 
+  const tagParams = filterTags.length > 0
+    ? { tags: filterTags, tag_match_mode: tagMatchMode as "any" | "all" }
+    : {};
+
   const handleSearch = () => {
     const trimmed = query.trim();
     if (!trimmed) return;
 
     if (mode === "text") {
-      textSearch.mutate({ query_text: trimmed });
+      textSearch.mutate({ query_text: trimmed, ...tagParams });
     } else if (mode === "summary") {
-      summarySearch.mutate({ query_text: trimmed });
+      summarySearch.mutate({ query_text: trimmed, ...tagParams });
     } else {
-      hierarchicalSearch.mutate({ query_text: trimmed, include_chunks: true });
+      hierarchicalSearch.mutate({ query_text: trimmed, include_chunks: true, ...tagParams });
     }
   };
 
@@ -126,6 +133,13 @@ export default function SearchPage() {
             if (e.value) setMode(e.value);
           }}
         />
+
+        <TagFilter
+          tags={filterTags}
+          matchMode={tagMatchMode}
+          onTagsChange={setFilterTags}
+          onMatchModeChange={setTagMatchMode}
+        />
       </div>
 
       {/* Results */}
@@ -147,12 +161,7 @@ export default function SearchPage() {
         )}
 
       {isPending && (
-        <div className="mt-12 flex items-center justify-center">
-          <ProgressSpinner
-            style={{ width: "1.5rem", height: "1.5rem" }}
-            strokeWidth="3"
-          />
-        </div>
+        <LoadingSpinner size="sm" className="mt-12 flex items-center justify-center" />
       )}
 
       {!hasResults && !isPending && (

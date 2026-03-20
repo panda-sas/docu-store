@@ -6,6 +6,7 @@ from returns.result import Failure, Result, Success
 from application.dtos.embedding_dtos import (
     ArtifactDetailsDTO,
     EmbeddingDTO,
+    RerankInfoDTO,
     SearchRequest,
     SearchResponse,
     SearchResultDTO,
@@ -13,10 +14,13 @@ from application.dtos.embedding_dtos import (
 from application.dtos.errors import AppError
 from application.ports.embedding_generator import EmbeddingGenerator
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
+from application.ports.repositories.artifact_repository import ArtifactRepository
 from application.ports.repositories.page_read_models import PageReadModel
 from application.ports.repositories.page_repository import PageRepository
+from application.ports.reranker import RerankDocument, Reranker
+from application.ports.sparse_embedding_generator import SparseEmbeddingGenerator
 from application.ports.text_chunker import TextChunker
-from application.ports.vector_store import PageSearchResult, VectorStore
+from application.ports.vector_store import VectorStore
 from domain.exceptions import AggregateNotFoundError
 from domain.value_objects.embedding_metadata import EmbeddingMetadata
 
@@ -34,17 +38,43 @@ class GeneratePageEmbeddingUseCase:
     5. Updates the domain aggregate with embedding metadata
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         page_repository: PageRepository,
         embedding_generator: EmbeddingGenerator,
         vector_store: VectorStore,
         text_chunker: TextChunker,
+        sparse_embedding_generator: SparseEmbeddingGenerator | None = None,
+        artifact_repository: ArtifactRepository | None = None,
     ) -> None:
         self.page_repository = page_repository
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
         self.text_chunker = text_chunker
+        self.sparse_embedding_generator = sparse_embedding_generator
+        self.artifact_repository = artifact_repository
+
+    @staticmethod
+    def _build_chunk_context(
+        artifact_title: str | None,
+        page_index: int,
+        tags: list[str] | None,
+        page_summary: str | None,
+    ) -> str:
+        """Build a context prefix to prepend to chunks before embedding.
+
+        The prefix gives each chunk awareness of its parent document,
+        improving retrieval for ambiguous passages like "IC50 was 2.3 uM".
+        """
+        parts = []
+        if artifact_title:
+            parts.append(f"Document: {artifact_title}")
+        if tags:
+            parts.append(f"Tags: {', '.join(tags[:10])}")
+        parts.append(f"Page {page_index + 1}")
+        if page_summary:
+            parts.append(f"Summary: {page_summary[:200]}")
+        return " | ".join(parts) + "\n\n" if parts else ""
 
     async def execute(
         self,
@@ -101,11 +131,50 @@ class GeneratePageEmbeddingUseCase:
                 text_length=len(page.text_mention.text),
             )
 
-            # 5. Generate embeddings for all chunks in a batch
-            chunk_texts = [chunk.text for chunk in chunks]
+            # 5. Build contextual chunk texts for embedding
+            #    Raw chunk text is used for sparse (exact-term) and display.
+            #    Contextual text (with doc title, tags, summary prefix) is used for dense embedding.
+            raw_chunk_texts = [chunk.text for chunk in chunks]
+
+            context_prefix = ""
+            if self.artifact_repository:
+                artifact_title = None
+                try:
+                    artifact = self.artifact_repository.get_by_id(page.artifact_id)
+                    if artifact.title_mention:
+                        artifact_title = artifact.title_mention.title
+                except AggregateNotFoundError:
+                    pass
+
+                tags = [tm.tag for tm in page.tag_mentions] if page.tag_mentions else None
+                summary = page.summary_candidate.summary if page.summary_candidate else None
+
+                context_prefix = self._build_chunk_context(
+                    artifact_title=artifact_title,
+                    page_index=page.index,
+                    tags=tags,
+                    page_summary=summary,
+                )
+
+            if context_prefix:
+                contextual_texts = [context_prefix + text for text in raw_chunk_texts]
+                logger.info("contextual_embedding", prefix_len=len(context_prefix))
+            else:
+                contextual_texts = raw_chunk_texts
+
+            # Generate dense embeddings on contextual texts
             embeddings = await self.embedding_generator.generate_batch_embeddings(
-                texts=chunk_texts,
+                texts=contextual_texts,
             )
+
+            # 5b. Generate sparse embeddings on raw texts (exact-term matching)
+            sparse_embeddings = None
+            if self.sparse_embedding_generator:
+                sparse_embeddings = (
+                    self.sparse_embedding_generator.generate_batch_sparse_embeddings(
+                        raw_chunk_texts,
+                    )
+                )
 
             # 6. Store all chunk embeddings in vector store
             logger.info(
@@ -113,10 +182,25 @@ class GeneratePageEmbeddingUseCase:
                 page_id=str(page_id),
                 chunk_count=len(embeddings),
             )
-            # Pass workspace_id through metadata for tenant isolation in Qdrant
-            upsert_metadata = {}
+            # Pass workspace_id and tag metadata through metadata for Qdrant payload
+            upsert_metadata: dict = {}
             if page.workspace_id:
                 upsert_metadata["workspace_id"] = str(page.workspace_id)
+
+            # Include tag metadata for filtered search
+            if page.tag_mentions:
+                upsert_metadata["tags"] = [tm.tag for tm in page.tag_mentions]
+                upsert_metadata["tag_normalized"] = [tm.tag.lower() for tm in page.tag_mentions]
+                ner_types = {tm.entity_type for tm in page.tag_mentions if tm.entity_type}
+                upsert_metadata["entity_types"] = sorted(ner_types)
+
+            # Include compound SMILES for cross-reference
+            if page.compound_mentions:
+                upsert_metadata["compound_smiles"] = [
+                    cm.canonical_smiles
+                    for cm in page.compound_mentions
+                    if cm.canonical_smiles and cm.is_smiles_valid
+                ]
 
             await self.vector_store.upsert_page_chunk_embeddings(
                 page_id=page_id,
@@ -125,6 +209,7 @@ class GeneratePageEmbeddingUseCase:
                 page_index=page.index,
                 chunk_count=len(chunks),
                 metadata=upsert_metadata or None,
+                sparse_embeddings=sparse_embeddings,
             )
 
             # 7. Update domain aggregate with metadata (using first embedding as reference)
@@ -178,7 +263,7 @@ class SearchSimilarPagesUseCase:
 
     This use case:
     1. Generates an embedding for the query text
-    2. Searches the vector store for similar pages
+    2. Searches the vector store for similar pages (hybrid if sparse generator available)
     3. Enriches results with data from read models (text preview, artifact details)
     """
 
@@ -188,11 +273,15 @@ class SearchSimilarPagesUseCase:
         vector_store: VectorStore,
         page_read_model: PageReadModel,
         artifact_read_model: ArtifactReadModel,
+        sparse_embedding_generator: SparseEmbeddingGenerator | None = None,
+        reranker: Reranker | None = None,
     ) -> None:
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
         self.page_read_model = page_read_model
         self.artifact_read_model = artifact_read_model
+        self.sparse_embedding_generator = sparse_embedding_generator
+        self.reranker = reranker
 
     async def execute(
         self,
@@ -223,32 +312,96 @@ class SearchSimilarPagesUseCase:
                 text=request.query_text,
             )
 
-            # 2. Search vector store (request extra results to account for chunk dedup)
-            search_results = await self.vector_store.search_similar_pages(
-                query_embedding=query_embedding,
-                limit=request.limit * 3,  # Over-fetch to handle chunk dedup
+            # 2. Search with server-side dedup — hybrid if sparse available
+            filter_kwargs = dict(
                 artifact_id_filter=request.artifact_id,
                 score_threshold=request.score_threshold,
                 allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
+                tags=request.tags,
+                entity_types=request.entity_types,
+                tag_match_mode=request.tag_match_mode,
             )
 
-            # 3. Deduplicate by page_id (keep highest-scoring chunk per page)
-            best_by_page: dict[UUID, PageSearchResult] = {}
-            for result in search_results:
-                existing = best_by_page.get(result.page_id)
-                if existing is None or result.score > existing.score:
-                    best_by_page[result.page_id] = result
+            # Over-fetch if reranker is available (reranker needs more candidates)
+            retrieval_limit = request.limit * 3 if self.reranker else request.limit
 
-            deduplicated_results = sorted(
-                best_by_page.values(),
-                key=lambda r: r.score,
-                reverse=True,
-            )[: request.limit]
+            if self.sparse_embedding_generator:
+                sparse_query = self.sparse_embedding_generator.generate_sparse_embedding(
+                    request.query_text,
+                )
+                search_results = await self.vector_store.search_hybrid_grouped(
+                    dense_query=query_embedding,
+                    sparse_query=sparse_query,
+                    limit=retrieval_limit,
+                    **filter_kwargs,
+                )
+            else:
+                search_results = await self.vector_store.search_pages_grouped(
+                    query_embedding=query_embedding,
+                    limit=retrieval_limit,
+                    **filter_kwargs,
+                )
 
-            # 4. Enrich results with read model data
+            # 2b. Rerank with cross-encoder if available
+            rerank_info = None
+            rerank_scores: dict[str, tuple[float, int]] = {}  # page_id → (score, original_rank)
+
+            if self.reranker and search_results:
+                rerank_docs = []
+                for r in search_results:
+                    page = await self.page_read_model.get_page_by_id(r.page_id)
+                    text = ""
+                    if page and page.text_mention and page.text_mention.text:
+                        text = page.text_mention.text[:2000]
+                    if not text.strip():
+                        continue  # skip empty pages — cross-encoder returns nan for empty text
+                    rerank_docs.append(RerankDocument(id=str(r.page_id), text=text))
+
+                reranked = self.reranker.rerank(
+                    query=request.query_text,
+                    documents=rerank_docs,
+                    top_k=request.limit,
+                )
+
+                # Build score/rank lookup and reorder
+                rerank_scores = {r.id: (r.score, r.original_rank) for r in reranked}
+                rerank_order = {r.id: i for i, r in enumerate(reranked)}
+                search_results = sorted(
+                    [r for r in search_results if str(r.page_id) in rerank_order],
+                    key=lambda r: rerank_order[str(r.page_id)],
+                )
+
+                # Build diagnostics
+                promotions = [r.original_rank - i for i, r in enumerate(reranked)]
+                rerank_info = RerankInfoDTO(
+                    reranker_model=self.reranker.model_name
+                    if hasattr(self.reranker, "model_name")
+                    else "unknown",
+                    candidates_before=len(rerank_docs),
+                    results_after=len(reranked),
+                    top_promotion=max(promotions) if promotions else None,
+                )
+
+                logger.info(
+                    "rerank_diagnostics",
+                    candidates=len(rerank_docs),
+                    returned=len(reranked),
+                    top_promotion=rerank_info.top_promotion,
+                    rank_changes=[
+                        {
+                            "page_id": r.id[:8],
+                            "original": r.original_rank,
+                            "new": i,
+                            "score": round(r.score, 4),
+                        }
+                        for i, r in enumerate(reranked[:5])
+                    ],
+                )
+
+            # 3. Enrich results with read model data
             result_dtos = []
-            for result in deduplicated_results:
+            for result in search_results:
                 # Fetch page details for text preview
                 page = await self.page_read_model.get_page_by_id(result.page_id)
                 text_preview = None
@@ -281,18 +434,33 @@ class SearchSimilarPagesUseCase:
                         mime_type=str(artifact.mime_type),
                         storage_location=artifact.storage_location,
                         page_count=page_count,
-                        tags=artifact.tags or [],
-                        summary=artifact.summary_candidate.text
+                        tags=[tm.tag for tm in artifact.tag_mentions]
+                        if artifact.tag_mentions
+                        else [],
+                        summary=artifact.summary_candidate.summary
                         if artifact.summary_candidate
                         else None,
-                        title=artifact.title_mention.text if artifact.title_mention else None,
+                        title=artifact.title_mention.title if artifact.title_mention else None,
+                        authors=[am.name for am in artifact.author_mentions]
+                        if artifact.author_mentions
+                        else [],
+                        presentation_date=artifact.presentation_date.date.isoformat()
+                        if artifact.presentation_date and hasattr(artifact.presentation_date.date, "isoformat")
+                        else str(artifact.presentation_date.date)
+                        if artifact.presentation_date
+                        else None,
                     )
+
+                # Attach rerank scores if available
+                rr_score, rr_original = rerank_scores.get(str(result.page_id), (None, None))
 
                 result_dto = SearchResultDTO(
                     page_id=result.page_id,
                     artifact_id=result.artifact_id,
                     page_index=result.page_index,
                     similarity_score=result.score,
+                    rerank_score=rr_score,
+                    original_rank=rr_original,
                     text_preview=text_preview,
                     artifact_name=artifact_name,
                     artifact_details=artifact_details,
@@ -313,6 +481,7 @@ class SearchSimilarPagesUseCase:
                     results=result_dtos,
                     total_results=len(result_dtos),
                     model_used=str(model_info.get("model_name", "unknown")),
+                    rerank_info=rerank_info,
                 ),
             )
 

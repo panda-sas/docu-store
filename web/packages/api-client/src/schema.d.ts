@@ -157,7 +157,7 @@ export interface paths {
         patch: operations["update_summary_candidate_artifacts__artifact_id__summary_candidate_patch"];
         trace?: never;
     };
-    "/artifacts/{artifact_id}/tags": {
+    "/artifacts/{artifact_id}/tag_mentions": {
         parameters: {
             query?: never;
             header?: never;
@@ -171,10 +171,10 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Update Tags
-         * @description Update tags for an artifact.
+         * Update Tag Mentions
+         * @description Update tag mentions for an artifact.
          */
-        patch: operations["update_tags_artifacts__artifact_id__tags_patch"];
+        patch: operations["update_tag_mentions_artifacts__artifact_id__tag_mentions_patch"];
         trace?: never;
     };
     "/artifacts/{artifact_id}/summarize": {
@@ -590,6 +590,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pages/{page_id}/ner/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Ner Extraction
+         * @description Trigger NER extraction for a page (non-blocking).
+         *
+         *     Starts the named-entity recognition Temporal workflow and returns immediately
+         *     with the initial workflow status. Extracts compound names, targets, diseases,
+         *     and other entities from the page text.
+         *
+         *     Re-triggering is safe — uses ALLOW_DUPLICATE reuse policy.
+         */
+        post: operations["trigger_ner_extraction_pages__page_id__ner_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pages/{page_id}/summary": {
         parameters: {
             query?: never;
@@ -653,6 +679,7 @@ export interface paths {
          *     Args:
          *         request: Search request with query text and optional filters
          *         container: DI container
+         *         auth: Request authentication context
          *
          *     Returns:
          *         Search results with similarity scores
@@ -687,6 +714,12 @@ export interface paths {
         /**
          * Generate Embedding For Page
          * @description Manually trigger embedding generation for a specific page.
+         *
+         *     Args:
+         *         page_id: UUID of the page to generate embeddings for
+         *         container: DI container
+         *         auth: Request authentication context
+         *         force_regenerate: Whether to overwrite existing embeddings
          *
          *     Useful for:
          *     - Testing the embedding pipeline
@@ -1023,10 +1056,10 @@ export interface components {
             /** @description Title mention extracted from the artifact */
             title_mention?: components["schemas"]["TitleMention"] | null;
             /**
-             * Tags
-             * @description List of tags associated with the artifact
+             * Tag Mentions
+             * @description Structured tag mentions aggregated from all pages
              */
-            tags?: string[];
+            tag_mentions?: components["schemas"]["TagMention"][];
             /** @description Summary candidate extracted from the artifact */
             summary_candidate?: components["schemas"]["SummaryCandidate"] | null;
         };
@@ -1045,6 +1078,11 @@ export interface components {
             artifact_type: components["schemas"]["ArtifactType"];
             /** Source Uri */
             source_uri?: string | null;
+            /**
+             * Visibility
+             * @default workspace
+             */
+            visibility: string;
         };
         /**
          * ChunkHit
@@ -1067,6 +1105,10 @@ export interface components {
             score: number;
             /** Text Preview */
             text_preview?: string | null;
+            /** Artifact Name */
+            artifact_name?: string | null;
+            /** Page Name */
+            page_name?: string | null;
         };
         /**
          * CompoundMention
@@ -1096,10 +1138,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1464,10 +1506,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1620,10 +1662,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1660,10 +1702,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -1698,10 +1740,10 @@ export interface components {
             model_name?: string | null;
             /**
              * Additional Model Params
-             * @description Additional parameters passed to the extraction model
+             * @description Additional parameters from the extraction model (may contain nested structures)
              */
             additional_model_params?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /**
              * Pipeline Run Id
@@ -2042,7 +2084,7 @@ export interface operations {
             };
         };
     };
-    update_tags_artifacts__artifact_id__tags_patch: {
+    update_tag_mentions_artifacts__artifact_id__tag_mentions_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -2053,7 +2095,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": string[];
+                "application/json": {
+                    [key: string]: unknown;
+                }[];
             };
         };
         responses: {
@@ -2708,6 +2752,37 @@ export interface operations {
         };
     };
     trigger_page_summarization_pages__page_id__summarize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowStartedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_ner_extraction_pages__page_id__ner_extract_post: {
         parameters: {
             query?: never;
             header?: never;

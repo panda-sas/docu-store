@@ -262,56 +262,36 @@ class TestArtifactSummaryCandidate:
             sample_artifact.update_summary_candidate(sample_summary_candidate)
 
 
-class TestArtifactTags:
-    """Test updating tags on artifact."""
+class TestArtifactTagMentions:
+    """Test updating tag mentions on artifact."""
 
-    def test_update_tags(self, sample_artifact: Artifact) -> None:
-        """Test updating tags."""
-        tags = ["chemistry", "research", "important"]
-        sample_artifact.update_tags(tags)
-        assert sample_artifact.tags == tags
+    @staticmethod
+    def _make_tag_mentions():
+        from domain.value_objects.tag_mention import TagMention
+        return [
+            TagMention(tag="Aspirin", entity_type="compound_name", model_name="test"),
+            TagMention(tag="EGFR", entity_type="target", model_name="test"),
+        ]
 
-    def test_update_tags_empty_list(self, sample_artifact: Artifact) -> None:
-        """Test updating to empty tags."""
-        tags = ["chemistry"]
-        sample_artifact.update_tags(tags)
-        sample_artifact.update_tags([])
-        assert sample_artifact.tags == []
+    def test_update_tag_mentions(self, sample_artifact: Artifact) -> None:
+        """Test updating tag mentions."""
+        tms = self._make_tag_mentions()
+        sample_artifact.update_tag_mentions(tms)
+        assert len(sample_artifact.tag_mentions) == 2
+        assert sample_artifact.tag_mentions[0].tag == "Aspirin"
 
-    def test_update_tags_removes_duplicates(self, sample_artifact: Artifact) -> None:
-        """Test that duplicate tags are removed."""
-        tags = ["chemistry", "research", "chemistry"]
-        sample_artifact.update_tags(tags)
-        assert sample_artifact.tags == ["chemistry", "research"]
+    def test_update_tag_mentions_empty_list(self, sample_artifact: Artifact) -> None:
+        """Test updating to empty tag mentions."""
+        tms = self._make_tag_mentions()
+        sample_artifact.update_tag_mentions(tms)
+        sample_artifact.update_tag_mentions([])
+        assert sample_artifact.tag_mentions == []
 
-    def test_update_tags_strips_whitespace(self, sample_artifact: Artifact) -> None:
-        """Test that tags are stripped of whitespace."""
-        tags = ["  chemistry  ", "  research  "]
-        sample_artifact.update_tags(tags)
-        assert sample_artifact.tags == ["chemistry", "research"]
-
-    def test_update_tags_removes_blank_tags(self, sample_artifact: Artifact) -> None:
-        """Test that blank tags are removed."""
-        tags = ["chemistry", "", "  ", "research"]
-        sample_artifact.update_tags(tags)
-        assert sample_artifact.tags == ["chemistry", "research"]
-
-    def test_update_tags_same_tags_is_noop(self, sample_artifact: Artifact) -> None:
-        """Test that updating with same tags generates events both times."""
-        tags = ["chemistry", "research"]
-        sample_artifact.update_tags(tags)
-        # First update creates a TagsUpdated event
-        assert sample_artifact.tags == tags
-
-        # Second update with same tags should work (idempotent)
-        sample_artifact.update_tags(tags)
-        assert sample_artifact.tags == tags
-
-    def test_update_tags_raises_on_deleted_artifact(self, sample_artifact: Artifact) -> None:
-        """Test that updating tags on deleted artifact raises error."""
+    def test_update_tag_mentions_raises_on_deleted_artifact(self, sample_artifact: Artifact) -> None:
+        """Test that updating tag mentions on deleted artifact raises error."""
         sample_artifact.delete()
-        with pytest.raises(ValueError, match="Cannot update tags on a deleted artifact"):
-            sample_artifact.update_tags(["chemistry"])
+        with pytest.raises(ValueError, match="Cannot update tag mentions on a deleted artifact"):
+            sample_artifact.update_tag_mentions(self._make_tag_mentions())
 
 
 
@@ -342,8 +322,8 @@ class TestArtifactDeletion:
                 TitleMention(title="test", confidence=0.9),
             )
 
-        with pytest.raises(ValueError, match="Cannot update tags"):
-            sample_artifact.update_tags(["tag"])
+        with pytest.raises(ValueError, match="Cannot update tag mentions"):
+            sample_artifact.update_tag_mentions([])
 
 
 class TestArtifactHashing:
@@ -441,8 +421,10 @@ class TestArtifactEventSourcing:
         assert summary_event.summary_candidate.summary == "This paper discusses..."
         assert summary_event.summary_candidate.confidence == 0.88
 
-    def test_tags_updated_event_contains_complete_data(self) -> None:
-        """Test that TagsUpdated event captures all necessary data."""
+    def test_tag_mentions_updated_event_contains_complete_data(self) -> None:
+        """Test that TagMentionsUpdated event captures all necessary data."""
+        from domain.value_objects.tag_mention import TagMention
+
         artifact = Artifact.create(
             source_uri="https://example.com/test.pdf",
             source_filename="test.pdf",
@@ -451,14 +433,15 @@ class TestArtifactEventSourcing:
             storage_location="/storage/test.pdf",
         )
 
-        tags = ["chemistry", "research", "important"]
-        artifact.update_tags(tags)
+        tms = [TagMention(tag="EGFR", entity_type="target", model_name="test")]
+        artifact.update_tag_mentions(tms)
 
         events = list(artifact.collect_events())
-        tags_event = events[1]
+        tag_event = events[1]
 
-        assert tags_event.__class__.__name__ == "TagsUpdated"
-        assert tags_event.tags == tags
+        assert tag_event.__class__.__name__ == "TagMentionsUpdated"
+        assert len(tag_event.tag_mentions) == 1
+        assert tag_event.tag_mentions[0].tag == "EGFR"
 
     def test_deleted_event_contains_timestamp(self) -> None:
         """Test that Deleted event captures deletion timestamp."""
@@ -499,14 +482,7 @@ class TestArtifactEventSourcing:
         artifact.add_pages([])  # Empty list
         artifact.remove_pages([])  # Empty list
 
-        tags = ["test"]
-        artifact.update_tags(tags)
-        list(artifact.collect_events())  # Clear
-
-        artifact.update_tags(tags)  # Same tags - should be no-op
-
-        events = list(artifact.collect_events())
-        assert len(events) == 0, "No-op operations should not generate events"
+        # No-op for tag_mentions: tested separately; update_tag_mentions always emits events
 
 
 class TestArtifactInvariants:
@@ -546,7 +522,7 @@ class TestArtifactInvariants:
             )
 
         with pytest.raises(ValueError, match="deleted"):
-            artifact.update_tags(["test"])
+            artifact.update_tag_mentions([])
 
     def test_deletion_is_idempotent(self) -> None:
         """Test that deleting an already deleted artifact doesn't cause issues.
@@ -601,13 +577,12 @@ class TestArtifactInvariants:
             storage_location="/storage/test.pdf",
         )
 
-        # Test with messy input
-        artifact.update_tags(["  chemistry  ", "", "  ", "research", "chemistry", "BIOLOGY"])
-
-        # Should be normalized: stripped, no blanks, no duplicates
-        assert artifact.tags == ["chemistry", "research", "BIOLOGY"]
-
-        # Note: The domain doesn't enforce case normalization - that's acceptable
+        # Tag mentions are now structured TagMention objects
+        # Normalization/dedup is handled by the domain service, not the aggregate
+        from domain.value_objects.tag_mention import TagMention
+        tms = [TagMention(tag="chemistry", entity_type="target", model_name="test")]
+        artifact.update_tag_mentions(tms)
+        assert len(artifact.tag_mentions) == 1
 
     def test_cannot_create_artifact_with_invalid_data(self) -> None:
         """Test that artifact creation validates required fields."""
@@ -671,7 +646,8 @@ class TestArtifactInvariants:
         artifact.add_pages([uuid4()])
         assert artifact.version == initial_version + 1
 
-        artifact.update_tags(["test"])
+        from domain.value_objects.tag_mention import TagMention
+        artifact.update_tag_mentions([TagMention(tag="test", entity_type="target", model_name="t")])
         assert artifact.version == initial_version + 2
 
         artifact.delete()

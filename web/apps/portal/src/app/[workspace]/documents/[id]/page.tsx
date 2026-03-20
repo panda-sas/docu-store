@@ -1,64 +1,31 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useRef } from "react";
 import { Button } from "primereact/button";
-import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
-import { DataTable } from "primereact/datatable";
 import { Message } from "primereact/message";
-import { ProgressSpinner } from "primereact/progressspinner";
 import { TabPanel, TabView } from "primereact/tabview";
-import { Tag } from "primereact/tag";
 import { Toast } from "primereact/toast";
-import { FileText, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { FileText, ArrowLeft, Lock, Users } from "lucide-react";
 
-import type { components } from "@docu-store/api-client";
-import type { WorkflowMap } from "@docu-store/types";
-import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { WorkflowStatusBadge } from "@/components/WorkflowStatusBadge";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { OverviewTab } from "@/components/documents/OverviewTab";
+import { PagesTab } from "@/components/documents/PagesTab";
+import { PdfEmbed } from "@/components/PdfEmbed";
+import { WorkflowList, parseWorkflows } from "@/components/WorkflowList";
 import {
   useArtifact,
   useArtifactWorkflows,
   useDeleteArtifact,
+  useRerunArtifactWorkflow,
+  RERUNNABLE_ARTIFACT_WORKFLOWS,
 } from "@/hooks/use-artifacts";
 import { ShareDialog } from "@/components/sharing/ShareDialog";
+import { useArtifactPermissions } from "@/hooks/use-permissions";
 import { useSession } from "@/lib/auth";
-import { API_URL } from "@/lib/constants";
-
-type PageResponse = components["schemas"]["PageResponse"];
-
-function PdfEmbed({ artifactId }: { artifactId: string }) {
-  const { blobUrl, error } = useAuthBlobUrl(
-    `${API_URL}/artifacts/${artifactId}/pdf`,
-  );
-
-  if (error) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border border-ds-error/20 bg-ds-error/5">
-        <p className="text-sm text-ds-error">Failed to load PDF</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-border-default">
-      {!blobUrl && (
-        <div className="h-[80vh] w-full animate-pulse bg-surface-elevated" />
-      )}
-      {blobUrl && (
-        <iframe
-          src={blobUrl}
-          className="h-[80vh] w-full"
-          title="PDF Viewer"
-        />
-      )}
-    </div>
-  );
-}
+import { getErrorMessage } from "@/lib/api-error";
 
 export default function ArtifactDetailPage() {
   const { workspace, id } = useParams<{ workspace: string; id: string }>();
@@ -67,20 +34,15 @@ export default function ArtifactDetailPage() {
   const { user } = useSession();
   const { data: artifact, isLoading, error } = useArtifact(id);
   const { data: workflowData } = useArtifactWorkflows(id);
+  const { data: acl } = useArtifactPermissions(id);
   const deleteMutation = useDeleteArtifact();
+  const rerunMutation = useRerunArtifactWorkflow(id);
 
   const isOwnerOrAdmin =
     !!artifact?.owner_id && artifact.owner_id === user.id;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <ProgressSpinner
-          style={{ width: "2rem", height: "2rem" }}
-          strokeWidth="3"
-        />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error || !artifact) {
@@ -88,7 +50,7 @@ export default function ArtifactDetailPage() {
       <div>
         <Message
           severity="error"
-          text="Failed to load artifact. It may not exist or the backend is unreachable."
+          text={getErrorMessage(error)}
         />
         <Button
           label="Back to Documents"
@@ -96,7 +58,6 @@ export default function ArtifactDetailPage() {
           onClick={() => router.push(`/${workspace}/documents`)}
           text
           severity="secondary"
-          size="small"
           className="mt-4"
         />
       </div>
@@ -109,7 +70,6 @@ export default function ArtifactDetailPage() {
     "Untitled";
 
   const pages = artifact.pages ?? [];
-  const isPageObjects = pages.length > 0 && typeof pages[0] === "object";
 
   const handleDelete = () => {
     confirmDialog({
@@ -132,10 +92,7 @@ export default function ArtifactDetailPage() {
     });
   };
 
-  const workflowMap = (workflowData as WorkflowMap | undefined)?.workflows;
-  const workflows = workflowMap
-    ? Object.entries(workflowMap).map(([name, info]) => ({ name, ...info }))
-    : undefined;
+  const workflows = parseWorkflows(workflowData);
 
   return (
     <div>
@@ -149,7 +106,6 @@ export default function ArtifactDetailPage() {
         onClick={() => router.push(`/${workspace}/documents`)}
         text
         severity="secondary"
-        size="small"
         className="mb-4"
       />
 
@@ -157,6 +113,19 @@ export default function ArtifactDetailPage() {
         icon={FileText}
         title={title}
         subtitle={`${artifact.artifact_type.replace(/_/g, " ")} · ${pages.length} pages`}
+        badge={
+          acl?.visibility === "private" && acl.shares?.length > 0 ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-accent-light px-1.5 py-0.5 text-xs font-medium text-accent-text" title="Shared with specific people">
+              <Users className="size-3" />
+              Shared
+            </span>
+          ) : acl?.visibility === "private" ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-surface-sunken px-1.5 py-0.5 text-xs font-medium text-text-muted" title="Only you can access">
+              <Lock className="size-3" />
+              Private
+            </span>
+          ) : null
+        }
         actions={
           <div className="flex items-center gap-2">
             <ShareDialog
@@ -171,13 +140,30 @@ export default function ArtifactDetailPage() {
               loading={deleteMutation.isPending}
               severity="danger"
               outlined
-              size="small"
             />
           </div>
         }
       />
 
       <TabView className="mt-2">
+        {/* Overview Tab */}
+        <TabPanel header="Overview">
+          <OverviewTab
+            artifact={artifact}
+            workspace={workspace}
+            artifactId={id}
+          />
+        </TabPanel>
+
+        {/* Pages Tab */}
+        <TabPanel header="Pages">
+          <PagesTab
+            pages={pages}
+            workspace={workspace}
+            artifactId={id}
+          />
+        </TabPanel>
+
         {/* PDF Tab */}
         <TabPanel header="PDF">
           <div className="pt-4">
@@ -185,183 +171,17 @@ export default function ArtifactDetailPage() {
           </div>
         </TabPanel>
 
-        {/* Overview Tab */}
-        <TabPanel header="Overview">
-          <div className="space-y-6 pt-4">
-            {/* Metadata */}
-            <Card>
-              <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-                <div>
-                  <span className="text-text-muted">Type</span>
-                  <p className="mt-1 font-medium text-text-primary">
-                    {artifact.artifact_type.replace(/_/g, " ")}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-text-muted">MIME Type</span>
-                  <p className="mt-1 font-mono text-text-primary">
-                    {artifact.mime_type}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-text-muted">Pages</span>
-                  <p className="mt-1 font-medium text-text-primary">
-                    {pages.length}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-text-muted">Source</span>
-                  <p className="mt-1 truncate text-text-primary">
-                    {artifact.source_uri || "—"}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Tags */}
-            {artifact.tags && artifact.tags.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-sm font-medium text-text-secondary">
-                  Tags
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {artifact.tags.map((tag) => (
-                    <Tag key={tag} value={tag} severity="secondary" rounded />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Summary */}
-            {artifact.summary_candidate?.summary && (
-              <Card>
-                <h3 className="mb-3 text-sm font-medium text-text-secondary">
-                  Summary
-                </h3>
-                <p className="text-sm leading-relaxed text-text-primary">
-                  {artifact.summary_candidate.summary}
-                </p>
-                {artifact.summary_candidate.model_name && (
-                  <p className="mt-3 border-t border-border-subtle pt-2 text-xs text-text-muted">
-                    Generated by {artifact.summary_candidate.model_name}
-                  </p>
-                )}
-              </Card>
-            )}
-          </div>
-        </TabPanel>
-
-        {/* Pages Tab */}
-        <TabPanel header="Pages">
-          <div className="pt-4">
-            {isPageObjects ? (
-              <DataTable
-                value={pages as PageResponse[]}
-                className="rounded-xl border border-border-default"
-                emptyMessage="No pages."
-                rowHover
-              >
-                <Column
-                  header="Name"
-                  body={(row: PageResponse) => (
-                    <Link
-                      href={`/${workspace}/documents/${id}/pages/${row.page_id}`}
-                      className="font-medium text-accent-text hover:underline"
-                    >
-                      {row.name ?? `Page ${row.index}`}
-                    </Link>
-                  )}
-                />
-                <Column
-                  field="index"
-                  header="Index"
-                  style={{ width: "80px" }}
-                />
-                <Column
-                  header="Text"
-                  body={(row: PageResponse) => {
-                    const text = row.text_mention?.text;
-                    return text ? (
-                      <span className="block max-w-md truncate text-sm text-text-secondary">
-                        {text.slice(0, 120)}...
-                      </span>
-                    ) : (
-                      <span className="text-text-muted">—</span>
-                    );
-                  }}
-                />
-                <Column
-                  header="Compounds"
-                  body={(row: PageResponse) => row.compound_mentions?.length ?? 0}
-                  style={{ width: "100px" }}
-                />
-                <Column
-                  header="Summary"
-                  body={(row: PageResponse) =>
-                    row.summary_candidate?.summary ? (
-                      <CheckCircle2 className="h-4 w-4 text-ds-success" />
-                    ) : (
-                      <span className="text-text-muted">—</span>
-                    )
-                  }
-                  style={{ width: "80px" }}
-                />
-              </DataTable>
-            ) : (
-              <DataTable
-                value={(pages as string[]).map((pageId, idx) => ({
-                  page_id: pageId,
-                  index: idx,
-                }))}
-                className="rounded-xl border border-border-default"
-                emptyMessage="No pages."
-                rowHover
-              >
-                <Column
-                  header="Page"
-                  body={(row: { page_id: string; index: number }) => (
-                    <Link
-                      href={`/${workspace}/documents/${id}/pages/${row.page_id}`}
-                      className="font-mono text-sm text-accent-text hover:underline"
-                    >
-                      {row.page_id}
-                    </Link>
-                  )}
-                />
-                <Column
-                  field="index"
-                  header="Index"
-                  style={{ width: "80px" }}
-                />
-              </DataTable>
-            )}
-          </div>
-        </TabPanel>
-
         {/* Workflows Tab */}
         <TabPanel header="Workflows">
           <div className="pt-4">
-            {workflows && workflows.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {workflows.map((w) => (
-                  <Card key={w.name}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-text-primary">
-                        {w.name.replace(/_/g, " ")}
-                      </span>
-                      <WorkflowStatusBadge status={w.status} />
-                    </div>
-                    <p className="mt-2 truncate font-mono text-xs text-text-muted">
-                      {w.workflow_id}
-                    </p>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <p className="py-8 text-center text-sm text-text-muted">
-                No workflows found for this artifact.
-              </p>
-            )}
+            <WorkflowList
+              workflows={workflows}
+              rerunableWorkflows={RERUNNABLE_ARTIFACT_WORKFLOWS}
+              onRerun={(name) => rerunMutation.mutateAsync(name)}
+              isRerunning={rerunMutation.isPending}
+              rerunningName={rerunMutation.variables}
+              variant="cards"
+            />
           </div>
         </TabPanel>
       </TabView>

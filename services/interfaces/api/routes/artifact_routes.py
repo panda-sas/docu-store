@@ -11,8 +11,14 @@ from sentinel_auth import RequestAuth
 
 from application.dtos.artifact_dtos import ArtifactResponse, CreateArtifactRequest
 from application.dtos.blob_dtos import UploadBlobRequest
-from application.dtos.permission_dtos import ShareResourceRequest, UpdateVisibilityRequest
-from application.dtos.workflow_dtos import WorkflowStartedResponse
+from application.dtos.permission_dtos import (
+    ResourceACLResponse,
+    ShareActionResponse,
+    ShareResourceRequest,
+    UpdateVisibilityRequest,
+    VisibilityResponse,
+)
+from application.dtos.workflow_dtos import SummaryDetailResponse, WorkflowStartedResponse, WorkflowStatusMapResponse
 from application.ports.blob_store import BlobStore
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
@@ -23,11 +29,14 @@ from application.use_cases.artifact_use_cases import (
     DeleteArtifactUseCase,
     RemovePagesUseCase,
     UpdateSummaryCandidateUseCase,
-    UpdateTagsUseCase,
     UpdateTitleMentionUseCase,
+)
+from application.use_cases.artifact_use_cases import (
+    UpdateTagMentionsUseCase as UpdateArtifactTagMentionsUseCase,
 )
 from domain.value_objects.artifact_type import ArtifactType
 from domain.value_objects.summary_candidate import SummaryCandidate
+from domain.value_objects.tag_mention import TagMention
 from domain.value_objects.title_mention import TitleMention
 from interfaces.api.middleware import handle_use_case_errors
 from interfaces.api.routes.helpers import (
@@ -50,6 +59,8 @@ async def list_artifacts(
     auth: Annotated[RequestAuth, Depends(get_auth)],
     skip: Annotated[int, Query(...)] = 0,
     limit: Annotated[int, Query(...)] = 100,
+    sort_by: Annotated[str, Query(...)] = "updated_at",
+    sort_order: Annotated[int, Query(...)] = -1,
 ) -> list[ArtifactResponse]:
     """List all artifacts with pagination, filtered by permissions."""
     allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
@@ -59,6 +70,8 @@ async def list_artifacts(
         skip=skip,
         limit=limit,
         allowed_artifact_ids=allowed_artifact_ids,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -201,19 +214,19 @@ async def update_summary_candidate(
     )
 
 
-@router.patch("/{artifact_id}/tags", status_code=status.HTTP_200_OK)
+@router.patch("/{artifact_id}/tag_mentions", status_code=status.HTTP_200_OK)
 @handle_use_case_errors
-async def update_tags(
+async def update_tag_mentions(
     artifact_id: UUID,
-    tags: Annotated[list[str], Body(...)],
+    tag_mentions: Annotated[list[TagMention], Body(...)],
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> ArtifactResponse:
-    """Update tags for an artifact."""
+    """Update tag mentions for an artifact."""
     await require_workspace_artifact(artifact_id, auth, container)
     await require_artifact_permission(artifact_id, auth, "edit")
-    use_case = container[UpdateTagsUseCase]
-    return await use_case.execute(artifact_id=artifact_id, tags=tags, auth=auth)
+    use_case = container[UpdateArtifactTagMentionsUseCase]
+    return await use_case.execute(artifact_id=artifact_id, tag_mentions=tag_mentions, auth=auth)
 
 
 @router.delete("/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -252,12 +265,45 @@ async def trigger_artifact_summarization(
     return WorkflowStartedResponse(workflow_id=f"artifact-summarization-{artifact_id}")
 
 
+@router.post("/{artifact_id}/extract-metadata", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_doc_metadata_extraction(
+    artifact_id: UUID,
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+) -> WorkflowStartedResponse:
+    """Trigger document metadata extraction for an artifact (non-blocking).
+
+    Starts the GLiNER2 + LLM extraction workflow for title, authors, and date.
+    Uses the first page (index 0) of the artifact. Useful for re-running after
+    manual corrections or when automated extraction missed fields.
+    """
+    artifact = await require_workspace_artifact(artifact_id, auth, container)
+    await require_artifact_permission(artifact_id, auth, "edit")
+
+    if not artifact.pages:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artifact has no pages",
+        )
+
+    # Pages are resolved to PageResponse objects by the read model
+    first_page = artifact.pages[0]
+    page_id = first_page.page_id if hasattr(first_page, "page_id") else UUID(str(first_page))
+
+    orchestrator = container[WorkflowOrchestrator]
+    await orchestrator.start_doc_metadata_extraction_workflow(
+        artifact_id=artifact_id,
+        page_id=page_id,
+    )
+    return WorkflowStartedResponse(workflow_id=f"doc-metadata-{artifact_id}")
+
+
 @router.get("/{artifact_id}/summary", status_code=status.HTTP_200_OK)
 async def get_artifact_summary(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> SummaryDetailResponse:
     """Get the current summary for an artifact from the read model.
 
     Returns the summary_candidate field. Returns 404 if the artifact has no
@@ -272,14 +318,14 @@ async def get_artifact_summary(
             detail="No summary available for this artifact yet",
         )
 
-    return {
-        "artifact_id": str(artifact_id),
-        "summary": artifact.summary_candidate.summary,
-        "model_name": artifact.summary_candidate.model_name,
-        "date_extracted": artifact.summary_candidate.date_extracted,
-        "is_locked": artifact.summary_candidate.is_locked,
-        "hil_correction": artifact.summary_candidate.hil_correction,
-    }
+    return SummaryDetailResponse(
+        entity_id=str(artifact_id),
+        summary=artifact.summary_candidate.summary,
+        model_name=artifact.summary_candidate.model_name,
+        date_extracted=artifact.summary_candidate.date_extracted,
+        is_locked=artifact.summary_candidate.is_locked,
+        hil_correction=artifact.summary_candidate.hil_correction,
+    )
 
 
 @router.get("/{artifact_id}/workflows", status_code=status.HTTP_200_OK)
@@ -287,7 +333,7 @@ async def get_artifact_workflows(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> WorkflowStatusMapResponse:
     """Get Temporal workflow statuses for an artifact.
 
     Proxies to Temporal to return the current status of all workflows
@@ -297,7 +343,7 @@ async def get_artifact_workflows(
     await require_artifact_permission(artifact_id, auth, "view")
     orchestrator = container[WorkflowOrchestrator]
     workflows = await orchestrator.get_artifact_workflow_statuses(artifact_id)
-    return {"artifact_id": str(artifact_id), "workflows": workflows}
+    return WorkflowStatusMapResponse(entity_id=str(artifact_id), workflows=workflows)
 
 
 @router.get("/{artifact_id}/pdf", status_code=status.HTTP_200_OK)
@@ -375,11 +421,12 @@ async def get_artifact_permissions(
     artifact_id: UUID,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> ResourceACLResponse:
     """Get the permission ACL for an artifact with user profiles resolved."""
     await require_workspace_artifact(artifact_id, auth, container)
     await require_artifact_permission(artifact_id, auth, "view")
-    return await auth.get_enriched_resource_acl("artifact", artifact_id)
+    acl = await auth.get_enriched_resource_acl("artifact", artifact_id)
+    return ResourceACLResponse(**acl)
 
 
 @router.post("/{artifact_id}/shares", status_code=status.HTTP_201_CREATED)
@@ -388,7 +435,7 @@ async def share_artifact(
     request: ShareResourceRequest,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> ShareActionResponse:
     """Share an artifact with a user or group.
 
     Only the artifact owner or workspace admin can share.
@@ -400,12 +447,19 @@ async def share_artifact(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner or an admin can share this artifact",
         )
-    return await auth.share(
+    await auth.share(
         "artifact",
         artifact_id,
         request.grantee_type,
         request.grantee_id,
         request.permission,
+    )
+    return ShareActionResponse(
+        resource_type="artifact",
+        resource_id=str(artifact_id),
+        grantee_type=request.grantee_type,
+        grantee_id=str(request.grantee_id),
+        permission=request.permission,
     )
 
 
@@ -415,7 +469,7 @@ async def revoke_artifact_share(
     request: ShareResourceRequest,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> ShareActionResponse:
     """Revoke a share on an artifact."""
     artifact = await require_workspace_artifact(artifact_id, auth, container)
     if artifact.owner_id != auth.user_id and not auth.is_admin:
@@ -423,12 +477,19 @@ async def revoke_artifact_share(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner or an admin can revoke shares",
         )
-    return await auth.unshare(
+    await auth.unshare(
         "artifact",
         artifact_id,
         request.grantee_type,
         request.grantee_id,
         request.permission,
+    )
+    return ShareActionResponse(
+        resource_type="artifact",
+        resource_id=str(artifact_id),
+        grantee_type=request.grantee_type,
+        grantee_id=str(request.grantee_id),
+        permission=request.permission,
     )
 
 
@@ -438,7 +499,7 @@ async def update_artifact_visibility(
     request: UpdateVisibilityRequest,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-) -> dict:
+) -> VisibilityResponse:
     """Toggle artifact visibility between private and workspace."""
     artifact = await require_workspace_artifact(artifact_id, auth, container)
     if artifact.owner_id != auth.user_id and not auth.is_admin:
@@ -446,4 +507,9 @@ async def update_artifact_visibility(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner or an admin can change visibility",
         )
-    return await auth.update_visibility("artifact", artifact_id, request.visibility)
+    await auth.update_visibility("artifact", artifact_id, request.visibility)
+    return VisibilityResponse(
+        resource_type="artifact",
+        resource_id=str(artifact_id),
+        visibility=request.visibility,
+    )

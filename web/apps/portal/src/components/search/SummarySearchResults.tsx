@@ -1,4 +1,5 @@
 import { SearchResultCard } from "./SearchResultCard";
+import { highlightMatches } from "./highlight-matches";
 import { API_URL } from "@/lib/constants";
 
 interface SummaryResult {
@@ -54,7 +55,7 @@ export function SummarySearchResults({
                 : `/${workspace}/documents/${r.artifact_id}/pages/${r.entity_id}`
             }
             score={r.similarity_score}
-            preview={r.summary_text}
+            preview={r.summary_text ? highlightMatches(r.summary_text, data.query) : undefined}
             entityType={r.entity_type}
             thumbnailSrc={`${API_URL}/artifacts/${r.artifact_id}/pages/${r.page_index ?? 0}/image`}
           />

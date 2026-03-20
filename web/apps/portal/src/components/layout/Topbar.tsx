@@ -10,6 +10,7 @@ import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useScopeStore } from "@/lib/stores/scope-store";
 import { SearchCommand } from "./SearchCommand";
+import { getInitials } from "@/lib/utils";
 
 export function Topbar() {
   const { user, workspace } = useSession();
@@ -23,7 +24,12 @@ export function Topbar() {
     window.location.href = "/login";
   };
 
-  const bcModel = breadcrumbs.slice(0, -1).map((crumb) => ({
+  // PrimeReact BreadCrumb: home renders FIRST (leftmost), model items follow.
+  const firstCrumb = breadcrumbs[0];
+  const lastCrumb = breadcrumbs[breadcrumbs.length - 1];
+
+  // Middle crumbs: everything between first and last — navigable links
+  const middleCrumbs = breadcrumbs.slice(1, -1).map((crumb) => ({
     label: crumb.label,
     template: () => (
       <Link
@@ -35,14 +41,23 @@ export function Topbar() {
     ),
   }));
 
-  const lastCrumb = breadcrumbs[breadcrumbs.length - 1];
+  // model = middle crumbs (links) + last crumb (current page, non-clickable)
+  const bcModel =
+    breadcrumbs.length > 1
+      ? [
+          ...middleCrumbs,
+          {
+            label: lastCrumb?.label,
+            template: () => (
+              <span className="text-sm font-medium text-text-primary">
+                {lastCrumb?.label}
+              </span>
+            ),
+          },
+        ]
+      : [];
 
-  const initials = user.name
-    ?.split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "?";
+  const initials = getInitials(user.name);
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-default bg-surface px-6 transition-colors duration-200">
@@ -51,18 +66,21 @@ export function Topbar() {
         <BreadCrumb
           model={bcModel}
           home={{
-            label: lastCrumb?.label,
+            label: firstCrumb?.label,
             template: () => (
-              <span className="text-sm font-medium text-text-primary">
-                {lastCrumb?.label}
-              </span>
+              <Link
+                href={firstCrumb.href}
+                className="text-sm text-text-secondary hover:text-text-primary transition-colors"
+              >
+                {firstCrumb.label}
+              </Link>
             ),
           }}
           className="border-none bg-transparent p-0"
         />
       ) : (
         <span className="text-sm font-medium text-text-primary">
-          {lastCrumb?.label}
+          {firstCrumb?.label}
         </span>
       )}
 
@@ -78,7 +96,6 @@ export function Topbar() {
           onClick={() => setDefaultScope(defaultScope === "workspace" ? "private" : "workspace")}
           severity="secondary"
           text
-          size="small"
           aria-label={`Default visibility: ${defaultScope}. Click to switch.`}
           tooltip="Default visibility for new documents"
           tooltipOptions={{ position: "bottom" }}
@@ -91,7 +108,6 @@ export function Topbar() {
           severity="secondary"
           text
           rounded
-          size="small"
           aria-label={theme === "light" ? "Dark mode" : "Light mode"}
           tooltip={theme === "light" ? "Dark mode" : "Light mode"}
           tooltipOptions={{ position: "bottom" }}
@@ -121,7 +137,6 @@ export function Topbar() {
             severity="secondary"
             text
             rounded
-            size="small"
             aria-label="Sign out"
             tooltip="Sign out"
             tooltipOptions={{ position: "bottom" }}

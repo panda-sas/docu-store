@@ -112,12 +112,27 @@ class Settings(BaseSettings):
         validation_alias="EMBEDDING_MODEL_PROVIDER",
     )
     embedding_model_name: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
+        default="nomic-ai/nomic-embed-text-v1.5",
         validation_alias="EMBEDDING_MODEL_NAME",
+    )
+    embedding_dimensions: int = Field(
+        default=768,
+        validation_alias="EMBEDDING_DIMENSIONS",
+        description="Vector dimensionality (768 for nomic, 384 for MiniLM)",
     )
     embedding_device: Literal["cpu", "cuda", "mps"] = Field(
         default="cpu",
         validation_alias="EMBEDDING_DEVICE",
+    )
+    embedding_query_prefix: str = Field(
+        default="search_query: ",
+        validation_alias="EMBEDDING_QUERY_PREFIX",
+        description="Prefix for query text (nomic requires 'search_query: ')",
+    )
+    embedding_document_prefix: str = Field(
+        default="search_document: ",
+        validation_alias="EMBEDDING_DOCUMENT_PREFIX",
+        description="Prefix for document text (nomic requires 'search_document: ')",
     )
 
     # SMILES / ChemBERTa embeddings
@@ -130,6 +145,20 @@ class Settings(BaseSettings):
         validation_alias="SMILES_EMBEDDING_DEVICE",
     )
 
+    # Cross-encoder reranker
+    reranker_model_name: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-12-v2",
+        validation_alias="RERANKER_MODEL_NAME",
+    )
+    reranker_device: Literal["cpu", "cuda", "mps"] = Field(
+        default="cpu",
+        validation_alias="RERANKER_DEVICE",
+    )
+    reranker_enabled: bool = Field(
+        default=True,
+        validation_alias="RERANKER_ENABLED",
+    )
+
     # Text Chunking
     chunk_size: int = Field(
         default=1000,
@@ -140,6 +169,13 @@ class Settings(BaseSettings):
         default=200,
         validation_alias="CHUNK_OVERLAP",
         description="Overlapping characters between chunks. Typically 10-20% of chunk_size.",
+    )
+
+    # GLiNER2 (structured extraction for document metadata)
+    gliner2_model_name: str = Field(
+        default="fastino/gliner2-large-v1",
+        validation_alias="GLINER2_MODEL_NAME",
+        description="GLiNER2 model for structured document metadata extraction.",
     )
 
     # Artifact Summarization
@@ -191,6 +227,20 @@ class Settings(BaseSettings):
         default="https://www.googleapis.com/oauth2/v3/certs",
         validation_alias="SENTINEL_IDP_JWKS_URL",
     )
+
+    # Browse (tag-based document browser)
+    browse_default_category_limit: int = Field(
+        default=5, validation_alias="BROWSE_DEFAULT_CATEGORY_LIMIT",
+    )
+    browse_sticky_categories: str = Field(
+        default="target", validation_alias="BROWSE_STICKY_CATEGORIES",
+    )
+
+    @property
+    def browse_sticky_categories_list(self) -> list[str]:
+        if not self.browse_sticky_categories:
+            return []
+        return [c.strip() for c in self.browse_sticky_categories.split(",") if c.strip()]
 
     # Plugin system
     enabled_plugins: str = Field(

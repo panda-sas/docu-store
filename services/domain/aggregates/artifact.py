@@ -4,8 +4,11 @@ from uuid import UUID
 from eventsourcing.domain import Aggregate, event
 
 from domain.value_objects.artifact_type import ArtifactType
+from domain.value_objects.author_mention import AuthorMention
 from domain.value_objects.mime_type import MimeType
+from domain.value_objects.presentation_date import PresentationDate
 from domain.value_objects.summary_candidate import SummaryCandidate
+from domain.value_objects.tag_mention import TagMention
 from domain.value_objects.title_mention import TitleMention
 
 
@@ -89,7 +92,9 @@ class Artifact(Aggregate):
         self._pages: list[UUID] = []
         self.title_mention: TitleMention | None = None
         self.summary_candidate: SummaryCandidate | None = None
-        self.tags: list[str] = []
+        self.tag_mentions: list[TagMention] = []
+        self.author_mentions: list[AuthorMention] = []
+        self.presentation_date: PresentationDate | None = None
         self.is_deleted: bool = False
 
     def __hash__(self) -> int:
@@ -197,28 +202,52 @@ class Artifact(Aggregate):
         self.summary_candidate = summary_candidate
 
     # ============================================================================
-    # COMMAND METHOD - Tag Updated
+    # COMMAND METHOD - Tag Mentions Updated
     # ============================================================================
-    class TagsUpdated(Aggregate.Event):
-        tags: list[str]
+    class TagMentionsUpdated(Aggregate.Event):
+        tag_mentions: list[TagMention]
 
-    def update_tags(self, tags: list[str]) -> None:
+    def update_tag_mentions(self, tag_mentions: list[TagMention]) -> None:
         if self.is_deleted:
-            msg = "Cannot update tags on a deleted artifact"
+            msg = "Cannot update tag mentions on a deleted artifact"
             raise ValueError(msg)
-        # Normalize: strip and drop blanks
-        normalized = [t.strip() for t in tags if t and t.strip()]
-        # Deduplicate while preserving order
-        cleaned_tags = list(dict.fromkeys(normalized))
+        self.trigger_event(self.TagMentionsUpdated, tag_mentions=tag_mentions)
 
-        if cleaned_tags == self.tags:
-            return
+    @event(TagMentionsUpdated)
+    def _apply_tag_mentions_updated(self, tag_mentions: list[TagMention]) -> None:
+        self.tag_mentions = tag_mentions
 
-        self.trigger_event(self.TagsUpdated, tags=cleaned_tags)
+    # ============================================================================
+    # COMMAND METHOD - Author Mentions Updated
+    # ============================================================================
+    class AuthorMentionsUpdated(Aggregate.Event):
+        author_mentions: list[AuthorMention]
 
-    @event(TagsUpdated)
-    def _apply_tags_updated(self, tags: list[str]) -> None:
-        self.tags = tags
+    def update_author_mentions(self, author_mentions: list[AuthorMention]) -> None:
+        if self.is_deleted:
+            msg = "Cannot update author mentions on a deleted artifact"
+            raise ValueError(msg)
+        self.trigger_event(self.AuthorMentionsUpdated, author_mentions=author_mentions)
+
+    @event(AuthorMentionsUpdated)
+    def _apply_author_mentions_updated(self, author_mentions: list[AuthorMention]) -> None:
+        self.author_mentions = author_mentions
+
+    # ============================================================================
+    # COMMAND METHOD - Presentation Date Updated
+    # ============================================================================
+    class PresentationDateUpdated(Aggregate.Event):
+        presentation_date: PresentationDate | None
+
+    def update_presentation_date(self, presentation_date: PresentationDate | None) -> None:
+        if self.is_deleted:
+            msg = "Cannot update presentation date on a deleted artifact"
+            raise ValueError(msg)
+        self.trigger_event(self.PresentationDateUpdated, presentation_date=presentation_date)
+
+    @event(PresentationDateUpdated)
+    def _apply_presentation_date_updated(self, presentation_date: PresentationDate | None) -> None:
+        self.presentation_date = presentation_date
 
     # ============================================================================
     # COMMAND METHOD - Delete Artifact

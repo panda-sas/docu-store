@@ -9,6 +9,7 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from application.dtos.errors import AppError
+from domain.services.bioactivity_reducer import associate_bioactivities
 from domain.value_objects.tag_mention import TagMention
 
 if TYPE_CHECKING:
@@ -79,6 +80,10 @@ class ExtractPageEntitiesUseCase:
                 if entity.text and entity.text.strip()
             ]
 
+            # Associate bioactivity tags with their parent compounds;
+            # orphan bioactivities (no compound link) are discarded.
+            tag_mentions = associate_bioactivities(tag_mentions)
+
             page.update_tag_mentions(tag_mentions)
             self.page_repository.save(page)
 
@@ -107,11 +112,7 @@ class ExtractPageEntitiesUseCase:
             )
 
         except Exception as e:
-            from eventsourcing.application import AggregateNotFoundError  # noqa: PLC0415
-
-            from infrastructure.event_sourced_repositories.page_repository import (  # noqa: PLC0415
-                ConcurrencyError,
-            )
+            from domain.exceptions import AggregateNotFoundError, ConcurrencyError  # noqa: PLC0415
 
             if isinstance(e, AggregateNotFoundError):
                 return Failure(AppError("not_found", str(e)))

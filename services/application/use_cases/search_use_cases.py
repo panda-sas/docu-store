@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import structlog
 from returns.result import Failure, Result, Success
 
+from application.dtos.embedding_dtos import RerankInfoDTO
 from application.dtos.errors import AppError
 from application.dtos.search_dtos import (
     ChunkHit,
@@ -18,14 +19,17 @@ from application.dtos.search_dtos import (
     SummarySearchResultDTO,
 )
 
+from application.ports.reranker import RerankDocument
+
 if TYPE_CHECKING:
     from uuid import UUID
 
     from application.ports.embedding_generator import EmbeddingGenerator
+    from application.ports.reranker import Reranker
     from application.ports.repositories.artifact_read_models import ArtifactReadModel
     from application.ports.repositories.page_read_models import PageReadModel
     from application.ports.summary_vector_store import SummarySearchResult, SummaryVectorStore
-    from application.ports.vector_store import PageSearchResult, VectorStore
+    from application.ports.vector_store import VectorStore
 
 logger = structlog.get_logger()
 
@@ -35,22 +39,47 @@ logger = structlog.get_logger()
 # ---------------------------------------------------------------------------
 
 
-async def _resolve_artifact_title(
+class _ArtifactInfo:
+    """Resolved artifact metadata for enriching search results."""
+
+    __slots__ = ("title", "authors", "presentation_date")
+
+    def __init__(
+        self,
+        title: str | None = None,
+        authors: list[str] | None = None,
+        presentation_date: str | None = None,
+    ) -> None:
+        self.title = title
+        self.authors = authors or []
+        self.presentation_date = presentation_date
+
+
+def _date_to_str(val: object) -> str | None:
+    """Convert a datetime or string date to ISO string."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    if hasattr(val, "isoformat"):
+        return val.isoformat()  # type: ignore[union-attr]
+    return str(val)
+
+
+async def _resolve_artifact_info(
     artifact_id: UUID,
     artifact_read_model: ArtifactReadModel,
     fallback_title: str | None = None,
-) -> str | None:
-    """Return the best-available title for an artifact.
-
-    Uses the existing *fallback_title* when present, otherwise queries the
-    read model.
-    """
-    if fallback_title:
-        return fallback_title
+) -> _ArtifactInfo:
+    """Return title, authors, and date for an artifact."""
     artifact = await artifact_read_model.get_artifact_by_id(artifact_id)
     if artifact:
-        return artifact.title_mention.title if artifact.title_mention else artifact.source_filename
-    return None
+        return _ArtifactInfo(
+            title=artifact.title_mention.title if artifact.title_mention else (fallback_title or artifact.source_filename),
+            authors=[am.name for am in artifact.author_mentions] if artifact.author_mentions else [],
+            presentation_date=_date_to_str(artifact.presentation_date.date) if artifact.presentation_date else None,
+        )
+    return _ArtifactInfo()
 
 
 # ---------------------------------------------------------------------------
@@ -100,11 +129,14 @@ class SearchSummariesUseCase:
                 score_threshold=request.score_threshold,
                 allowed_artifact_ids=allowed_artifact_ids,
                 workspace_id=workspace_id,
+                tags=request.tags,
+                entity_types=request.entity_types_filter,
+                tag_match_mode=request.tag_match_mode,
             )
 
             result_dtos: list[SummarySearchResultDTO] = []
             for h in hits:
-                title = await _resolve_artifact_title(
+                info = await _resolve_artifact_info(
                     h.artifact_id,
                     self.artifact_read_model,
                     h.artifact_title,
@@ -116,7 +148,7 @@ class SearchSummariesUseCase:
                         artifact_id=h.artifact_id,
                         similarity_score=h.score,
                         summary_text=h.summary_text,
-                        artifact_title=title,
+                        artifact_title=info.title,
                         page_index=h.metadata.get("page_index"),
                         metadata=h.metadata,
                     ),
@@ -166,12 +198,14 @@ class HierarchicalSearchUseCase:
         summary_vector_store: SummaryVectorStore,
         page_read_model: PageReadModel,
         artifact_read_model: ArtifactReadModel,
+        reranker: Reranker | None = None,
     ) -> None:
         self.embedding_generator = embedding_generator
         self.vector_store = vector_store
         self.summary_vector_store = summary_vector_store
         self.page_read_model = page_read_model
         self.artifact_read_model = artifact_read_model
+        self.reranker = reranker
 
     async def execute(
         self,
@@ -199,8 +233,9 @@ class HierarchicalSearchUseCase:
             )
 
             chunk_hits: list[ChunkHit] = []
+            chunk_rerank_info: RerankInfoDTO | None = None
             if request.include_chunks:
-                chunk_hits = await self._search_chunks(
+                chunk_hits, chunk_rerank_info = await self._search_chunks(
                     query_embedding,
                     request,
                     allowed_artifact_ids,
@@ -223,6 +258,7 @@ class HierarchicalSearchUseCase:
                     total_summary_hits=len(summary_hits),
                     total_chunk_hits=len(chunk_hits),
                     model_used=str(model_info.get("model_name", "unknown")),
+                    chunk_rerank_info=chunk_rerank_info,
                 ),
             )
 
@@ -252,10 +288,13 @@ class HierarchicalSearchUseCase:
             score_threshold=request.score_threshold,
             allowed_artifact_ids=allowed_artifact_ids,
             workspace_id=workspace_id,
+            tags=request.tags,
+            entity_types=request.entity_types_filter,
+            tag_match_mode=request.tag_match_mode,
         )
         result: list[SummaryHit] = []
         for h in summary_hits_raw:
-            title = await _resolve_artifact_title(
+            info = await _resolve_artifact_info(
                 h.artifact_id,
                 self.artifact_read_model,
                 h.artifact_title,
@@ -267,8 +306,10 @@ class HierarchicalSearchUseCase:
                     artifact_id=h.artifact_id,
                     score=h.score,
                     summary_text=h.summary_text,
-                    artifact_title=title,
+                    artifact_title=info.title,
                     page_index=h.metadata.get("page_index"),
+                    authors=info.authors,
+                    presentation_date=info.presentation_date,
                 ),
             )
         return result
@@ -279,32 +320,73 @@ class HierarchicalSearchUseCase:
         request: HierarchicalSearchRequest,
         allowed_artifact_ids: list[UUID] | None,
         workspace_id: UUID | None,
-    ) -> list[ChunkHit]:
-        """Query the raw chunk collection, deduplicate by page, enrich."""
-        raw_results: list[PageSearchResult] = await self.vector_store.search_similar_pages(
+    ) -> tuple[list[ChunkHit], RerankInfoDTO | None]:
+        """Query the raw chunk collection with server-side dedup, rerank, then enrich."""
+        retrieval_limit = request.limit * 3 if self.reranker else request.limit
+
+        grouped_results = await self.vector_store.search_pages_grouped(
             query_embedding=query_embedding,
-            limit=request.limit * 3,
+            limit=retrieval_limit,
             score_threshold=request.score_threshold,
             allowed_artifact_ids=allowed_artifact_ids,
             workspace_id=workspace_id,
+            tags=request.tags,
+            entity_types=request.entity_types_filter,
+            tag_match_mode=request.tag_match_mode,
         )
 
-        # Deduplicate: keep best chunk per page
-        best_by_page: dict[UUID, tuple[float, int]] = {}
-        for r in raw_results:
-            existing_score, _ = best_by_page.get(r.page_id, (-1.0, 0))
-            if r.score > existing_score:
-                best_by_page[r.page_id] = (r.score, r.page_index)
+        rerank_info: RerankInfoDTO | None = None
+        rerank_scores: dict[str, tuple[float, int]] = {}
 
-        top_pages = sorted(best_by_page.items(), key=lambda x: x[1][0], reverse=True)[
-            : request.limit
-        ]
+        if self.reranker and grouped_results:
+            rerank_docs: list[RerankDocument] = []
+            for r in grouped_results:
+                page = await self.page_read_model.get_page_by_id(r.page_id)
+                text = ""
+                if page and page.text_mention and page.text_mention.text:
+                    text = page.text_mention.text[:2000]
+                if not text.strip():
+                    continue
+                rerank_docs.append(RerankDocument(id=str(r.page_id), text=text))
+
+            reranked = self.reranker.rerank(
+                query=request.query_text,
+                documents=rerank_docs,
+                top_k=request.limit,
+            )
+
+            rerank_scores = {r.id: (r.score, r.original_rank) for r in reranked}
+            rerank_order = {r.id: i for i, r in enumerate(reranked)}
+            grouped_results = sorted(
+                [r for r in grouped_results if str(r.page_id) in rerank_order],
+                key=lambda r: rerank_order[str(r.page_id)],
+            )
+
+            promotions = [r.original_rank - i for i, r in enumerate(reranked)]
+            rerank_info = RerankInfoDTO(
+                reranker_model=self.reranker.model_name
+                if hasattr(self.reranker, "model_name")
+                else "unknown",
+                candidates_before=len(rerank_docs),
+                results_after=len(reranked),
+                top_promotion=max(promotions) if promotions else None,
+            )
+
+            logger.info(
+                "hierarchical_chunk_rerank",
+                candidates=len(rerank_docs),
+                returned=len(reranked),
+                top_promotion=rerank_info.top_promotion,
+            )
 
         chunk_hits: list[ChunkHit] = []
-        for page_id, (score, page_index) in top_pages:
-            artifact_id = next(r.artifact_id for r in raw_results if r.page_id == page_id)
-            chunk_hits.append(await self._enrich_chunk_hit(page_id, artifact_id, page_index, score))
-        return chunk_hits
+        for r in grouped_results:
+            rr_score, rr_original = rerank_scores.get(str(r.page_id), (None, None))
+            hit = await self._enrich_chunk_hit(r.page_id, r.artifact_id, r.page_index, r.score)
+            hit.rerank_score = rr_score
+            hit.original_rank = rr_original
+            chunk_hits.append(hit)
+        return chunk_hits, rerank_info
 
     async def _enrich_chunk_hit(
         self,
@@ -322,7 +404,7 @@ class HierarchicalSearchUseCase:
             if page.text_mention and page.text_mention.text:
                 text_preview = page.text_mention.text[:500]
 
-        artifact_name = await _resolve_artifact_title(artifact_id, self.artifact_read_model)
+        info = await _resolve_artifact_info(artifact_id, self.artifact_read_model)
 
         return ChunkHit(
             page_id=page_id,
@@ -330,6 +412,6 @@ class HierarchicalSearchUseCase:
             page_index=page_index,
             score=score,
             text_preview=text_preview,
-            artifact_name=artifact_name,
+            artifact_name=info.title,
             page_name=page_name,
         )

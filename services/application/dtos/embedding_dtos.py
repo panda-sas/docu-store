@@ -40,6 +40,19 @@ class SearchRequest(BaseModel):
         le=1.0,
         description="Minimum similarity score (0.0 to 1.0)",
     )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Filter by tags (case-insensitive). Matches pages containing these tags.",
+    )
+    entity_types: list[str] | None = Field(
+        default=None,
+        description="Filter by entity types (e.g. 'target', 'compound_name', 'gene_name').",
+    )
+    tag_match_mode: str = Field(
+        default="any",
+        pattern="^(any|all)$",
+        description="'any' = match pages with ANY of the tags, 'all' = must have ALL tags.",
+    )
 
 
 class SearchResultDTO(BaseModel):
@@ -49,6 +62,14 @@ class SearchResultDTO(BaseModel):
     artifact_id: UUID
     page_index: int
     similarity_score: float
+    rerank_score: float | None = Field(
+        default=None,
+        description="Cross-encoder rerank score (if reranking was applied)",
+    )
+    original_rank: int | None = Field(
+        default=None,
+        description="Position before reranking (0-based). Shows how much the result moved.",
+    )
     text_preview: str | None = Field(
         default=None,
         description="Preview of the page text (if available from read model)",
@@ -88,6 +109,26 @@ class ArtifactDetailsDTO(BaseModel):
         None,
         description="Title mention extracted from the artifact",
     )
+    authors: list[str] = Field(
+        default_factory=list,
+        description="Author names extracted from the artifact",
+    )
+    presentation_date: str | None = Field(
+        None,
+        description="Presentation/publication date (ISO format)",
+    )
+
+
+class RerankInfoDTO(BaseModel):
+    """Diagnostics about the reranking step."""
+
+    reranker_model: str
+    candidates_before: int
+    results_after: int
+    top_promotion: int | None = Field(
+        default=None,
+        description="Largest rank jump (e.g. result moved from #15 to #1 = promotion of 14)",
+    )
 
 
 class SearchResponse(BaseModel):
@@ -97,6 +138,10 @@ class SearchResponse(BaseModel):
     results: list[SearchResultDTO]
     total_results: int
     model_used: str
+    rerank_info: RerankInfoDTO | None = Field(
+        default=None,
+        description="Reranking diagnostics (present when reranking was applied)",
+    )
 
 
 # Forward reference resolution

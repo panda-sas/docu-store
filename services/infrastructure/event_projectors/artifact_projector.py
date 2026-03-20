@@ -29,7 +29,9 @@ class ArtifactProjector:
                 "owner_id": str(event.owner_id) if event.owner_id else None,
                 "pages": [],
                 "title_mention": None,
-                "tags": [],
+                "tag_mentions": [],
+                "author_mentions": [],
+                "presentation_date": None,
                 "summary_candidate": None,
             },
             tracking=tracking,  # type: ignore[arg-type]
@@ -73,12 +75,43 @@ class ArtifactProjector:
             tracking=tracking,  # type: ignore[arg-type]
         )
 
-    def tags_updated(self, event: object, tracking: object) -> None:
-        """Project TagsUpdated event to read model."""
+    def tag_mentions_updated(self, event: object, tracking: object) -> None:
+        """Project TagMentionsUpdated event to read model."""
+        tag_mentions_data = [
+            tag_mention.model_dump(mode="json")
+            for tag_mention in event.tag_mentions  # type: ignore[attr-defined]
+        ]
         self._materializer.upsert_artifact(
             artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
             fields={
-                "tags": event.tags,  # type: ignore[attr-defined]
+                "tag_mentions": tag_mentions_data,
+            },
+            tracking=tracking,  # type: ignore[arg-type]
+        )
+
+    def author_mentions_updated(self, event: object, tracking: object) -> None:
+        """Project AuthorMentionsUpdated event to read model."""
+        author_mentions_data = [
+            author_mention.model_dump(mode="json")
+            for author_mention in event.author_mentions  # type: ignore[attr-defined]
+        ]
+        self._materializer.upsert_artifact(
+            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            fields={
+                "author_mentions": author_mentions_data,
+            },
+            tracking=tracking,  # type: ignore[arg-type]
+        )
+
+    def presentation_date_updated(self, event: object, tracking: object) -> None:
+        """Project PresentationDateUpdated event to read model."""
+        presentation_date_data = (
+            event.presentation_date.model_dump(mode="json") if event.presentation_date else None  # type: ignore[attr-defined]
+        )
+        self._materializer.upsert_artifact(
+            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            fields={
+                "presentation_date": presentation_date_data,
             },
             tracking=tracking,  # type: ignore[arg-type]
         )

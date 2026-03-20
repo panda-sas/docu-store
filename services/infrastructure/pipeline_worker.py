@@ -20,6 +20,7 @@ import structlog
 from eventsourcing.application import Application
 from eventsourcing.projection import ApplicationSubscription
 
+from application.use_cases.vector_metadata_use_cases import SyncPageTagsToVectorStoreUseCase
 from application.workflow_use_cases.log_artifcat_sample_use_case import LogArtifactSampleUseCase
 from application.workflow_use_cases.trigger_artifact_summarization_use_case import (
     TriggerArtifactSummarizationUseCase,
@@ -32,6 +33,9 @@ from application.workflow_use_cases.trigger_artifact_tag_aggregation_use_case im
 )
 from application.workflow_use_cases.trigger_compound_extraction_use_case import (
     TriggerCompoundExtractionUseCase,
+)
+from application.workflow_use_cases.trigger_doc_metadata_extraction_use_case import (
+    TriggerDocMetadataExtractionUseCase,
 )
 from application.workflow_use_cases.trigger_embedding_use_case import TriggerEmbeddingUseCase
 from application.workflow_use_cases.trigger_ner_extraction_use_case import (
@@ -85,6 +89,8 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     trigger_artifact_summary_embedding_use_case = container[TriggerArtifactSummaryEmbeddingUseCase]
     trigger_ner_extraction_use_case = container[TriggerNERExtractionUseCase]
     trigger_artifact_tag_aggregation_use_case = container[TriggerArtifactTagAggregationUseCase]
+    trigger_doc_metadata_extraction_use_case = container[TriggerDocMetadataExtractionUseCase]
+    sync_page_tags_use_case = container[SyncPageTagsToVectorStoreUseCase]
 
     # Setup signal handlers
     def handle_signal(signum: int, _frame: object) -> None:
@@ -190,8 +196,13 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                     page_id=domain_event.originator_id,
                                 )
 
+                                # Doc metadata extraction (title, authors, date) — only runs for page 0
+                                await trigger_doc_metadata_extraction_use_case.execute(
+                                    page_id=domain_event.originator_id,
+                                )
+
                                 logger.info(
-                                    "pipeline_embedding_and_ner_workflows_triggered",
+                                    "pipeline_embedding_ner_metadata_workflows_triggered",
                                     page_id=str(domain_event.originator_id),
                                     tracking_id=tracking.notification_id,
                                 )
@@ -228,6 +239,14 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 # Embed this page's summary into the summary_embeddings collection
                                 await trigger_page_summary_embedding_use_case.execute(
                                     page_id=domain_event.originator_id,
+                                )
+
+                                # Re-embed page chunks with full context (title + tags + summary)
+                                # By this point tags and summary are available, so contextual
+                                # embeddings get the complete prefix.
+                                await trigger_embedding_use_case.execute(
+                                    page_id=domain_event.originator_id,
+                                    force_regenerate=True,
                                 )
 
                                 logger.info(
@@ -278,6 +297,11 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 )
 
                                 await trigger_artifact_tag_aggregation_use_case.execute(
+                                    page_id=domain_event.originator_id,
+                                )
+
+                                # Sync tags to Qdrant payloads (page_embeddings + summary_embeddings)
+                                await sync_page_tags_use_case.execute(
                                     page_id=domain_event.originator_id,
                                 )
 

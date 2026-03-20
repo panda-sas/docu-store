@@ -20,5 +20,7 @@ class ArtifactReadModel(ABC):
         skip: int = 0,
         limit: int = 100,
         allowed_artifact_ids: list[UUID] | None = None,
+        sort_by: str = "updated_at",
+        sort_order: int = -1,
     ) -> list[ArtifactResponse]:
         pass

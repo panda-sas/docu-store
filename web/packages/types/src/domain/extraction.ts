@@ -18,9 +18,23 @@ export interface TitleMention extends ExtractionMetadata {
   title: string;
 }
 
+export interface TagSource {
+  page_id: string;
+  page_index: number;
+  confidence: number | null;
+}
+
 export interface TagMention extends ExtractionMetadata {
   tag: string;
   entity_type: string | null;
+  /** Lowercase key for grouping — populated on artifact-level aggregated tags. */
+  tag_normalized: string | null;
+  /** Pages that contributed this tag to the artifact aggregate. */
+  sources: TagSource[] | null;
+  /** Highest confidence across all source pages. */
+  max_confidence: number | null;
+  /** Number of distinct pages where this tag was found. */
+  page_count: number | null;
 }
 
 export interface CompoundMention extends ExtractionMetadata {
@@ -36,10 +50,26 @@ export interface CompoundMention extends ExtractionMetadata {
   extracted_id: string | null;  // Raw ID string as found in the source document
 }
 
+export interface AuthorMention extends ExtractionMetadata {
+  name: string;
+}
+
+export interface PresentationDate extends ExtractionMetadata {
+  date: string;
+  source: string | null;
+}
+
 export interface SummaryCandidate extends ExtractionMetadata {
   summary: string | null;
   is_locked: boolean;
   hil_correction: string | null;
+}
+
+export interface Bioactivity {
+  assay_type: string;
+  value: string;
+  unit: string;
+  raw_text: string;
 }
 
 export interface EmbeddingMetadata {

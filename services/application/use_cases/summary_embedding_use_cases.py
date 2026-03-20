@@ -58,7 +58,7 @@ class EmbedPageSummaryUseCase:
             try:
                 artifact = self.artifact_repository.get_by_id(page.artifact_id)
                 if artifact.title_mention:
-                    artifact_title = artifact.title_mention.text
+                    artifact_title = artifact.title_mention.title
             except AggregateNotFoundError:
                 pass  # Title is optional — embed without it
 
@@ -72,6 +72,12 @@ class EmbedPageSummaryUseCase:
                 artifact_title=artifact_title,
                 page_index=page.index,
                 workspace_id=page.workspace_id,
+                tags=[tm.tag for tm in page.tag_mentions] if page.tag_mentions else None,
+                entity_types=(
+                    sorted({tm.entity_type for tm in page.tag_mentions if tm.entity_type})
+                    if page.tag_mentions
+                    else None
+                ),
             )
 
             logger.info(
@@ -125,7 +131,7 @@ class EmbedArtifactSummaryUseCase:
                 )
 
             summary_text = artifact.summary_candidate.summary
-            artifact_title = artifact.title_mention.text if artifact.title_mention else None
+            artifact_title = artifact.title_mention.title if artifact.title_mention else None
             page_count = len(artifact.pages)
 
             embedding = await self.embedding_generator.generate_text_embedding(text=summary_text)
@@ -137,6 +143,12 @@ class EmbedArtifactSummaryUseCase:
                 artifact_title=artifact_title,
                 page_count=page_count,
                 workspace_id=artifact.workspace_id,
+                tags=[tm.tag for tm in artifact.tag_mentions] if artifact.tag_mentions else None,
+                entity_types=(
+                    sorted({tm.entity_type for tm in artifact.tag_mentions if tm.entity_type})
+                    if artifact.tag_mentions
+                    else None
+                ),
             )
 
             logger.info(

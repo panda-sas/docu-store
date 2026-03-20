@@ -45,7 +45,7 @@ def create_generate_page_embedding_activity(
 
         try:
             page_uuid = UUID(page_id)
-            result = await use_case.execute(page_id=page_uuid, force_regenerate=False)
+            result = await use_case.execute(page_id=page_uuid, force_regenerate=True)
         except Exception as e:
             logger.exception(
                 "generate_page_embedding_activity_exception",

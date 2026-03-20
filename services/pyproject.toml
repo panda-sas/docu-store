@@ -7,7 +7,9 @@ requires-python = ">=3.12"
 dependencies = [
     "sentinel-auth-sdk",
     "confluent-kafka>=2.13.0",
+    "dateparser>=1.2.0",
     "eventsourcing>=9.5.2",
+    "gliner2>=1.2.0",
     "eventsourcing-kurrentdb>=1.2.2",
     "fastapi>=0.128.0",
     "fsspec>=2026.1.0",
@@ -33,16 +35,15 @@ dependencies = [
     "returns>=0.26.0",
     "sentence-transformers>=3.3.0",
     "structflo-cser>=0.2.0",
-    "structflo-ner>=0.1.0",
+    "structflo-ner>=0.3.0",
     "structlog>=25.5.0",
     "temporalio>=1.3.0",
     "torch>=2.5.0",
     "transformers>=5.1.0",
     "uvicorn>=0.40.0",
+    "einops",
 ]
 
-[tool.uv.sources]
-sentinel-auth-sdk = { path = "/Users/sidx/workspace/identity-service/sdk", editable = true }
 
 [tool.ruff]
 line-length = 100

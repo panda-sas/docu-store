@@ -11,6 +11,8 @@ from infrastructure.auth import sentinel
 from infrastructure.config import settings
 from infrastructure.logging import setup_logging
 from interfaces.api.routes.artifact_routes import router as artifact_router
+from interfaces.api.routes.browse_routes import router as browse_router
+from interfaces.api.routes.dashboard_routes import router as dashboard_router
 from interfaces.api.routes.page_routes import router as page_router
 from interfaces.api.routes.search_routes import router as search_router
 from interfaces.api.routes.workspace_routes import router as workspace_router
@@ -50,6 +52,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             summary_vector_store = container[SummaryVectorStore]
             await summary_vector_store.ensure_collection_exists()
             logger.info("qdrant_summary_collection_initialized")
+
+            # Ensure MongoDB browse indexes
+            from application.ports.repositories.tag_browse_read_model import (
+                TagBrowseReadModel,
+            )
+
+            browse_read_model = container[TagBrowseReadModel]
+            await browse_read_model.ensure_browse_indexes()
+            logger.info("mongodb_browse_indexes_initialized")
         except Exception as e:  # noqa: BLE001
             logger.warning("qdrant_initialization_failed", error=str(e))
             # Don't fail startup - embedding features will just be unavailable
@@ -72,7 +83,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS middleware
+    # Sentinel auth middleware — protects all routes except excluded paths
+    # NOTE: Starlette middleware is LIFO — last added runs first.
+    # Sentinel must be added BEFORE CORS so that CORS runs first and adds
+    # Access-Control-Allow-* headers to ALL responses, including 401s.
+    sentinel.protect(app, exclude_paths=["/health", "/docs", "/openapi.json", "/search/health"])
+
+    # CORS middleware — added last so it runs first (wraps everything, including auth errors)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],  # Configure properly for production
@@ -81,11 +98,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Sentinel auth middleware — protects all routes except excluded paths
-    sentinel.protect(app, exclude_paths=["/health", "/docs", "/openapi.json", "/search/health"])
-
     # Include routers
     app.include_router(artifact_router)
+    app.include_router(browse_router)
+    app.include_router(dashboard_router)
     app.include_router(page_router)
     app.include_router(search_router)
     app.include_router(workspace_router)

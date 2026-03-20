@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from application.dtos.embedding_dtos import RerankInfoDTO
+
 
 class SummarySearchRequest(BaseModel):
     """Request to search page/artifact summaries by semantic similarity."""
@@ -24,6 +26,19 @@ class SummarySearchRequest(BaseModel):
         ge=0.0,
         le=1.0,
         description="Minimum cosine similarity score.",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Filter by tags (case-insensitive).",
+    )
+    entity_types_filter: list[str] | None = Field(
+        default=None,
+        description="Filter by NER entity types (e.g. 'target', 'compound_name').",
+    )
+    tag_match_mode: str = Field(
+        default="any",
+        pattern="^(any|all)$",
+        description="'any' = match ANY tag, 'all' = must have ALL tags.",
     )
 
 
@@ -63,6 +78,19 @@ class HierarchicalSearchRequest(BaseModel):
         default=True,
         description="Whether to include raw chunk hits alongside summary hits.",
     )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Filter by tags (case-insensitive).",
+    )
+    entity_types_filter: list[str] | None = Field(
+        default=None,
+        description="Filter by NER entity types (e.g. 'target', 'compound_name').",
+    )
+    tag_match_mode: str = Field(
+        default="any",
+        pattern="^(any|all)$",
+        description="'any' = match ANY tag, 'all' = must have ALL tags.",
+    )
 
 
 class ChunkHit(BaseModel):
@@ -75,6 +103,8 @@ class ChunkHit(BaseModel):
     text_preview: str | None = None
     artifact_name: str | None = None
     page_name: str | None = None
+    rerank_score: float | None = None
+    original_rank: int | None = None
 
 
 class SummaryHit(BaseModel):
@@ -87,6 +117,8 @@ class SummaryHit(BaseModel):
     summary_text: str | None = None
     artifact_title: str | None = None
     page_index: int | None = None
+    authors: list[str] = Field(default_factory=list)
+    presentation_date: str | None = None
 
 
 class HierarchicalSearchResponse(BaseModel):
@@ -98,3 +130,4 @@ class HierarchicalSearchResponse(BaseModel):
     total_summary_hits: int
     total_chunk_hits: int
     model_used: str
+    chunk_rerank_info: RerankInfoDTO | None = None

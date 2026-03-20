@@ -6,7 +6,6 @@ import { AutoComplete } from "primereact/autocomplete";
 import { Button } from "primereact/button";
 import { Dropdown } from "primereact/dropdown";
 import { InputSwitch } from "primereact/inputswitch";
-import { ProgressSpinner } from "primereact/progressspinner";
 import { SelectButton } from "primereact/selectbutton";
 import { Tag } from "primereact/tag";
 import { Toast } from "primereact/toast";
@@ -27,6 +26,8 @@ import {
   useUpdateVisibility,
 } from "@/hooks/use-permissions";
 import { apiClient } from "@docu-store/api-client";
+import { getInitials } from "@/lib/utils";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 const PERMISSION_OPTIONS = [
   { label: "View", value: "view" as const },
@@ -82,6 +83,7 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
         params: { query: { q: event.query, limit: 10 } },
       });
       if (error) throw new Error("Search failed");
+      // Schema type doesn't overlap with Sentinel SDK types — double cast needed
       setMemberSuggestions((data as unknown as WorkspaceMember[]) ?? []);
     } catch {
       setMemberSuggestions([]);
@@ -93,6 +95,7 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
     try {
       const { data, error } = await apiClient.GET("/workspace/groups");
       if (error) throw new Error("Failed to load groups");
+      // Schema type doesn't overlap with Sentinel SDK types — double cast needed
       setGroupOptions((data as unknown as GroupInfo[]) ?? []);
       setGroupsLoaded(true);
     } catch {
@@ -182,12 +185,7 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
   const memberTemplate = (member: WorkspaceMember) => (
     <div className="flex items-center gap-3 py-1">
       <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/10 text-xs font-medium text-accent-text">
-        {member.name
-          .split(" ")
-          .map((n) => n[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase()}
+        {getInitials(member.name)}
       </div>
       <div>
         <p className="text-sm font-medium">{member.name}</p>
@@ -222,7 +220,6 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
         onClick={() => setVisible(true)}
         outlined
         severity="secondary"
-        size="small"
       />
 
       <Dialog
@@ -234,12 +231,7 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
         draggable={false}
       >
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <ProgressSpinner
-              style={{ width: "1.5rem", height: "1.5rem" }}
-              strokeWidth="3"
-            />
-          </div>
+          <LoadingSpinner size="sm" className="flex items-center justify-center py-8" />
         ) : (
           <div className="space-y-6">
             {/* Visibility toggle */}
@@ -351,7 +343,6 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
                     onClick={handleShare}
                     disabled={!hasSelection || shareMutation.isPending}
                     loading={shareMutation.isPending}
-                    size="small"
                   />
                 </div>
               </div>
@@ -369,12 +360,7 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
                 <div className="flex items-center justify-between rounded-lg border border-border-default bg-surface-default px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-xs font-medium text-accent-text">
-                      {(acl.owner_name ?? "?")
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()}
+                      {getInitials(acl.owner_name)}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-text-primary">
@@ -406,12 +392,7 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
                           </div>
                         ) : (
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-border-subtle text-xs font-medium text-text-secondary">
-                            {(share.grantee_name ?? "?")
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")
-                              .slice(0, 2)
-                              .toUpperCase()}
+                            {getInitials(share.grantee_name)}
                           </div>
                         )}
                         <div>
@@ -432,7 +413,6 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
                         <Tag
                           value={share.grantee_type}
                           severity={share.grantee_type === "group" ? "info" : "secondary"}
-                          rounded
                           className="text-xs"
                         />
                         <span className="rounded-md bg-border-subtle px-2 py-0.5 text-xs font-medium text-text-secondary">
@@ -446,7 +426,6 @@ export function ShareDialog({ artifactId, isOwnerOrAdmin }: ShareDialogProps) {
                             severity="danger"
                             text
                             rounded
-                            size="small"
                             aria-label="Revoke access"
                             tooltip="Revoke access"
                             tooltipOptions={{ position: "top" }}

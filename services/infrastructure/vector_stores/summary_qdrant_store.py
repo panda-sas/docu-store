@@ -40,7 +40,7 @@ class SummaryQdrantStore(SummaryVectorStore):
         url: str = "http://localhost:6333",
         api_key: str | None = None,
         collection_name: str = "summary_embeddings",
-        vector_size: int = 384,  # all-MiniLM-L6-v2
+        vector_size: int = 768,  # nomic-embed-text-v1.5
     ) -> None:
         self.url = url
         self.api_key = api_key
@@ -83,6 +83,8 @@ class SummaryQdrantStore(SummaryVectorStore):
                 ("entity_id", models.PayloadSchemaType.KEYWORD),
                 ("artifact_id", models.PayloadSchemaType.KEYWORD),
                 ("workspace_id", models.PayloadSchemaType.KEYWORD),
+                ("tag_normalized", models.PayloadSchemaType.KEYWORD),
+                ("entity_types", models.PayloadSchemaType.KEYWORD),
             ]:
                 await client.create_payload_index(
                     collection_name=self.collection_name,
@@ -113,11 +115,13 @@ class SummaryQdrantStore(SummaryVectorStore):
         artifact_title: str | None = None,
         page_index: int = 0,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
     ) -> None:
         client = await self._get_client()
 
         point_id = _page_point_id(page_id)
-        payload = {
+        payload: dict = {
             "entity_type": "page",
             "entity_id": str(page_id),
             "artifact_id": str(artifact_id),
@@ -129,6 +133,11 @@ class SummaryQdrantStore(SummaryVectorStore):
             "generated_at": embedding.generated_at.isoformat(),
             "workspace_id": str(workspace_id) if workspace_id else None,
         }
+        if tags:
+            payload["tags"] = tags
+            payload["tag_normalized"] = [t.lower() for t in tags]
+        if entity_types:
+            payload["entity_types"] = entity_types
 
         try:
             await client.upsert(
@@ -156,11 +165,13 @@ class SummaryQdrantStore(SummaryVectorStore):
         artifact_title: str | None = None,
         page_count: int = 0,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
     ) -> None:
         client = await self._get_client()
 
         point_id = _artifact_point_id(artifact_id)
-        payload = {
+        payload: dict = {
             "entity_type": "artifact",
             "entity_id": str(artifact_id),
             "artifact_id": str(artifact_id),
@@ -172,6 +183,11 @@ class SummaryQdrantStore(SummaryVectorStore):
             "generated_at": embedding.generated_at.isoformat(),
             "workspace_id": str(workspace_id) if workspace_id else None,
         }
+        if tags:
+            payload["tags"] = tags
+            payload["tag_normalized"] = [t.lower() for t in tags]
+        if entity_types:
+            payload["entity_types"] = entity_types
 
         try:
             await client.upsert(
@@ -220,6 +236,40 @@ class SummaryQdrantStore(SummaryVectorStore):
                 error=str(e),
             )
 
+    def _build_tag_conditions(
+        self,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
+    ) -> list[models.Condition]:
+        """Build Qdrant filter conditions for tag-based filtering."""
+        conditions: list[models.Condition] = []
+        if tags:
+            normalized = [t.lower() for t in tags]
+            if tag_match_mode == "any":
+                conditions.append(
+                    models.FieldCondition(
+                        key="tag_normalized",
+                        match=models.MatchAny(any=normalized),
+                    ),
+                )
+            else:
+                for tag in normalized:
+                    conditions.append(
+                        models.FieldCondition(
+                            key="tag_normalized",
+                            match=models.MatchValue(value=tag),
+                        ),
+                    )
+        if entity_types:
+            conditions.append(
+                models.FieldCondition(
+                    key="entity_types",
+                    match=models.MatchAny(any=entity_types),
+                ),
+            )
+        return conditions
+
     async def search_summaries(  # noqa: PLR0913
         self,
         query_embedding: TextEmbedding,
@@ -229,11 +279,14 @@ class SummaryQdrantStore(SummaryVectorStore):
         score_threshold: float | None = None,
         allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
+        tags: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        tag_match_mode: Literal["any", "all"] = "any",
     ) -> list[SummarySearchResult]:
         client = await self._get_client()
 
         # Build filter conditions
-        must_conditions = []
+        must_conditions: list[models.Condition] = []
         if entity_type_filter:
             must_conditions.append(
                 models.FieldCondition(
@@ -262,6 +315,7 @@ class SummaryQdrantStore(SummaryVectorStore):
                     match=models.MatchValue(value=str(workspace_id)),
                 ),
             )
+        must_conditions.extend(self._build_tag_conditions(tags, entity_types, tag_match_mode))
 
         query_filter = models.Filter(must=must_conditions) if must_conditions else None
 
@@ -320,6 +374,37 @@ class SummaryQdrantStore(SummaryVectorStore):
                 "status": info.status,
                 "vector_size": self.vector_size,
             }
+
+    async def set_summary_payload(
+        self,
+        entity_type: Literal["page", "artifact"],
+        entity_id: UUID,
+        payload: dict,
+    ) -> None:
+        """Patch payload fields on a summary point without re-embedding."""
+        client = await self._get_client()
+        point_id = (
+            _page_point_id(entity_id) if entity_type == "page" else _artifact_point_id(entity_id)
+        )
+        try:
+            await client.set_payload(
+                collection_name=self.collection_name,
+                payload=payload,
+                points=[point_id],
+            )
+            logger.info(
+                "summary_payload_updated",
+                entity_type=entity_type,
+                entity_id=str(entity_id),
+                fields=list(payload.keys()),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "failed_to_set_summary_payload",
+                entity_type=entity_type,
+                entity_id=str(entity_id),
+                error=str(e),
+            )
 
     async def close(self) -> None:
         if self._client:
