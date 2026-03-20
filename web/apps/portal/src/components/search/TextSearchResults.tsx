@@ -1,4 +1,5 @@
 import { SearchResultCard } from "./SearchResultCard";
+import { highlightMatches } from "./highlight-matches";
 import { API_URL } from "@/lib/constants";
 
 interface TextResult {
@@ -10,6 +11,11 @@ interface TextResult {
   original_rank?: number | null;
   text_preview?: string | null;
   artifact_name?: string | null;
+  artifact_details?: {
+    title?: string | null;
+    authors?: string[];
+    presentation_date?: string | null;
+  } | null;
 }
 
 interface RerankInfo {
@@ -45,50 +51,62 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
         </span>
       </div>
 
-      {data.rerank_info && (
-        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs dark:border-blue-800 dark:bg-blue-950">
-          <span className="font-medium text-blue-700 dark:text-blue-300">Reranked</span>
-          <span className="ml-2 text-blue-600 dark:text-blue-400">
-            {data.rerank_info.candidates_before} candidates → {data.rerank_info.results_after} results
-            {data.rerank_info.top_promotion != null && data.rerank_info.top_promotion > 0 && (
-              <> · top result promoted {data.rerank_info.top_promotion} positions</>
-            )}
-            <span className="ml-2 opacity-60">({data.rerank_info.reranker_model})</span>
-          </span>
-        </div>
-      )}
+      {data.rerank_info && console.log("[rerank]", data.rerank_info)}
 
       <div className="space-y-3">
-        {data.results.map((r) => (
-          <SearchResultCard
-            key={`${r.page_id}-${r.similarity_score}`}
-            title={`${r.artifact_name ?? "Untitled"} — Page ${r.page_index}`}
-            href={`/${workspace}/documents/${r.artifact_id}/pages/${r.page_id}`}
-            score={r.similarity_score}
-            preview={r.text_preview}
-            thumbnailSrc={`${API_URL}/artifacts/${r.artifact_id}/pages/${r.page_index}/image`}
-            secondaryLink={{
-              label: "View document",
-              href: `/${workspace}/documents/${r.artifact_id}`,
-            }}
-          >
-            {r.rerank_score != null && (
-              <div className="mt-1.5 flex items-center gap-2 text-xs text-text-muted">
-                <span>vector: {r.similarity_score.toFixed(3)}</span>
-                <span>→ rerank: {r.rerank_score.toFixed(3)}</span>
-                {r.original_rank != null && (
-                  <span className={
-                    r.original_rank > 0
-                      ? "text-green-600 dark:text-green-400"
-                      : "text-text-muted"
-                  }>
-                    {r.original_rank > 0 ? `↑${r.original_rank}` : "—"}
-                  </span>
-                )}
-              </div>
-            )}
-          </SearchResultCard>
-        ))}
+        {data.results.map((r, index) => {
+          const displacement =
+            r.original_rank != null ? r.original_rank - index : null;
+          return (
+            <SearchResultCard
+              key={`${r.page_id}-${r.similarity_score}`}
+              title={`${r.artifact_details?.title ?? r.artifact_name ?? "Untitled"} — Page ${r.page_index + 1}`}
+              href={`/${workspace}/documents/${r.artifact_id}/pages/${r.page_id}`}
+              score={r.similarity_score}
+              preview={r.text_preview ? highlightMatches(r.text_preview, data.query) : undefined}
+              thumbnailSrc={`${API_URL}/artifacts/${r.artifact_id}/pages/${r.page_index}/image`}
+              secondaryLink={{
+                label: "View document",
+                href: `/${workspace}/documents/${r.artifact_id}`,
+              }}
+            >
+              {(r.artifact_details?.authors?.length || r.artifact_details?.presentation_date) && (
+                <div className="mt-1 text-xs text-text-muted">
+                  {r.artifact_details.authors?.length
+                    ? r.artifact_details.authors.join(", ")
+                    : null}
+                  {r.artifact_details.authors?.length && r.artifact_details.presentation_date
+                    ? " · "
+                    : null}
+                  {r.artifact_details.presentation_date
+                    ? new Date(r.artifact_details.presentation_date).getFullYear()
+                    : null}
+                </div>
+              )}
+              {r.rerank_score != null && (
+                <div className="mt-1.5 flex items-center gap-2 text-xs text-text-muted">
+                  <span>vector: {r.similarity_score.toFixed(3)}</span>
+                  <span>→ rerank: {r.rerank_score.toFixed(3)}</span>
+                  {displacement != null && (
+                    <span className={
+                      displacement > 0
+                        ? "text-green-600 dark:text-green-400"
+                        : displacement < 0
+                          ? "text-red-500 dark:text-red-400"
+                          : "text-text-muted"
+                    }>
+                      {displacement > 0
+                        ? `↑${displacement}`
+                        : displacement < 0
+                          ? `↓${Math.abs(displacement)}`
+                          : "—"}
+                    </span>
+                  )}
+                </div>
+              )}
+            </SearchResultCard>
+          );
+        })}
       </div>
     </div>
   );

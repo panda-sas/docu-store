@@ -117,6 +117,8 @@ class SummaryHit(BaseModel):
     summary_text: str | None = None
     artifact_title: str | None = None
     page_index: int | None = None
+    authors: list[str] = Field(default_factory=list)
+    presentation_date: str | None = None
 
 
 class HierarchicalSearchResponse(BaseModel):

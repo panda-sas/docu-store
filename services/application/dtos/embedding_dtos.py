@@ -109,6 +109,14 @@ class ArtifactDetailsDTO(BaseModel):
         None,
         description="Title mention extracted from the artifact",
     )
+    authors: list[str] = Field(
+        default_factory=list,
+        description="Author names extracted from the artifact",
+    )
+    presentation_date: str | None = Field(
+        None,
+        description="Presentation/publication date (ISO format)",
+    )
 
 
 class RerankInfoDTO(BaseModel):

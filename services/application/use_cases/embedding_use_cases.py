@@ -441,6 +441,14 @@ class SearchSimilarPagesUseCase:
                         if artifact.summary_candidate
                         else None,
                         title=artifact.title_mention.title if artifact.title_mention else None,
+                        authors=[am.name for am in artifact.author_mentions]
+                        if artifact.author_mentions
+                        else [],
+                        presentation_date=artifact.presentation_date.date.isoformat()
+                        if artifact.presentation_date and hasattr(artifact.presentation_date.date, "isoformat")
+                        else str(artifact.presentation_date.date)
+                        if artifact.presentation_date
+                        else None,
                     )
 
                 # Attach rerank scores if available

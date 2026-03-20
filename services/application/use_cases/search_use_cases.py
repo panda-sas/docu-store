@@ -39,22 +39,47 @@ logger = structlog.get_logger()
 # ---------------------------------------------------------------------------
 
 
-async def _resolve_artifact_title(
+class _ArtifactInfo:
+    """Resolved artifact metadata for enriching search results."""
+
+    __slots__ = ("title", "authors", "presentation_date")
+
+    def __init__(
+        self,
+        title: str | None = None,
+        authors: list[str] | None = None,
+        presentation_date: str | None = None,
+    ) -> None:
+        self.title = title
+        self.authors = authors or []
+        self.presentation_date = presentation_date
+
+
+def _date_to_str(val: object) -> str | None:
+    """Convert a datetime or string date to ISO string."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    if hasattr(val, "isoformat"):
+        return val.isoformat()  # type: ignore[union-attr]
+    return str(val)
+
+
+async def _resolve_artifact_info(
     artifact_id: UUID,
     artifact_read_model: ArtifactReadModel,
     fallback_title: str | None = None,
-) -> str | None:
-    """Return the best-available title for an artifact.
-
-    Uses the existing *fallback_title* when present, otherwise queries the
-    read model.
-    """
-    if fallback_title:
-        return fallback_title
+) -> _ArtifactInfo:
+    """Return title, authors, and date for an artifact."""
     artifact = await artifact_read_model.get_artifact_by_id(artifact_id)
     if artifact:
-        return artifact.title_mention.title if artifact.title_mention else artifact.source_filename
-    return None
+        return _ArtifactInfo(
+            title=artifact.title_mention.title if artifact.title_mention else (fallback_title or artifact.source_filename),
+            authors=[am.name for am in artifact.author_mentions] if artifact.author_mentions else [],
+            presentation_date=_date_to_str(artifact.presentation_date.date) if artifact.presentation_date else None,
+        )
+    return _ArtifactInfo()
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +136,7 @@ class SearchSummariesUseCase:
 
             result_dtos: list[SummarySearchResultDTO] = []
             for h in hits:
-                title = await _resolve_artifact_title(
+                info = await _resolve_artifact_info(
                     h.artifact_id,
                     self.artifact_read_model,
                     h.artifact_title,
@@ -123,7 +148,7 @@ class SearchSummariesUseCase:
                         artifact_id=h.artifact_id,
                         similarity_score=h.score,
                         summary_text=h.summary_text,
-                        artifact_title=title,
+                        artifact_title=info.title,
                         page_index=h.metadata.get("page_index"),
                         metadata=h.metadata,
                     ),
@@ -269,7 +294,7 @@ class HierarchicalSearchUseCase:
         )
         result: list[SummaryHit] = []
         for h in summary_hits_raw:
-            title = await _resolve_artifact_title(
+            info = await _resolve_artifact_info(
                 h.artifact_id,
                 self.artifact_read_model,
                 h.artifact_title,
@@ -281,8 +306,10 @@ class HierarchicalSearchUseCase:
                     artifact_id=h.artifact_id,
                     score=h.score,
                     summary_text=h.summary_text,
-                    artifact_title=title,
+                    artifact_title=info.title,
                     page_index=h.metadata.get("page_index"),
+                    authors=info.authors,
+                    presentation_date=info.presentation_date,
                 ),
             )
         return result
@@ -377,7 +404,7 @@ class HierarchicalSearchUseCase:
             if page.text_mention and page.text_mention.text:
                 text_preview = page.text_mention.text[:500]
 
-        artifact_name = await _resolve_artifact_title(artifact_id, self.artifact_read_model)
+        info = await _resolve_artifact_info(artifact_id, self.artifact_read_model)
 
         return ChunkHit(
             page_id=page_id,
@@ -385,6 +412,6 @@ class HierarchicalSearchUseCase:
             page_index=page_index,
             score=score,
             text_preview=text_preview,
-            artifact_name=artifact_name,
+            artifact_name=info.title,
             page_name=page_name,
         )
