@@ -11,6 +11,8 @@ import {
   Upload,
   Search,
   ArrowUpRight,
+  X,
+  Trash2,
 } from "lucide-react";
 import { Skeleton } from "primereact/skeleton";
 import { Tag } from "primereact/tag";
@@ -18,12 +20,22 @@ import { Tag } from "primereact/tag";
 import { StatCard } from "@/components/ui/StatCard";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { useDashboard } from "@/hooks/use-dashboard";
+import {
+  useRecentSearches,
+  useRecentDocuments,
+  useDeleteSearchEntry,
+  useClearSearchHistory,
+} from "@/hooks/use-activity";
 import { useSession } from "@/lib/auth";
 import { ARTIFACT_TYPE_LABELS } from "@/lib/constants";
 
 export default function DashboardPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const { stats, recentArtifacts, isLoading } = useDashboard();
+  const { data: recentSearches } = useRecentSearches(5);
+  const { data: recentDocs } = useRecentDocuments(5);
+  const deleteSearch = useDeleteSearchEntry();
+  const clearSearches = useClearSearchHistory();
   const { user } = useSession();
 
   const firstName = user.name?.split(" ")[0] || "there";
@@ -176,63 +188,134 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions — 1/3 width */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-text-primary">
-            Quick Actions
-          </h2>
-          <div className="space-y-3">
-            <Link
-              href={`/${workspace}/documents/upload`}
-              className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-light">
-                <Upload className="h-5 w-5 text-accent-text" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-primary">
-                  Upload Document
-                </p>
-                <p className="text-xs text-text-muted">
-                  PDF, PPTX, DOC, DOCX
-                </p>
-              </div>
-            </Link>
+        {/* Right column — Quick Actions + Activity */}
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-text-primary">
+              Quick Actions
+            </h2>
+            <div className="space-y-3">
+              <Link
+                href={`/${workspace}/documents/upload`}
+                className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-light">
+                  <Upload className="h-5 w-5 text-accent-text" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    Upload Document
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    PDF, PPTX, DOC, DOCX
+                  </p>
+                </div>
+              </Link>
 
-            <Link
-              href={`/${workspace}/search`}
-              className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-feature-search/10">
-                <Search className="h-5 w-5 text-feature-search" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-primary">
-                  Search Documents
-                </p>
-                <p className="text-xs text-text-muted">
-                  Semantic search across all content
-                </p>
-              </div>
-            </Link>
+              <Link
+                href={`/${workspace}/search`}
+                className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-feature-search/10">
+                  <Search className="h-5 w-5 text-feature-search" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    Search Documents
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    Semantic search across all content
+                  </p>
+                </div>
+              </Link>
 
-            <Link
-              href={`/${workspace}/compounds`}
-              className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-feature-compounds/10">
-                <Atom className="h-5 w-5 text-feature-compounds" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-primary">
-                  Browse Compounds
-                </p>
-                <p className="text-xs text-text-muted">
-                  SMILES similarity search
-                </p>
-              </div>
-            </Link>
+              <Link
+                href={`/${workspace}/compounds`}
+                className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-feature-compounds/10">
+                  <Atom className="h-5 w-5 text-feature-compounds" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    Browse Compounds
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    SMILES similarity search
+                  </p>
+                </div>
+              </Link>
+            </div>
           </div>
+
+          {/* Recent Searches */}
+          {recentSearches && recentSearches.length > 0 && (
+            <div className="rounded-xl border border-border-default bg-surface-elevated">
+              <div className="flex items-center justify-between px-5 py-3">
+                <h2 className="text-sm font-semibold text-text-primary">
+                  Recent Searches
+                </h2>
+                <button
+                  onClick={() => clearSearches.mutate()}
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:bg-ds-error/10 hover:text-ds-error"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Clear
+                </button>
+              </div>
+              <div className="border-t border-border-default divide-y divide-border-subtle">
+                {recentSearches.map((entry, i) => (
+                  <div
+                    key={`${entry.query_text}-${i}`}
+                    className="group flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-sunken"
+                  >
+                    <Search className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                    <Link
+                      href={`/${workspace}/search?q=${encodeURIComponent(entry.query_text)}&mode=${entry.search_mode}`}
+                      className="min-w-0 flex-1 truncate text-sm text-text-primary"
+                    >
+                      {entry.query_text}
+                    </Link>
+                    <span className="shrink-0 text-xs text-text-muted">
+                      {entry.search_mode === "hierarchical" ? "deep" : entry.search_mode}
+                    </span>
+                    <button
+                      onClick={() => deleteSearch.mutate(entry.query_text)}
+                      className="shrink-0 rounded p-0.5 text-text-muted opacity-0 transition-all hover:bg-ds-error/10 hover:text-ds-error group-hover:opacity-100"
+                      aria-label={`Remove "${entry.query_text}"`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recently Viewed Documents */}
+          {recentDocs && recentDocs.length > 0 && (
+            <div className="rounded-xl border border-border-default bg-surface-elevated">
+              <div className="px-5 py-3">
+                <h2 className="text-sm font-semibold text-text-primary">
+                  Recently Viewed
+                </h2>
+              </div>
+              <div className="border-t border-border-default divide-y divide-border-subtle">
+                {recentDocs.map((entry) => (
+                  <Link
+                    key={entry.artifact_id}
+                    href={`/${workspace}/documents/${entry.artifact_id}`}
+                    className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-sunken"
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                    <span className="truncate text-sm text-text-primary">
+                      {entry.artifact_title ?? entry.artifact_id.slice(0, 12)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

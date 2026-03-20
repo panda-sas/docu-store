@@ -259,6 +259,19 @@ def create_container() -> Container:  # noqa: PLR0915
     container[TagDictionaryReadModel] = mongo_repository_factory
     container[DashboardReadModel] = mongo_repository_factory
 
+    from application.ports.repositories.user_activity_store import UserActivityStore
+    from application.ports.repositories.user_preferences_store import UserPreferencesStore
+    from infrastructure.read_repositories.mongo_user_store import MongoUserStore
+
+    def user_store_factory(c: object) -> MongoUserStore:
+        return MongoUserStore(
+            client=c[AsyncIOMotorClient],
+            settings=settings,
+        )
+
+    container[UserPreferencesStore] = user_store_factory
+    container[UserActivityStore] = user_store_factory
+
     # Register Pipeline Orchestrator (Temporal)
     container[WorkflowOrchestrator] = lambda _: TemporalWorkflowOrchestrator()
 

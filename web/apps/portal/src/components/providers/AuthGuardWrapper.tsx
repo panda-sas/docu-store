@@ -5,12 +5,20 @@ import { ProgressSpinner } from "primereact/progressspinner";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
+import { usePreferencesSync } from "@/hooks/use-preferences-sync";
+
 function RedirectToLogin() {
   const router = useRouter();
   useEffect(() => {
     router.replace("/login");
   }, [router]);
   return null;
+}
+
+/** Runs hooks that require authentication context. */
+function AuthenticatedShell({ children }: { children: ReactNode }) {
+  usePreferencesSync();
+  return <>{children}</>;
 }
 
 export function AuthGuardWrapper({ children }: { children: ReactNode }) {
@@ -26,7 +34,7 @@ export function AuthGuardWrapper({ children }: { children: ReactNode }) {
         </div>
       }
     >
-      {children}
+      <AuthenticatedShell>{children}</AuthenticatedShell>
     </AuthzGuard>
   );
 }

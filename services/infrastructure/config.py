@@ -69,6 +69,14 @@ class Settings(BaseSettings):
         default="tag_dictionary",
         validation_alias="MONGO_TAG_DICTIONARY_COLLECTION",
     )
+    mongo_user_preferences_collection: str = Field(
+        default="user_preferences",
+        validation_alias="MONGO_USER_PREFERENCES_COLLECTION",
+    )
+    mongo_user_activity_collection: str = Field(
+        default="user_activity",
+        validation_alias="MONGO_USER_ACTIVITY_COLLECTION",
+    )
 
     # Blob Storage
     blob_base_url: str = Field(

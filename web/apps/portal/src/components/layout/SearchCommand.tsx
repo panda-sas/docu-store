@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { Tag } from "primereact/tag";
 import type { SummaryHit, ChunkHit } from "@docu-store/types";
-import { useHierarchicalSearch } from "@/hooks/use-search";
-import { useSearchStore } from "@/lib/stores/search-store";
+import { useHierarchicalSearchMutation } from "@/hooks/use-search";
+import { useRecentSearches } from "@/hooks/use-activity";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 export function SearchCommand() {
@@ -25,7 +25,8 @@ export function SearchCommand() {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const search = useHierarchicalSearch();
+  const search = useHierarchicalSearchMutation();
+  const { data: recentSearches } = useRecentSearches(5);
 
   // Close panel on route change (layout persists across navigations)
   const prevPathname = useRef(pathname);
@@ -92,8 +93,7 @@ export function SearchCommand() {
   };
 
   const handleViewAll = () => {
-    useSearchStore.getState().setPendingQuery(query);
-    router.push(`/${workspace}/search`);
+    router.push(`/${workspace}/search?q=${encodeURIComponent(query)}&mode=hierarchical`);
   };
 
   const handleResultClick = () => {
@@ -156,9 +156,35 @@ export function SearchCommand() {
         </div>
       )}
 
+      {/* Recent searches — shown before user types */}
+      {open && !query && !search.data && recentSearches && recentSearches.length > 0 && (
+        <div className="absolute left-1/2 top-full z-50 mt-2 w-[32rem] -translate-x-1/2 rounded-xl border border-border-default bg-surface-elevated/60 shadow-ds-md backdrop-blur-2xl animate-[fadeSlideDown_150ms_ease-out]">
+          <div className="px-4 py-2 border-b border-border-subtle">
+            <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Recent Searches
+            </span>
+          </div>
+          {recentSearches.map((entry, i) => (
+            <button
+              key={`${entry.query_text}-${i}`}
+              onClick={() => {
+                setQuery(entry.query_text);
+                search.mutate({ query_text: entry.query_text, include_chunks: true, limit: 6 });
+              }}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-sunken"
+            >
+              <Search className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <span className="truncate text-sm text-text-primary">
+                {entry.query_text}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Results dropdown */}
       {open && (hasResults || search.isPending || search.isError) && (
-        <div className="absolute left-1/2 top-full z-50 mt-2 w-[32rem] -translate-x-1/2 rounded-xl border border-border-default bg-surface-elevated shadow-ds-md animate-[fadeSlideDown_150ms_ease-out]">
+        <div className="absolute left-1/2 top-full z-50 mt-2 w-[32rem] -translate-x-1/2 rounded-xl border border-border-default bg-surface-elevated/60 shadow-ds-md backdrop-blur-2xl animate-[fadeSlideDown_150ms_ease-out]">
           {/* Loading */}
           {search.isPending && (
             <LoadingSpinner size="sm" className="flex items-center justify-center py-8" />
@@ -177,7 +203,7 @@ export function SearchCommand() {
               {/* Summary hits */}
               {(search.data!.summary_hits?.length ?? 0) > 0 && (
                 <div>
-                  <div className="sticky top-0 z-10 bg-surface-elevated px-4 py-2 border-b border-border-subtle">
+                  <div className="sticky top-0 z-10 bg-surface-elevated/80 backdrop-blur-md px-4 py-2 border-b border-border-subtle">
                     <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                       Summary Matches
                     </span>
@@ -230,7 +256,7 @@ export function SearchCommand() {
               {/* Chunk hits */}
               {(search.data!.chunk_hits?.length ?? 0) > 0 && (
                 <div>
-                  <div className="sticky top-0 z-10 bg-surface-elevated px-4 py-2 border-b border-border-subtle border-t">
+                  <div className="sticky top-0 z-10 bg-surface-elevated/80 backdrop-blur-md px-4 py-2 border-b border-border-subtle border-t">
                     <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                       Text Matches
                     </span>

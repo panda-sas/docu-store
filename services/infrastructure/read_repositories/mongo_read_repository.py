@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorClient
-
 from application.dtos.artifact_dtos import ArtifactResponse
 from application.dtos.browse_dtos import (
     ArtifactBrowseItemDTO,

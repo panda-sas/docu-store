@@ -49,6 +49,14 @@ export const queryKeys = {
     pipeline: () => [...queryKeys.stats.all, "pipeline"] as const,
     vectors: () => [...queryKeys.stats.all, "vectors"] as const,
   },
+  user: {
+    all: ["user"] as const,
+    preferences: () => [...queryKeys.user.all, "preferences"] as const,
+    activity: {
+      searches: () => [...queryKeys.user.all, "activity", "searches"] as const,
+      documents: () => [...queryKeys.user.all, "activity", "documents"] as const,
+    },
+  },
   browse: {
     all: ["browse"] as const,
     categories: () => [...queryKeys.browse.all, "categories"] as const,
