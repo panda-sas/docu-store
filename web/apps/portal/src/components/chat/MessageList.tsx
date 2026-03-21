@@ -30,10 +30,10 @@ export function MessageList({
       <div className="max-w-4xl mx-auto p-6 space-y-4">
         {[1, 2, 3].map((i) => (
           <div key={i} className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-surface-200 dark:bg-surface-700 animate-pulse flex-shrink-0" />
+            <div className="w-8 h-8 rounded-full bg-border-subtle animate-pulse flex-shrink-0" />
             <div className="flex-1 space-y-2">
-              <div className="h-4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse w-3/4" />
-              <div className="h-4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse w-1/2" />
+              <div className="h-4 bg-border-subtle rounded animate-pulse w-3/4" />
+              <div className="h-4 bg-border-subtle rounded animate-pulse w-1/2" />
             </div>
           </div>
         ))}
@@ -89,7 +89,7 @@ export function MessageList({
       )}
 
       {messages.length === 0 && !isStreaming && (
-        <div className="text-center text-surface-400 dark:text-surface-500 py-12">
+        <div className="text-center text-text-muted py-12">
           <p className="text-lg">Ask a question about your documents</p>
           <p className="text-sm mt-1">
             Your answers will be grounded in uploaded sources with citations.

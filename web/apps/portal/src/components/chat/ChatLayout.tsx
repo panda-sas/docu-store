@@ -24,7 +24,7 @@ export function ChatLayout({ workspace, conversationId }: ChatLayoutProps) {
     <div className="flex h-full overflow-hidden">
       {/* Left: Conversation sidebar */}
       <div
-        className={`border-r border-surface-200 dark:border-surface-700 transition-all duration-200 flex-shrink-0 ${
+        className={`border-r border-border-default transition-all duration-200 flex-shrink-0 ${
           sidebarCollapsed ? "w-0 overflow-hidden" : "w-72"
         }`}
       >
@@ -50,7 +50,7 @@ export function ChatLayout({ workspace, conversationId }: ChatLayoutProps) {
 
       {/* Right: Sources panel */}
       {hasSources && sourcesOpen && (
-        <div className="w-80 border-l border-surface-200 dark:border-surface-700 flex-shrink-0 bg-surface-0 dark:bg-surface-900">
+        <div className="w-80 border-l border-border-default flex-shrink-0 bg-surface">
           <SourcesPanel
             sources={activeSources}
             workspace={workspace}

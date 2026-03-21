@@ -18,7 +18,7 @@ export function DataTableBlock({ headers, rows }: DataTableBlockProps) {
   });
 
   return (
-    <div className="my-3 rounded-lg overflow-hidden border border-surface-200 dark:border-surface-700">
+    <div className="my-3 rounded-lg overflow-hidden border border-border-default">
       <DataTable value={data} size="small" stripedRows scrollable>
         {headers.map((h) => (
           <Column key={h} field={h} header={h} />

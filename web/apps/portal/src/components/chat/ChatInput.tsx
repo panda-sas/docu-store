@@ -36,7 +36,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="border-t border-surface-200 dark:border-surface-700 p-4 bg-surface-0 dark:bg-surface-900">
+    <div className="border-t border-border-default p-4 bg-surface">
       <div className="flex gap-3 items-end max-w-4xl mx-auto">
         <InputTextarea
           ref={textareaRef}
@@ -57,7 +57,7 @@ export function ChatInput({
           aria-label="Send message"
         />
       </div>
-      <p className="text-xs text-surface-400 text-center mt-2">
+      <p className="text-xs text-text-muted text-center mt-2">
         Docu Store AI can make mistakes. Always verify the information it provides with the original documents.
       </p>
     </div>

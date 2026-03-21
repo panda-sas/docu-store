@@ -32,10 +32,10 @@ export function SourcesPanel({ sources, workspace, onClose }: SourcesPanelProps)
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-surface-200 dark:border-surface-700">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-surface-500" />
-          <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
+          <FileText className="w-4 h-4 text-text-muted" />
+          <span className="text-sm font-medium text-text-primary">
             Sources ({sources.length})
           </span>
         </div>
@@ -89,14 +89,14 @@ function SourceArtifactCard({
   const formattedDate = date ? formatDate(date) : null;
 
   return (
-    <div className="rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-800 overflow-hidden">
+    <div className="rounded-lg border border-border-default bg-surface-elevated overflow-hidden">
       {/* Thumbnail + title + metadata */}
       <div className="flex gap-3 p-3">
         <SourceThumbnail src={thumbSrc} href={artifactHref} />
         <div className="min-w-0 flex-1">
           <Link
             href={artifactHref}
-            className="text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline line-clamp-2"
+            className="text-sm font-medium text-accent-text hover:underline line-clamp-2"
           >
             {title}
           </Link>
@@ -104,8 +104,8 @@ function SourceArtifactCard({
           {/* Authors */}
           {authors.length > 0 && (
             <div className="flex items-center gap-1 mt-1">
-              <Users className="w-3 h-3 text-surface-400 flex-shrink-0" />
-              <p className="text-xs text-surface-500 dark:text-surface-400 truncate">
+              <Users className="w-3 h-3 text-text-muted flex-shrink-0" />
+              <p className="text-xs text-text-muted truncate">
                 {authors.join(", ")}
               </p>
             </div>
@@ -114,8 +114,8 @@ function SourceArtifactCard({
           {/* Date */}
           {formattedDate && (
             <div className="flex items-center gap-1 mt-0.5">
-              <Calendar className="w-3 h-3 text-surface-400 flex-shrink-0" />
-              <p className="text-xs text-surface-500 dark:text-surface-400">
+              <Calendar className="w-3 h-3 text-text-muted flex-shrink-0" />
+              <p className="text-xs text-text-muted">
                 {formattedDate}
               </p>
             </div>
@@ -123,7 +123,7 @@ function SourceArtifactCard({
 
           {/* Score */}
           {best.similarity_score != null && (
-            <span className="inline-block mt-1.5 text-[11px] font-mono text-surface-400 dark:text-surface-500">
+            <span className="inline-block mt-1.5 text-[11px] font-mono text-text-muted">
               relevance: {best.similarity_score.toFixed(2)}
             </span>
           )}
@@ -132,10 +132,10 @@ function SourceArtifactCard({
 
       {/* Pages toggle + collapsible rows */}
       {citations.length > 0 && (
-        <div className="border-t border-surface-100 dark:border-surface-700">
+        <div className="border-t border-border-subtle">
           <button
             onClick={() => setPagesExpanded(!pagesExpanded)}
-            className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs text-surface-500 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-750 transition-colors"
+            className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs text-text-muted hover:bg-surface-hover transition-colors"
           >
             {pagesExpanded ? (
               <ChevronDown className="w-3 h-3" />
@@ -176,23 +176,23 @@ function SourcePageRow({
   return (
     <Link
       href={pageHref}
-      className="flex items-start gap-2 px-3 py-2 hover:bg-surface-50 dark:hover:bg-surface-750 transition-colors border-t border-surface-100 dark:border-surface-700"
+      className="flex items-start gap-2 px-3 py-2 hover:bg-surface-hover transition-colors border-t border-border-subtle"
     >
-      <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-semibold text-[10px] flex-shrink-0 mt-0.5">
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-accent-light text-accent-text font-semibold text-[10px] flex-shrink-0 mt-0.5">
         {citation.citation_index}
       </span>
 
       <div className="min-w-0 flex-1">
-        <span className="text-xs font-medium text-surface-700 dark:text-surface-300">
+        <span className="text-xs font-medium text-text-primary">
           {citation.page_name || (citation.page_index != null ? `Page ${citation.page_index + 1}` : "Document")}
         </span>
         {citation.text_excerpt && (
-          <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5 line-clamp-2 leading-relaxed">
+          <p className="text-[11px] text-text-muted mt-0.5 line-clamp-2 leading-relaxed">
             {citation.text_excerpt}
           </p>
         )}
         {devMode && (
-          <div className="flex gap-2 mt-0.5 text-[10px] font-mono text-surface-400">
+          <div className="flex gap-2 mt-0.5 text-[10px] font-mono text-text-muted">
             {citation.similarity_score != null && (
               <span>score: <span className="text-blue-500">{citation.similarity_score.toFixed(3)}</span></span>
             )}
@@ -211,8 +211,8 @@ function SourceThumbnail({ src, href }: { src: string; href: string }) {
 
   if (error) {
     return (
-      <Link href={href} className="flex items-center justify-center w-16 h-20 rounded bg-surface-100 dark:bg-surface-700 flex-shrink-0">
-        <FileText className="w-6 h-6 text-surface-400" />
+      <Link href={href} className="flex items-center justify-center w-16 h-20 rounded bg-surface-elevated flex-shrink-0">
+        <FileText className="w-6 h-6 text-text-muted" />
       </Link>
     );
   }
@@ -225,7 +225,7 @@ function SourceThumbnail({ src, href }: { src: string; href: string }) {
         <img
           src={blobUrl}
           alt=""
-          className="w-16 h-20 rounded-md border border-surface-200 dark:border-surface-700 object-cover object-top"
+          className="w-16 h-20 rounded-md border border-border-default object-cover object-top"
         />
       )}
     </Link>

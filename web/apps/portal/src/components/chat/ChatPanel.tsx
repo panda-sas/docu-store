@@ -107,7 +107,7 @@ export function ChatPanel({
     return (
       <div className="flex flex-col h-full">
         {sidebarCollapsed && (
-          <div className="p-2 border-b border-surface-200 dark:border-surface-700">
+          <div className="p-2 border-b border-border-default">
             <Button
               icon={<PanelLeftOpen className="w-4 h-4" />}
               onClick={onToggleSidebar}
@@ -131,7 +131,7 @@ export function ChatPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-surface-200 dark:border-surface-700">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border-default">
         {sidebarCollapsed && (
           <Button
             icon={<PanelLeftOpen className="w-4 h-4" />}
@@ -140,7 +140,7 @@ export function ChatPanel({
             aria-label="Show sidebar"
           />
         )}
-        <h2 className="text-sm font-medium text-surface-700 dark:text-surface-300 truncate flex-1">
+        <h2 className="text-sm font-medium text-text-primary truncate flex-1">
           {data?.conversation?.title || "Loading..."}
         </h2>
         {/* Sources toggle */}

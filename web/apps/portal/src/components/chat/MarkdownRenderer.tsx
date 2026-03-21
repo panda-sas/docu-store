@@ -17,21 +17,21 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
       components={{
         table: ({ children }) => (
           <div className="overflow-x-auto my-3">
-            <table className="w-full text-sm border-collapse border border-surface-200 dark:border-surface-700">
+            <table className="w-full text-sm border-collapse border border-border-default">
               {children}
             </table>
           </div>
         ),
         thead: ({ children }) => (
-          <thead className="bg-surface-100 dark:bg-surface-800">{children}</thead>
+          <thead className="bg-surface-elevated">{children}</thead>
         ),
         th: ({ children }) => (
-          <th className="px-3 py-2 text-left font-semibold border border-surface-200 dark:border-surface-700">
+          <th className="px-3 py-2 text-left font-semibold border border-border-default">
             {children}
           </th>
         ),
         td: ({ children }) => (
-          <td className="px-3 py-2 border border-surface-200 dark:border-surface-700">
+          <td className="px-3 py-2 border border-border-default">
             {children}
           </td>
         ),
@@ -39,19 +39,19 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           const isInline = !className;
           if (isInline) {
             return (
-              <code className="px-1.5 py-0.5 bg-surface-100 dark:bg-surface-800 rounded text-sm font-mono" {...props}>
+              <code className="px-1.5 py-0.5 bg-surface-elevated rounded text-sm font-mono" {...props}>
                 {children}
               </code>
             );
           }
           return (
-            <code className={`block p-3 bg-surface-900 dark:bg-surface-950 text-surface-100 rounded-lg text-sm font-mono overflow-x-auto ${className ?? ""}`} {...props}>
+            <code className={`block p-3 bg-surface-sunken text-text-inverse rounded-lg text-sm font-mono overflow-x-auto ${className ?? ""}`} {...props}>
               {children}
             </code>
           );
         },
         a: ({ children, href }) => (
-          <a href={href} className="text-primary-600 dark:text-primary-400 hover:underline" target="_blank" rel="noopener noreferrer">
+          <a href={href} className="text-accent-text hover:underline" target="_blank" rel="noopener noreferrer">
             {children}
           </a>
         ),
@@ -99,7 +99,7 @@ function replaceCitationsInText(text: string): ReactNode {
     parts.push(
       <span
         key={`c${match.index}`}
-        className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 mx-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-[10px] font-semibold align-baseline"
+        className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 mx-0.5 rounded bg-accent-light text-accent-text text-[10px] font-semibold align-baseline"
       >
         {idx}
       </span>,

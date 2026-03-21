@@ -9,14 +9,14 @@ interface MoleculeBlockProps {
 
 export function MoleculeBlock({ smiles, label }: MoleculeBlockProps) {
   return (
-    <div className="my-3 p-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-800 inline-block">
+    <div className="my-3 p-3 rounded-lg border border-border-default bg-surface-elevated inline-block">
       <MoleculeStructure smiles={smiles} width={250} height={200} />
       {label && (
-        <p className="text-xs text-surface-500 dark:text-surface-400 mt-1 text-center">
+        <p className="text-xs text-text-muted mt-1 text-center">
           {label}
         </p>
       )}
-      <p className="text-xs font-mono text-surface-400 mt-1 text-center break-all">
+      <p className="text-xs font-mono text-text-muted mt-1 text-center break-all">
         {smiles}
       </p>
     </div>

@@ -15,7 +15,7 @@ export function CitationList({ sources, workspace }: CitationListProps) {
 
   return (
     <div className="mt-3">
-      <p className="text-xs font-medium text-surface-500 dark:text-surface-400 mb-2">
+      <p className="text-xs font-medium text-text-muted mb-2">
         Sources ({sources.length})
       </p>
       <div className="flex flex-wrap gap-2">
@@ -46,23 +46,23 @@ function SourceCard({
     <div className="inline-flex flex-col">
       <a
         href={href}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-800 hover:bg-surface-50 dark:hover:bg-surface-750 transition-colors text-xs group"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-default bg-surface-elevated hover:bg-surface-hover transition-colors text-xs group"
       >
-        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-semibold text-[10px]">
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-accent-light text-accent-text font-semibold text-[10px]">
           {source.citation_index}
         </span>
-        <FileText className="w-3 h-3 text-surface-400" />
-        <span className="text-surface-700 dark:text-surface-300 truncate max-w-[140px]">
+        <FileText className="w-3 h-3 text-text-muted" />
+        <span className="text-text-primary truncate max-w-[140px]">
           {title}
         </span>
         {page && (
-          <span className="text-surface-400 dark:text-surface-500">{"\u00B7"} {page}</span>
+          <span className="text-text-muted">{"\u00B7"} {page}</span>
         )}
-        <ExternalLink className="w-3 h-3 text-surface-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <ExternalLink className="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
       </a>
       {/* Dev-mode: score + excerpt length */}
       {devMode && (
-        <div className="flex gap-2 px-1 mt-0.5 text-[10px] font-mono text-surface-400">
+        <div className="flex gap-2 px-1 mt-0.5 text-[10px] font-mono text-text-muted">
           {source.similarity_score != null && (
             <span>score: <span className="text-blue-500">{source.similarity_score.toFixed(3)}</span></span>
           )}

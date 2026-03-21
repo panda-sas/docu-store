@@ -42,13 +42,14 @@ export function ConversationSidebar({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-3 border-b border-surface-200 dark:border-surface-700">
+      <div className="p-2 border-b border-border-default">
         <Button
           label="New Chat"
+          size="small"
           icon={<Plus className="w-4 h-4 mr-2" />}
           onClick={handleNew}
           loading={createConversation.isPending}
-          className="w-full p-button-sm"
+          className="w-full"
           severity="secondary"
           outlined
         />
@@ -59,11 +60,11 @@ export function ConversationSidebar({
         {isLoading ? (
           <div className="p-4 space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 bg-surface-100 dark:bg-surface-800 rounded animate-pulse" />
+              <div key={i} className="h-12 bg-surface-elevated rounded animate-pulse" />
             ))}
           </div>
         ) : !conversations?.length ? (
-          <div className="p-4 text-center text-surface-500 text-sm">
+          <div className="p-4 text-center text-text-muted text-sm">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p>No conversations yet</p>
           </div>
@@ -107,22 +108,22 @@ function ConversationItem({
       onClick={() => onSelect(conversation.conversation_id)}
       className={`group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
         isActive
-          ? "bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300"
-          : "hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-700 dark:text-surface-300"
+          ? "bg-accent-muted text-accent-text"
+          : "hover:bg-surface-hover text-text-primary"
       }`}
     >
       <MessageSquare className="w-4 h-4 flex-shrink-0 opacity-60" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{title}</p>
-        <p className="text-xs text-surface-500 dark:text-surface-400">
+        <p className="text-xs text-text-muted">
           {date} · {conversation.message_count} msgs
         </p>
       </div>
       <button
         onClick={(e) => onDelete(e, conversation.conversation_id)}
-        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-surface-200 dark:hover:bg-surface-700 transition-opacity"
+        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-surface-hover transition-opacity"
       >
-        <Trash2 className="w-3.5 h-3.5 text-surface-500" />
+        <Trash2 className="w-3.5 h-3.5 text-text-muted" />
       </button>
     </div>
   );
