@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChatMessage as ChatMessageType, AgentStep, SourceCitation } from "@docu-store/types";
+import { useChatStore } from "@/lib/stores/chat-store";
 import { ChatMessage } from "./ChatMessage";
 
 interface MessageListProps {
@@ -22,6 +23,8 @@ export function MessageList({
   streamingSources,
   workspace,
 }: MessageListProps) {
+  const pendingUserMessage = useChatStore((s) => s.pendingUserMessage);
+
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6 space-y-4">
@@ -43,6 +46,24 @@ export function MessageList({
       {messages.map((msg) => (
         <ChatMessage key={msg.message_id} message={msg} workspace={workspace} />
       ))}
+
+      {/* Show user message immediately while agent processes */}
+      {isStreaming && pendingUserMessage && (
+        <ChatMessage
+          message={{
+            conversation_id: "",
+            message_id: "pending-user",
+            role: "user",
+            content: pendingUserMessage,
+            sources: [],
+            agent_trace: null,
+            structured_content: null,
+            token_usage: null,
+            created_at: new Date().toISOString(),
+          }}
+          workspace={workspace}
+        />
+      )}
 
       {/* Streaming assistant message */}
       {isStreaming && (

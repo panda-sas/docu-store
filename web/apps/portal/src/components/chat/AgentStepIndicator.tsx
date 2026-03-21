@@ -21,36 +21,33 @@ export function AgentStepIndicator({ step, durationMs, devMode }: AgentStepIndic
 
   return (
     <div className="flex items-start gap-2 text-xs">
-      {/* Status icon */}
       {step.status === "started" && (
-        <Loader2 className="w-3.5 h-3.5 text-primary-500 animate-spin flex-shrink-0 mt-0.5" />
+        <Loader2 className="w-3.5 h-3.5 text-accent-text animate-spin flex-shrink-0 mt-0.5" />
       )}
       {step.status === "completed" && (
-        <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+        <Check className="w-3.5 h-3.5 text-ds-success flex-shrink-0 mt-0.5" />
       )}
       {step.status === "failed" && (
-        <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+        <AlertCircle className="w-3.5 h-3.5 text-ds-error flex-shrink-0 mt-0.5" />
       )}
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span
             className={`font-medium ${
-              step.status === "started"
-                ? "text-primary-600 dark:text-primary-400"
-                : "text-surface-600 dark:text-surface-400"
+              step.status === "started" ? "text-accent-text" : "text-text-secondary"
             }`}
           >
             {label}
           </span>
           {durationMs != null && (
-            <span className="font-mono text-[10px] text-surface-400">
+            <span className="font-mono text-[10px] text-text-muted">
               {durationMs}ms
             </span>
           )}
         </div>
         {step.output_summary && (
-          <p className={`text-surface-500 dark:text-surface-400 mt-0.5 ${devMode ? "whitespace-pre-wrap break-words" : "truncate"}`}>
+          <p className={`text-text-muted mt-0.5 ${devMode ? "whitespace-pre-wrap break-words" : "truncate"}`}>
             {step.output_summary}
           </p>
         )}

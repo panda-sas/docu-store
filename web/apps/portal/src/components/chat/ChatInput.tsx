@@ -58,7 +58,7 @@ export function ChatInput({
         />
       </div>
       <p className="text-xs text-surface-400 text-center mt-2">
-        Answers are grounded in your uploaded documents. Press Enter to send, Shift+Enter for new line.
+        Docu Store AI can make mistakes. Always verify the information it provides with the original documents.
       </p>
     </div>
   );

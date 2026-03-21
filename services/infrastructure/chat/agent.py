@@ -200,6 +200,13 @@ class ChatAgent:
                     ),
                 )
 
+                # Emit structured grounding result for the frontend
+                yield AgentEvent(
+                    type="grounding_result",
+                    grounding_is_grounded=grounding.is_grounded,
+                    grounding_confidence=grounding.confidence,
+                )
+
                 if _debug:
                     log.info(
                         "chat.debug.agent.verification_done",

@@ -44,6 +44,8 @@ export interface AgentTrace {
   steps: AgentStep[];
   total_duration_ms: number | null;
   retry_count: number;
+  grounding_is_grounded: boolean | null;
+  grounding_confidence: number | null;
 }
 
 // --- Token usage ---
@@ -89,6 +91,7 @@ export interface AgentEvent {
     | "retrieval_results"
     | "token"
     | "structured_block"
+    | "grounding_result"
     | "done"
     | "error";
   step?: string;
@@ -102,4 +105,11 @@ export interface AgentEvent {
   total_tokens?: number;
   duration_ms?: number;
   error_message?: string;
+  grounding_is_grounded?: boolean;
+  grounding_confidence?: number;
+}
+
+export interface GroundingStatus {
+  is_grounded: boolean;
+  confidence: number;
 }

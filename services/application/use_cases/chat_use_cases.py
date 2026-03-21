@@ -201,6 +201,8 @@ class SendMessageUseCase:
         final_sources: list = []
         final_event: AgentEvent | None = None
         trace_steps: dict[str, AgentStepDTO] = {}
+        grounding_is_grounded: bool | None = None
+        grounding_confidence: float | None = None
 
         async for event in self._agent.run(
             message=message,
@@ -222,18 +224,23 @@ class SendMessageUseCase:
                     trace_steps[event.step].status = "completed"
                     trace_steps[event.step].completed_at = datetime.now(UTC)
                     trace_steps[event.step].output_summary = event.output
+            elif event.type == "grounding_result":
+                grounding_is_grounded = event.grounding_is_grounded
+                grounding_confidence = event.grounding_confidence
             elif event.type == "done":
                 final_event = event
                 if event.sources:
                     final_sources = event.sources
             yield event
 
-        # Save assistant response with full step trace
+        # Save assistant response with full step trace + grounding result
         if draft_answer:
             agent_trace = AgentTraceDTO(
                 steps=list(trace_steps.values()),
                 total_duration_ms=final_event.duration_ms if final_event else None,
                 retry_count=0,
+                grounding_is_grounded=grounding_is_grounded,
+                grounding_confidence=grounding_confidence,
             )
 
             assistant_msg = ChatMessageDTO(

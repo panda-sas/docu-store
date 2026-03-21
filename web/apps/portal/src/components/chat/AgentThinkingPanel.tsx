@@ -23,7 +23,7 @@ function getStepDuration(step: AgentStep, streamingTimings: { step: string; dura
 }
 
 export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const devMode = useDevModeStore((s) => s.enabled);
   const { stepTimings, doneEvent, rawEvents } = useChatStore();
   const steps = trace.steps;
@@ -39,7 +39,7 @@ export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelPro
     <div className="mb-2">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 text-xs text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 transition-colors"
+        className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors"
       >
         {expanded ? (
           <ChevronDown className="w-3.5 h-3.5" />
@@ -51,7 +51,7 @@ export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelPro
       </button>
 
       {expanded && (
-        <div className="mt-1.5 ml-2 pl-3 border-l-2 border-surface-200 dark:border-surface-700 space-y-1.5">
+        <div className="mt-1.5 ml-2 pl-3 border-l-2 border-border-subtle space-y-1.5">
           {steps.map((step, i) => (
             <AgentStepIndicator
               key={`${step.step}-${i}`}
@@ -107,20 +107,20 @@ function DevPipelineSummary({
   if (!totalMs && !isStreaming && durations.every((d) => d.ms === null)) return null;
 
   return (
-    <div className="mt-2 ml-2 rounded bg-surface-100 dark:bg-surface-800 px-2 py-1.5 text-[10px] font-mono text-surface-500 dark:text-surface-400 space-y-0.5">
+    <div className="mt-2 ml-2 rounded bg-surface-elevated px-2 py-1.5 text-[10px] font-mono text-text-muted space-y-0.5">
       <div className="flex flex-wrap gap-x-3">
-        <span className="font-semibold text-surface-600 dark:text-surface-300">Pipeline</span>
+        <span className="font-semibold text-text-secondary">Pipeline</span>
         {totalMs != null && (
-          <span>total: <span className="text-blue-500">{totalMs}ms</span></span>
+          <span>total: <span className="text-accent-text">{totalMs}ms</span></span>
         )}
         {totalTokens != null && (
-          <span>tokens: <span className="text-purple-500">{totalTokens}</span></span>
+          <span>tokens: <span className="text-feature-search">{totalTokens}</span></span>
         )}
         {trace.retry_count > 0 && (
-          <span className="text-orange-400">retries: {trace.retry_count}</span>
+          <span className="text-ds-warning">retries: {trace.retry_count}</span>
         )}
         {isStreaming && rawEvents.length > 0 && (
-          <span>events: <span className="text-green-500">{rawEvents.length}</span></span>
+          <span>events: <span className="text-ds-success">{rawEvents.length}</span></span>
         )}
       </div>
       <div className="flex flex-wrap gap-x-3">
@@ -129,10 +129,10 @@ function DevPipelineSummary({
             {d.step}:{" "}
             <span className={
               d.status === "completed"
-                ? "text-green-500"
+                ? "text-ds-success"
                 : d.status === "started"
-                  ? "text-orange-400"
-                  : "text-red-400"
+                  ? "text-ds-warning"
+                  : "text-ds-error"
             }>
               {d.ms != null ? `${d.ms}ms` : d.status === "started" ? "running..." : "—"}
             </span>

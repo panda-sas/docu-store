@@ -9,6 +9,7 @@ import type {
   ChatMessage,
   AgentEvent,
   AgentStep,
+  GroundingStatus,
   SourceCitation,
 } from "@docu-store/types";
 
@@ -77,7 +78,7 @@ export function useSendMessage(conversationId: string | undefined) {
     mutationFn: async (message: string) => {
       if (!conversationId) throw new Error("No conversation selected");
 
-      store.startStreaming();
+      store.startStreaming(message);
 
       const res = await authFetch(`/chat/${conversationId}/messages`, {
         method: "POST",
@@ -115,6 +116,7 @@ interface ChatStoreActions {
   addStep: (step: AgentStep) => void;
   updateStep: (stepName: string, update: Partial<AgentStep>) => void;
   setSources: (sources: SourceCitation[]) => void;
+  setGroundingResult: (result: GroundingStatus) => void;
   recordEvent: (event: AgentEvent) => void;
   setDoneEvent: (event: AgentEvent) => void;
 }
@@ -190,6 +192,15 @@ function handleAgentEvent(
     case "token":
       if (event.delta) {
         store.appendToken(event.delta);
+      }
+      break;
+
+    case "grounding_result":
+      if (event.grounding_is_grounded != null && event.grounding_confidence != null) {
+        store.setGroundingResult({
+          is_grounded: event.grounding_is_grounded,
+          confidence: event.grounding_confidence,
+        });
       }
       break;
 

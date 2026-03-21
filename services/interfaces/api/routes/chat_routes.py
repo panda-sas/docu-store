@@ -166,6 +166,7 @@ def _map_event_type(event_type: str) -> str:
         "retrieval_results": "retrieval_results",
         "token": "token",
         "structured_block": "structured_block",
+        "grounding_result": "grounding_result",
         "done": "done",
         "error": "error",
     }

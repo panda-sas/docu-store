@@ -64,8 +64,26 @@ export function ChatPanel({
     onSourcesChange([]);
   }, [isStreaming, streamingSources, data?.messages, onSourcesChange]);
 
+  // Auto-send queued message after navigating to a new conversation
+  const queuedMessage = useChatStore((s) => s.queuedMessage);
+  const setQueuedMessage = useChatStore((s) => s.setQueuedMessage);
+  const queueSentRef = useRef(false);
+
+  useEffect(() => {
+    if (conversationId && queuedMessage && !isStreaming && !queueSentRef.current) {
+      queueSentRef.current = true;
+      setQueuedMessage(null);
+      sendMessage.mutate(queuedMessage);
+    }
+    if (!queuedMessage) {
+      queueSentRef.current = false;
+    }
+  }, [conversationId, queuedMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSend = async (message: string) => {
     if (!conversationId) {
+      // Queue the message, create conversation, then navigate — message auto-sends on mount
+      setQueuedMessage(message);
       const conv = await createConversation.mutateAsync();
       router.push(`/${workspace}/chat/${conv.conversation_id}`);
       return;

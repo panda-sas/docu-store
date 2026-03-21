@@ -20,6 +20,7 @@ class AgentEvent(BaseModel):
         "retrieval_results",
         "token",
         "structured_block",
+        "grounding_result",
         "done",
         "error",
     ]
@@ -34,6 +35,9 @@ class AgentEvent(BaseModel):
     total_tokens: int | None = None
     duration_ms: int | None = None
     error_message: str | None = None
+    # Grounding verification result (emitted as grounding_result event)
+    grounding_is_grounded: bool | None = None
+    grounding_confidence: float | None = None
 
 
 # --- Source Citations ---
@@ -86,6 +90,8 @@ class AgentTraceDTO(BaseModel):
     steps: list[AgentStepDTO] = Field(default_factory=list)
     total_duration_ms: int | None = None
     retry_count: int = 0
+    grounding_is_grounded: bool | None = None
+    grounding_confidence: float | None = None
 
 
 # --- Token Usage ---

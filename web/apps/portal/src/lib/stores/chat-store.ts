@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { AgentEvent, AgentStep, SourceCitation } from "@docu-store/types";
+import type { AgentEvent, AgentStep, GroundingStatus, SourceCitation } from "@docu-store/types";
 
 interface StepTiming {
   step: string;
@@ -17,17 +17,28 @@ interface ChatState {
   streamingSteps: AgentStep[];
   streamingSources: SourceCitation[];
 
+  // User message shown immediately while agent processes
+  pendingUserMessage: string | null;
+
+  // Grounding verification state
+  groundingResult: GroundingStatus | null;
+
+  // Message queued for send after navigation (new conversation flow)
+  queuedMessage: string | null;
+
   // Dev-mode diagnostics
   stepTimings: StepTiming[];
   rawEvents: AgentEvent[];
   doneEvent: AgentEvent | null;
 
   // Actions
-  startStreaming: () => void;
+  setQueuedMessage: (msg: string | null) => void;
+  startStreaming: (userMessage: string) => void;
   appendToken: (delta: string) => void;
   addStep: (step: AgentStep) => void;
   updateStep: (stepName: string, update: Partial<AgentStep>) => void;
   setSources: (sources: SourceCitation[]) => void;
+  setGroundingResult: (result: GroundingStatus) => void;
   recordEvent: (event: AgentEvent) => void;
   setDoneEvent: (event: AgentEvent) => void;
   finishStreaming: () => void;
@@ -39,16 +50,23 @@ export const useChatStore = create<ChatState>((set) => ({
   streamingContent: "",
   streamingSteps: [],
   streamingSources: [],
+  pendingUserMessage: null,
+  queuedMessage: null,
+  groundingResult: null,
   stepTimings: [],
   rawEvents: [],
   doneEvent: null,
 
-  startStreaming: () =>
+  setQueuedMessage: (msg) => set({ queuedMessage: msg }),
+
+  startStreaming: (userMessage) =>
     set({
       isStreaming: true,
       streamingContent: "",
       streamingSteps: [],
       streamingSources: [],
+      pendingUserMessage: userMessage,
+      groundingResult: null,
       stepTimings: [],
       rawEvents: [],
       doneEvent: null,
@@ -85,6 +103,8 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setSources: (sources) => set({ streamingSources: sources }),
 
+  setGroundingResult: (result) => set({ groundingResult: result }),
+
   recordEvent: (event) =>
     set((state) => ({
       rawEvents: [...state.rawEvents, event],
@@ -92,7 +112,7 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setDoneEvent: (event) => set({ doneEvent: event }),
 
-  finishStreaming: () => set({ isStreaming: false }),
+  finishStreaming: () => set({ isStreaming: false, pendingUserMessage: null }),
 
   reset: () =>
     set({
@@ -100,6 +120,8 @@ export const useChatStore = create<ChatState>((set) => ({
       streamingContent: "",
       streamingSteps: [],
       streamingSources: [],
+      pendingUserMessage: null,
+      groundingResult: null,
       stepTimings: [],
       rawEvents: [],
       doneEvent: null,
