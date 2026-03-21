@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Skeleton } from "primereact/skeleton";
+import { ChevronDown } from "lucide-react";
 
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { highlightMatches } from "./highlight-matches";
-import { getAuthzClient } from "@/lib/authz-client";
+import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { API_URL } from "@/lib/constants";
 
@@ -261,51 +262,24 @@ function buildDocumentGroups(
 }
 
 // ---------------------------------------------------------------------------
-// Authenticated thumbnail (reused from SearchResultCard pattern)
+// Authenticated thumbnail
 // ---------------------------------------------------------------------------
 
 function AuthThumbnail({ src, href }: { src: string; href: string }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let revoke: string | null = null;
-    const headers = getAuthzClient().getHeaders();
-
-    fetch(src, { headers, signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.blob();
-      })
-      .then((blob) => {
-        if (controller.signal.aborted) return;
-        revoke = URL.createObjectURL(blob);
-        setBlobUrl(revoke);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(true);
-      });
-
-    return () => {
-      controller.abort();
-      if (revoke) URL.revokeObjectURL(revoke);
-    };
-  }, [src]);
+  const { blobUrl, error } = useAuthBlobUrl(src);
 
   if (error) return null;
 
   return (
-    <Link href={href} className="relative h-28 w-20 shrink-0 block">
+    <Link href={href} className="relative h-32 w-32 shrink-0 block">
       {!blobUrl && (
-        <Skeleton width="5rem" height="7rem" borderRadius="0.375rem" />
+        <Skeleton width="8rem" height="8rem" borderRadius="0.375rem" />
       )}
       {blobUrl && (
         <img
           src={blobUrl}
           alt=""
-          className="h-28 w-20 rounded-md border border-border-subtle object-cover object-top"
+          className="h-32 w-32 rounded-md border border-border-subtle object-cover object-top"
         />
       )}
     </Link>
@@ -344,7 +318,7 @@ function PageHitRow({
     <div className={`flex items-start gap-3 rounded-lg border border-border-default bg-surface-primary p-3 ${rankClass}`}>
       <div className="relative hidden shrink-0 sm:block">
         <AuthThumbnail
-          src={`${API_URL}/artifacts/${artifactId}/pages/${page.pageIndex}/image`}
+          src={`${API_URL}/artifacts/${artifactId}/pages/${page.pageIndex}/image?size=thumb`}
           href={pageHref}
         />
         <span className="absolute -left-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-text-secondary bg-surface-elevated text-[10px] font-bold text-text-secondary">
@@ -431,99 +405,143 @@ function DocumentGroupCard({
   nextScore: number | null;
   devMode: boolean;
 }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const metaLine = [
+    group.authors.length > 0 ? group.authors.join(", ") : null,
+    group.presentationDate
+      ? new Date(group.presentationDate).getFullYear()
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div className="rounded-xl border border-border-default bg-surface-elevated p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <Link
-          href={`/${workspace}/documents/${group.artifactId}`}
-          className="text-sm font-semibold text-accent-text hover:underline"
-        >
-          {group.artifactTitle || "Untitled Document"}
-        </Link>
-        <ScoreBadge score={group.bestScore} />
-      </div>
-
-      {/* Authors & date */}
-      {(group.authors.length > 0 || group.presentationDate) && (
-        <div className="mt-1 text-xs text-text-muted">
-          {group.authors.length > 0 ? group.authors.join(", ") : null}
-          {group.authors.length > 0 && group.presentationDate ? " · " : null}
-          {group.presentationDate
-            ? new Date(group.presentationDate).getFullYear()
-            : null}
-        </div>
-      )}
-
-      {/* RRF scoring debug — gated by Developer Mode in Settings */}
-      {devMode && (() => {
-        const { k, chunkWeight, summaryWeight } = SCORING_CONFIG;
-        const chunkRRF = group.bestChunkPosition !== null
-          ? chunkWeight / (k + group.bestChunkPosition)
-          : 0;
-        const summaryRRF = group.bestSummaryRank !== null
-          ? summaryWeight / (k + group.bestSummaryRank)
-          : 0;
-        const gap = nextScore !== null ? group.fusionScore - nextScore : null;
-
-        return (
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded bg-surface-primary px-2 py-1 text-[10px] font-mono text-text-muted">
-            <span className="font-semibold text-text-secondary">
-              #{rank + 1}
-            </span>
-            <span>
-              fusion: {group.fusionScore.toFixed(5)}
-            </span>
-            {group.bestChunkPosition !== null && (
-              <span className="text-blue-500">
-                chunk#{group.bestChunkPosition} → {chunkRRF.toFixed(5)}
-              </span>
-            )}
-            {group.bestSummaryRank !== null && (
-              <span className="text-purple-500">
-                summary#{group.bestSummaryRank} → {summaryRRF.toFixed(5)}
-              </span>
-            )}
-            {group.bestChunkPosition !== null && group.bestSummaryRank !== null && (
-              <span className="text-green-500">multi-hit</span>
-            )}
-            {group.bestChunkPosition === null && (
-              <span className="text-orange-400">summary-only</span>
-            )}
-            {group.bestSummaryRank === null && (
-              <span className="text-orange-400">chunk-only</span>
-            )}
-            {gap !== null && (
-              <span className="text-text-muted">
-                gap to #{rank + 2}: +{gap.toFixed(5)}
+      {/* Header — always visible */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/${workspace}/documents/${group.artifactId}`}
+              className="text-sm font-semibold text-accent-text hover:underline"
+            >
+              {group.artifactTitle || "Untitled Document"}
+            </Link>
+            <ScoreBadge score={group.bestScore} />
+            {!expanded && group.pages.length > 0 && (
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] tabular-nums text-text-muted">
+                {group.pages.length} {group.pages.length === 1 ? "page" : "pages"}
               </span>
             )}
           </div>
-        );
-      })()}
-
-      {/* Artifact-level summary */}
-      {group.artifactSummary?.summary_text && (
-        <p className="mt-2 text-sm leading-relaxed text-text-secondary line-clamp-3">
-          {highlightMatches(group.artifactSummary.summary_text, query)}
-        </p>
-      )}
-
-      {/* Page rows */}
-      {group.pages.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {group.pages.map((p, i) => (
-            <PageHitRow
-              key={p.pageId ?? `page-${p.pageIndex}-${i}`}
-              page={p}
-              artifactId={group.artifactId}
-              workspace={workspace}
-              query={query}
-              rank={i}
-              devMode={devMode}
-            />
-          ))}
+          {metaLine && (
+            <p className="mt-0.5 text-xs text-text-muted">{metaLine}</p>
+          )}
+          {/* Collapsed: show best matching context to jog memory */}
+          {!expanded && (() => {
+            const topPage = group.pages[0];
+            const snippets: string[] = [];
+            if (group.artifactSummary?.summary_text)
+              snippets.push(group.artifactSummary.summary_text);
+            if (topPage?.summary?.summary_text)
+              snippets.push(topPage.summary.summary_text);
+            if (topPage?.chunk?.text_preview)
+              snippets.push(topPage.chunk.text_preview);
+            const preview = snippets[0];
+            return preview ? (
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary line-clamp-2">
+                {highlightMatches(preview, query)}
+              </p>
+            ) : null;
+          })()}
         </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-0.5 shrink-0 rounded-md p-1 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
+          aria-label={expanded ? "Collapse" : "Expand"}
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+      </div>
+
+      {/* Expanded content */}
+      {expanded && (
+        <>
+          {/* RRF scoring debug — gated by Developer Mode in Settings */}
+          {devMode && (() => {
+            const { k, chunkWeight, summaryWeight } = SCORING_CONFIG;
+            const chunkRRF = group.bestChunkPosition !== null
+              ? chunkWeight / (k + group.bestChunkPosition)
+              : 0;
+            const summaryRRF = group.bestSummaryRank !== null
+              ? summaryWeight / (k + group.bestSummaryRank)
+              : 0;
+            const gap = nextScore !== null ? group.fusionScore - nextScore : null;
+
+            return (
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded bg-surface-primary px-2 py-1 text-[10px] font-mono text-text-muted">
+                <span className="font-semibold text-text-secondary">
+                  #{rank + 1}
+                </span>
+                <span>
+                  fusion: {group.fusionScore.toFixed(5)}
+                </span>
+                {group.bestChunkPosition !== null && (
+                  <span className="text-blue-500">
+                    chunk#{group.bestChunkPosition} → {chunkRRF.toFixed(5)}
+                  </span>
+                )}
+                {group.bestSummaryRank !== null && (
+                  <span className="text-purple-500">
+                    summary#{group.bestSummaryRank} → {summaryRRF.toFixed(5)}
+                  </span>
+                )}
+                {group.bestChunkPosition !== null && group.bestSummaryRank !== null && (
+                  <span className="text-green-500">multi-hit</span>
+                )}
+                {group.bestChunkPosition === null && (
+                  <span className="text-orange-400">summary-only</span>
+                )}
+                {group.bestSummaryRank === null && (
+                  <span className="text-orange-400">chunk-only</span>
+                )}
+                {gap !== null && (
+                  <span className="text-text-muted">
+                    gap to #{rank + 2}: +{gap.toFixed(5)}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Artifact-level summary */}
+          {group.artifactSummary?.summary_text && (
+            <p className="mt-2 text-sm leading-relaxed text-text-secondary line-clamp-3">
+              {highlightMatches(group.artifactSummary.summary_text, query)}
+            </p>
+          )}
+
+          {/* Page rows */}
+          {group.pages.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {group.pages.map((p, i) => (
+                <PageHitRow
+                  key={p.pageId ?? `page-${p.pageIndex}-${i}`}
+                  page={p}
+                  artifactId={group.artifactId}
+                  workspace={workspace}
+                  query={query}
+                  rank={i}
+                  devMode={devMode}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

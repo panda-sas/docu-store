@@ -194,12 +194,14 @@ export default function SearchPage() {
     }
   };
 
-  const isPending =
-    textSearch.isPending ||
-    summarySearch.isPending ||
-    hierarchicalSearch.isPending;
+  // isFetching = actual network request in progress.
+  // isPending would be wrong here: disabled queries (inactive modes) are permanently "pending".
+  const isFetching =
+    textSearch.isFetching ||
+    summarySearch.isFetching ||
+    hierarchicalSearch.isFetching;
 
-  const isLoading = urlQuery ? isPending : false;
+  const isLoading = urlQuery ? isFetching : false;
 
   const hasResults =
     (urlMode === "text" && textSearch.data) ||
@@ -322,17 +324,17 @@ export default function SearchPage() {
       </div>
 
       {/* Results */}
-      {urlMode === "text" && textSearch.data && !textSearch.isPending && (
+      {urlMode === "text" && textSearch.data && !textSearch.isFetching && (
         <TextSearchResults data={textSearch.data} workspace={workspace} />
       )}
 
-      {urlMode === "summary" && summarySearch.data && !summarySearch.isPending && (
+      {urlMode === "summary" && summarySearch.data && !summarySearch.isFetching && (
         <SummarySearchResults data={summarySearch.data} workspace={workspace} />
       )}
 
       {urlMode === "hierarchical" &&
         hierarchicalSearch.data &&
-        !hierarchicalSearch.isPending && (
+        !hierarchicalSearch.isFetching && (
           <HierarchicalSearchResults
             data={hierarchicalSearch.data}
             workspace={workspace}

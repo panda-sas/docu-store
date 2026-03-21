@@ -8,6 +8,7 @@ sentinel = Sentinel(
     service_key=settings.sentinel_service_key,
     mode="authz",
     idp_jwks_url=settings.sentinel_idp_jwks_url,
+    cache_ttl=settings.sentinel_cache_ttl,
     actions=[
         {"action": "artifacts:create", "description": "Create artifacts"},
         {"action": "artifacts:delete", "description": "Delete artifacts"},
