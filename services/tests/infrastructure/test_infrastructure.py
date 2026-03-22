@@ -55,6 +55,12 @@ class FakeMaterializer:
     def replace_artifact_tags(self, artifact_id: str, tags: list, tracking: object) -> None:
         self.replace_tags_calls.append((artifact_id, tags, tracking))
 
+    def upsert_artifact_and_replace_tags(
+        self, artifact_id: str, fields: dict, tags: list, tracking: object,
+    ) -> None:
+        self.upsert_artifact_calls.append((artifact_id, fields, tracking))
+        self.replace_tags_calls.append((artifact_id, tags, tracking))
+
 
 def _tracking() -> object:
     return SimpleNamespace(notification_id=1)

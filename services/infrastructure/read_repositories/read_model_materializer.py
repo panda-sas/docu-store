@@ -93,6 +93,21 @@ class ReadModelMaterializer(Protocol):
         """
         ...
 
+    def upsert_artifact_and_replace_tags(
+        self,
+        artifact_id: str,
+        fields: dict[str, Any],
+        tags: list[dict[str, str]],
+        tracking: Tracking,
+    ) -> None:
+        """Upsert artifact read model AND replace tag dictionary entries atomically.
+
+        Both operations share a single transaction and tracking record,
+        preventing the IntegrityError that occurs when they use separate
+        transactions with the same tracking ID.
+        """
+        ...
+
     def add_to_artifact_array(
         self,
         artifact_id: str,

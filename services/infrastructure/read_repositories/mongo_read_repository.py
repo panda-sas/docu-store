@@ -261,7 +261,6 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         pipeline.append({
             "$group": {
                 "_id": "$entity_type",
-                "artifact_ids": {"$addToSet": {"$arrayElemAt": ["$artifact_ids", 0]}},
                 "all_artifact_ids": {"$push": "$artifact_ids"},
                 "distinct_count": {"$sum": 1},
             },

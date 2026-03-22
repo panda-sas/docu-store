@@ -72,78 +72,58 @@ class ArtifactProjector:
         )
 
     def tag_mentions_updated(self, event: object, tracking: object) -> None:
-        """Project TagMentionsUpdated event to read model."""
+        """Project TagMentionsUpdated event to read model and tag dictionary.
+
+        Uses a combined transaction to avoid duplicate-tracking IntegrityError
+        that previously caused the tag_dictionary write to be silently skipped.
+        """
         tag_mentions_data = [
             tag_mention.model_dump(mode="json")
             for tag_mention in event.tag_mentions  # type: ignore[attr-defined]
         ]
-        self._materializer.upsert_artifact(
-            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
-            fields={
-                "tag_mentions": tag_mentions_data,
-            },
-            tracking=tracking,  # type: ignore[arg-type]
-        )
-
-        # Project to tag dictionary
         tags = [
             {"tag": tm.tag, "tag_normalized": tm.tag.lower(), "entity_type": tm.entity_type}
             for tm in event.tag_mentions  # type: ignore[attr-defined]
         ]
-        self._materializer.replace_artifact_tags(
+        self._materializer.upsert_artifact_and_replace_tags(
             artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            fields={"tag_mentions": tag_mentions_data},
             tags=tags,
             tracking=tracking,  # type: ignore[arg-type]
         )
 
     def author_mentions_updated(self, event: object, tracking: object) -> None:
-        """Project AuthorMentionsUpdated event to read model."""
+        """Project AuthorMentionsUpdated event to read model and tag dictionary."""
         author_mentions_data = [
             author_mention.model_dump(mode="json")
             for author_mention in event.author_mentions  # type: ignore[attr-defined]
         ]
-        self._materializer.upsert_artifact(
-            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
-            fields={
-                "author_mentions": author_mentions_data,
-            },
-            tracking=tracking,  # type: ignore[arg-type]
-        )
-
-        # Project authors to tag dictionary
         tags = [
             {"tag": am.name, "tag_normalized": am.name.lower(), "entity_type": "author"}
             for am in event.author_mentions  # type: ignore[attr-defined]
         ]
-        self._materializer.replace_artifact_tags(
+        self._materializer.upsert_artifact_and_replace_tags(
             artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            fields={"author_mentions": author_mentions_data},
             tags=tags,
             tracking=tracking,  # type: ignore[arg-type]
         )
 
     def presentation_date_updated(self, event: object, tracking: object) -> None:
-        """Project PresentationDateUpdated event to read model."""
+        """Project PresentationDateUpdated event to read model and tag dictionary."""
         presentation_date_data = (
             event.presentation_date.model_dump(mode="json") if event.presentation_date else None  # type: ignore[attr-defined]
-        )
-        self._materializer.upsert_artifact(
-            artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
-            fields={
-                "presentation_date": presentation_date_data,
-            },
-            tracking=tracking,  # type: ignore[arg-type]
         )
 
         # Project date year to tag dictionary
         if event.presentation_date and event.presentation_date.date:  # type: ignore[attr-defined]
-            from datetime import datetime as dt  # noqa: PLC0415
-
-            year = dt.fromisoformat(event.presentation_date.date).year  # type: ignore[attr-defined]
+            year = event.presentation_date.date.year  # type: ignore[attr-defined]
             tags = [{"tag": str(year), "tag_normalized": str(year), "entity_type": "date"}]
         else:
             tags = []
-        self._materializer.replace_artifact_tags(
+        self._materializer.upsert_artifact_and_replace_tags(
             artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
+            fields={"presentation_date": presentation_date_data},
             tags=tags,
             tracking=tracking,  # type: ignore[arg-type]
         )

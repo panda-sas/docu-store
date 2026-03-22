@@ -23,7 +23,7 @@ function getStepDuration(step: AgentStep, streamingTimings: { step: string; dura
 }
 
 export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const devMode = useDevModeStore((s) => s.enabled);
   const { stepTimings, doneEvent, rawEvents } = useChatStore();
   const steps = trace.steps;
@@ -32,8 +32,8 @@ export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelPro
   const completedCount = steps.filter((s) => s.status === "completed").length;
   const totalMs = trace.total_duration_ms;
   const label = isStreaming
-    ? `Agent thinking (${completedCount}/${steps.length} steps)...`
-    : `Agent trace (${completedCount} steps${totalMs ? `, ${(totalMs / 1000).toFixed(1)}s` : ""})`;
+    ? `Thinking (${completedCount}/${steps.length} steps)...`
+    : `Thinking history (${completedCount} steps${totalMs ? `, ${(totalMs / 1000).toFixed(1)}s` : ""})`;
 
   return (
     <div className="mb-2">
