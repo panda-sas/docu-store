@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from infrastructure.chat.models import GroundingResult
+from infrastructure.chat.utils import CITATION_RE, strip_markdown_fences
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
@@ -21,8 +22,6 @@ if TYPE_CHECKING:
     from infrastructure.chat.models import ContextMetadata, QueryPlan
 
 log = structlog.get_logger(__name__)
-
-_CITATION_RE = re.compile(r"\[(\d{1,2})\]")
 
 # Heuristic: sentences that are likely factual claims (contain numbers, units, names)
 _FACTUAL_INDICATORS = re.compile(
@@ -114,7 +113,7 @@ class InlineVerificationNode:
                 continue
 
             is_factual = bool(_FACTUAL_INDICATORS.search(sentence))
-            has_citation = bool(_CITATION_RE.search(sentence))
+            has_citation = bool(CITATION_RE.search(sentence))
 
             if is_factual:
                 factual_sentences += 1
@@ -164,12 +163,7 @@ class InlineVerificationNode:
 
             raw = await self._llm.complete(prompt)
 
-            cleaned = raw.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                cleaned = cleaned.strip()
+            cleaned = strip_markdown_fences(raw)
 
             data = json.loads(cleaned)
             result = GroundingResult(**data)

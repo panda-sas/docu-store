@@ -26,7 +26,11 @@ class TriggerDocMetadataExtractionUseCase:
         self.page_repository = page_repository
         self.workflow_orchestrator = workflow_orchestrator
 
-    async def execute(self, page_id: UUID) -> WorkflowStartedResponse | None:
+    async def execute(
+        self,
+        page_id: UUID,
+        artifact_id: UUID | None = None,
+    ) -> WorkflowStartedResponse | None:
         page = self.page_repository.get_by_id(page_id)
 
         # Only extract metadata from the first page (cover/title page)
@@ -38,17 +42,17 @@ class TriggerDocMetadataExtractionUseCase:
             )
             return None
 
-        artifact_id = page.artifact_id
-        workflow_id = f"doc-metadata-{artifact_id}"
+        resolved_artifact_id = artifact_id or page.artifact_id
+        workflow_id = f"doc-metadata-{resolved_artifact_id}"
 
         await self.workflow_orchestrator.start_doc_metadata_extraction_workflow(
-            artifact_id=artifact_id,
+            artifact_id=resolved_artifact_id,
             page_id=page_id,
         )
 
         logger.info(
             "trigger_doc_metadata.workflow_started",
             page_id=str(page_id),
-            artifact_id=str(artifact_id),
+            artifact_id=str(resolved_artifact_id),
         )
         return WorkflowStartedResponse(workflow_id=workflow_id)

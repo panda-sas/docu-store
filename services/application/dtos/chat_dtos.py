@@ -140,29 +140,3 @@ class ConversationDetailDTO(ConversationDTO):
     """Conversation with its messages."""
 
     messages: list[ChatMessageDTO] = Field(default_factory=list)
-
-
-# --- Requests ---
-
-class CreateConversationRequest(BaseModel):
-    """Request to create a new conversation."""
-
-    title: str | None = None
-
-
-class SendMessageRequest(BaseModel):
-    """Request to send a message in a conversation."""
-
-    message: str = Field(..., min_length=1, max_length=10000)
-    mode: Literal["quick", "thinking"] | None = Field(
-        default=None,
-        description="Pipeline mode. 'quick' = fast 4-step, 'thinking' = advanced 5-stage. None = server default.",
-    )
-
-
-class ListConversationsRequest(BaseModel):
-    """Request to list conversations."""
-
-    skip: int = Field(default=0, ge=0)
-    limit: int = Field(default=20, ge=1, le=100)
-    is_archived: bool = False

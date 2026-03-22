@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { type ReactNode } from "react";
-import { Skeleton } from "primereact/skeleton";
 
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { EntityTypeBadge } from "@/components/ui/EntityTypeBadge";
-import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
+import { AuthThumbnail } from "@/components/ui/TableThumbnail";
 
 interface SearchResultCardProps {
   title: string;
@@ -16,27 +15,6 @@ interface SearchResultCardProps {
   /** URL to a page thumbnail image (lazy-loaded with auth) */
   thumbnailSrc?: string;
   children?: ReactNode;
-}
-
-function AuthThumbnail({ src, href }: { src: string; href: string }) {
-  const { blobUrl, error } = useAuthBlobUrl(src);
-
-  if (error) return null;
-
-  return (
-    <Link href={href} className="relative hidden h-32 w-32 shrink-0 sm:block">
-      {!blobUrl && (
-        <Skeleton width="8rem" height="8rem" borderRadius="0.375rem" />
-      )}
-      {blobUrl && (
-        <img
-          src={blobUrl}
-          alt=""
-          className="h-32 w-32 rounded-md border border-border-subtle object-cover object-top"
-        />
-      )}
-    </Link>
-  );
 }
 
 export function SearchResultCard({
@@ -54,7 +32,7 @@ export function SearchResultCard({
       <div className="flex items-start gap-4">
         {/* Thumbnail with auth */}
         {thumbnailSrc && (
-          <AuthThumbnail src={thumbnailSrc} href={href} />
+          <AuthThumbnail src={thumbnailSrc} href={href} className="hidden sm:block" />
         )}
 
         {/* Content */}

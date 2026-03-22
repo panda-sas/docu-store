@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
 from lagom import Container
-from returns.result import Failure
+from pydantic import BaseModel, Field
 from sentinel_auth import RequestAuth
 
 from application.dtos.chat_dtos import (
+    ConversationDetailDTO,
     ConversationDTO,
-    CreateConversationRequest,
-    ListConversationsRequest,
-    SendMessageRequest,
 )
 from application.use_cases.chat_use_cases import (
     CreateConversationUseCase,
@@ -33,6 +31,22 @@ from interfaces.dependencies import get_auth, get_container
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+class CreateConversationRequest(BaseModel):
+    """Request to create a new conversation."""
+
+    title: str | None = None
+
+
+class SendMessageRequest(BaseModel):
+    """Request to send a message in a conversation."""
+
+    message: str = Field(..., min_length=1, max_length=10000)
+    mode: Literal["quick", "thinking"] | None = Field(
+        default=None,
+        description="Pipeline mode. 'quick' = fast 4-step, 'thinking' = advanced 5-stage. None = server default.",
+    )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -79,7 +93,7 @@ async def get_conversation(
     auth: Annotated[RequestAuth, Depends(get_auth)],
     skip: int = 0,
     limit: int = 100,
-) -> dict:
+) -> ConversationDetailDTO:
     """Get a conversation with its messages."""
     use_case = container[GetConversationUseCase]
     return await use_case.execute(
@@ -91,6 +105,7 @@ async def get_conversation(
 
 
 @router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+@handle_use_case_errors
 async def delete_conversation(
     conversation_id: UUID,
     container: Annotated[Container, Depends(get_container)],
@@ -98,15 +113,10 @@ async def delete_conversation(
 ) -> None:
     """Delete a conversation and all its messages."""
     use_case = container[DeleteConversationUseCase]
-    result = await use_case.execute(
+    return await use_case.execute(
         conversation_id=conversation_id,
         workspace_id=auth.workspace_id,
     )
-    if isinstance(result, Failure):
-        error = result.failure()
-        if error.category == "not_found":
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        raise HTTPException(status_code=500, detail="Failed to delete conversation")
 
 
 @router.post("/{conversation_id}/messages", status_code=status.HTTP_200_OK)

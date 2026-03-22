@@ -1,7 +1,8 @@
-"""Temporal worker process.
+"""Temporal worker process for CPU/IO-bound workflows.
 
-Runs the Temporal worker that executes workflows and activities.
-This is the process that actually performs the work defined in workflows/activities.
+Handles embedding, compound extraction, SMILES embedding, summary embedding,
+tag aggregation, and batch re-embedding. LLM-bound workflows (summarization,
+NER, document metadata) run on a separate worker — see llm_worker.py.
 
 Start with: python -m infrastructure.temporal.worker
 """
@@ -18,13 +19,7 @@ from application.use_cases.aggregate_artifact_tags_use_case import AggregateArti
 from application.use_cases.batch_reembed_use_cases import BatchReEmbedArtifactPagesUseCase
 from application.use_cases.compound_use_cases import ExtractCompoundMentionsUseCase
 from application.use_cases.embedding_use_cases import GeneratePageEmbeddingUseCase
-from application.use_cases.extract_document_metadata_use_case import ExtractDocumentMetadataUseCase
-from application.use_cases.extract_page_entities_use_case import ExtractPageEntitiesUseCase
 from application.use_cases.smiles_embedding_use_cases import EmbedCompoundSmilesUseCase
-from application.use_cases.summarization_use_cases import (
-    SummarizeArtifactUseCase,
-    SummarizePageUseCase,
-)
 from application.use_cases.summary_embedding_use_cases import (
     EmbedArtifactSummaryUseCase,
     EmbedPageSummaryUseCase,
@@ -36,17 +31,11 @@ from infrastructure.temporal.activities.artifact_activities import (
     log_mime_type_activity,
     log_storage_location_activity,
 )
-from infrastructure.temporal.activities.artifact_summarization_activities import (
-    create_summarize_artifact_activity,
-)
 from infrastructure.temporal.activities.batch_reembed_activities import (
     create_batch_reembed_artifact_pages_activity,
 )
 from infrastructure.temporal.activities.compound_activities import (
     create_extract_compound_mentions_activity,
-)
-from infrastructure.temporal.activities.document_metadata_activities import (
-    create_extract_document_metadata_activity,
 )
 from infrastructure.temporal.activities.embedding_activities import (
     create_generate_page_embedding_activity,
@@ -54,13 +43,9 @@ from infrastructure.temporal.activities.embedding_activities import (
 )
 from infrastructure.temporal.activities.ner_activities import (
     create_aggregate_artifact_tags_activity,
-    create_extract_page_entities_activity,
 )
 from infrastructure.temporal.activities.smiles_embedding_activities import (
     create_embed_compound_smiles_activity,
-)
-from infrastructure.temporal.activities.summarization_activities import (
-    create_summarize_page_activity,
 )
 from infrastructure.temporal.activities.summary_embedding_activities import (
     create_embed_artifact_summary_activity,
@@ -70,20 +55,12 @@ from infrastructure.temporal.workflows.artifact_processing import ProcessArtifac
 from infrastructure.temporal.workflows.batch_reembed_workflow import (
     BatchReEmbedArtifactPagesWorkflow,
 )
-from infrastructure.temporal.workflows.artifact_summarization_workflow import (
-    ArtifactSummarizationWorkflow,
-)
 from infrastructure.temporal.workflows.compound_workflow import ExtractCompoundMentionsWorkflow
-from infrastructure.temporal.workflows.document_metadata_workflow import (
-    DocumentMetadataExtractionWorkflow,
-)
 from infrastructure.temporal.workflows.embedding_workflow import GeneratePageEmbeddingWorkflow
 from infrastructure.temporal.workflows.ner_workflow import (
     ArtifactTagAggregationWorkflow,
-    NERExtractionWorkflow,
 )
 from infrastructure.temporal.workflows.smiles_embedding_workflow import EmbedCompoundSmilesWorkflow
-from infrastructure.temporal.workflows.summarization_workflow import PageSummarizationWorkflow
 from infrastructure.temporal.workflows.summary_embedding_workflow import (
     ArtifactSummaryEmbeddingWorkflow,
     PageSummaryEmbeddingWorkflow,
@@ -123,13 +100,9 @@ async def run() -> None:
     generate_embedding_use_case = container[GeneratePageEmbeddingUseCase]
     extract_compound_mentions_use_case = container[ExtractCompoundMentionsUseCase]
     embed_compound_smiles_use_case = container[EmbedCompoundSmilesUseCase]
-    summarize_page_use_case = container[SummarizePageUseCase]
-    summarize_artifact_use_case = container[SummarizeArtifactUseCase]
     embed_page_summary_use_case = container[EmbedPageSummaryUseCase]
     embed_artifact_summary_use_case = container[EmbedArtifactSummaryUseCase]
-    extract_page_entities_use_case = container[ExtractPageEntitiesUseCase]
     aggregate_artifact_tags_use_case = container[AggregateArtifactTagsUseCase]
-    extract_document_metadata_use_case = container[ExtractDocumentMetadataUseCase]
     batch_reembed_use_case = container[BatchReEmbedArtifactPagesUseCase]
 
     # Create activities with dependencies injected
@@ -142,26 +115,14 @@ async def run() -> None:
     embed_compound_smiles_activity = create_embed_compound_smiles_activity(
         use_case=embed_compound_smiles_use_case,
     )
-    summarize_page_activity = create_summarize_page_activity(
-        use_case=summarize_page_use_case,
-    )
-    summarize_artifact_activity = create_summarize_artifact_activity(
-        use_case=summarize_artifact_use_case,
-    )
     embed_page_summary_activity = create_embed_page_summary_activity(
         use_case=embed_page_summary_use_case,
     )
     embed_artifact_summary_activity = create_embed_artifact_summary_activity(
         use_case=embed_artifact_summary_use_case,
     )
-    extract_page_entities_activity = create_extract_page_entities_activity(
-        use_case=extract_page_entities_use_case,
-    )
     aggregate_artifact_tags_activity = create_aggregate_artifact_tags_activity(
         use_case=aggregate_artifact_tags_use_case,
-    )
-    extract_document_metadata_activity = create_extract_document_metadata_activity(
-        use_case=extract_document_metadata_use_case,
     )
     batch_reembed_activity = create_batch_reembed_artifact_pages_activity(
         use_case=batch_reembed_use_case,
@@ -177,13 +138,9 @@ async def run() -> None:
             GeneratePageEmbeddingWorkflow,
             ExtractCompoundMentionsWorkflow,
             EmbedCompoundSmilesWorkflow,
-            PageSummarizationWorkflow,
-            ArtifactSummarizationWorkflow,
             PageSummaryEmbeddingWorkflow,
             ArtifactSummaryEmbeddingWorkflow,
-            NERExtractionWorkflow,
             ArtifactTagAggregationWorkflow,
-            DocumentMetadataExtractionWorkflow,
             BatchReEmbedArtifactPagesWorkflow,
         ],
         activities=[
@@ -193,13 +150,9 @@ async def run() -> None:
             log_embedding_generated_activity,
             extract_compound_mentions_activity,
             embed_compound_smiles_activity,
-            summarize_page_activity,
-            summarize_artifact_activity,
             embed_page_summary_activity,
             embed_artifact_summary_activity,
-            extract_page_entities_activity,
             aggregate_artifact_tags_activity,
-            extract_document_metadata_activity,
             batch_reembed_activity,
         ],
         max_concurrent_activities=settings.temporal_max_concurrent_activities,

@@ -1,0 +1,31 @@
+{
+  "name": "@docu-store/cli",
+  "version": "0.1.0",
+  "description": "CLI client for docu-store — login and upload documents",
+  "type": "module",
+  "bin": {
+    "docu": "./bin/docu.mjs"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "dependencies": {
+    "commander": "^13.0.0",
+    "open": "^10.0.0",
+    "ora": "^8.0.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0"
+  }
+}

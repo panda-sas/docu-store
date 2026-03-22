@@ -1,3 +1,17 @@
+import type { WorkflowMap } from "@docu-store/types";
+
+/**
+ * Polls every 3s while any workflow is RUNNING; stops once all settle.
+ * Shared between useArtifactWorkflows and usePageWorkflows.
+ */
+export function workflowPollingInterval(query: { state: { data: unknown } }): number | false {
+  const workflows = (query.state.data as WorkflowMap | undefined)?.workflows;
+  const hasRunning = workflows
+    ? Object.values(workflows).some((w) => w.status === "RUNNING")
+    : false;
+  return hasRunning ? 3000 : false;
+}
+
 /**
  * Centralized TanStack Query key factory.
  *
@@ -33,10 +47,13 @@ export const queryKeys = {
       ["plugins", plugin, "enrichments", pageId] as const,
   },
   search: {
-    text: (query: string) => ["search", "text", query] as const,
-    summary: (query: string) => ["search", "summary", query] as const,
-    hierarchical: (query: string) =>
-      ["search", "hierarchical", query] as const,
+    all: ["search"] as const,
+    text: (query: string, tags?: string[], tagMatchMode?: string) =>
+      ["search", "text", query, tags, tagMatchMode] as const,
+    summary: (query: string, tags?: string[], tagMatchMode?: string) =>
+      ["search", "summary", query, tags, tagMatchMode] as const,
+    hierarchical: (query: string, tags?: string[], tagMatchMode?: string) =>
+      ["search", "hierarchical", query, tags, tagMatchMode] as const,
     compound: (smiles: string) => ["search", "compound", smiles] as const,
   },
   dashboard: {

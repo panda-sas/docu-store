@@ -652,3 +652,36 @@ class TestArtifactInvariants:
 
         artifact.delete()
         assert artifact.version == initial_version + 3
+
+
+class TestArtifactIsLockedSummary:
+    """Test that the aggregate enforces is_locked on summary candidates."""
+
+    def test_cannot_overwrite_locked_summary(self) -> None:
+        artifact = Artifact.create(
+            source_uri=None,
+            source_filename="test.pdf",
+            artifact_type=ArtifactType.RESEARCH_ARTICLE,
+            mime_type=MimeType.PDF,
+            storage_location="/storage/test.pdf",
+        )
+        locked = SummaryCandidate(summary="Final answer", is_locked=True)
+        artifact.update_summary_candidate(locked)
+
+        with pytest.raises(ValueError, match="locked"):
+            artifact.update_summary_candidate(SummaryCandidate(summary="Override"))
+
+    def test_can_update_unlocked_summary(self) -> None:
+        artifact = Artifact.create(
+            source_uri=None,
+            source_filename="test.pdf",
+            artifact_type=ArtifactType.RESEARCH_ARTICLE,
+            mime_type=MimeType.PDF,
+            storage_location="/storage/test.pdf",
+        )
+        unlocked = SummaryCandidate(summary="Draft", is_locked=False)
+        artifact.update_summary_candidate(unlocked)
+
+        new_summary = SummaryCandidate(summary="Better draft")
+        artifact.update_summary_candidate(new_summary)
+        assert artifact.summary_candidate == new_summary

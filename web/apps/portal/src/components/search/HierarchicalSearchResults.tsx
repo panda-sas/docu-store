@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Skeleton } from "primereact/skeleton";
 import { ChevronDown } from "lucide-react";
 
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
+import { AuthThumbnail } from "@/components/ui/TableThumbnail";
 import { highlightMatches } from "./highlight-matches";
-import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { API_URL } from "@/lib/constants";
 
@@ -259,31 +258,6 @@ function buildDocumentGroups(
     if (b.bestChunkPosition !== null) return 1;
     return b.bestScore - a.bestScore;
   });
-}
-
-// ---------------------------------------------------------------------------
-// Authenticated thumbnail
-// ---------------------------------------------------------------------------
-
-function AuthThumbnail({ src, href }: { src: string; href: string }) {
-  const { blobUrl, error } = useAuthBlobUrl(src);
-
-  if (error) return null;
-
-  return (
-    <Link href={href} className="relative h-32 w-32 shrink-0 block">
-      {!blobUrl && (
-        <Skeleton width="8rem" height="8rem" borderRadius="0.375rem" />
-      )}
-      {blobUrl && (
-        <img
-          src={blobUrl}
-          alt=""
-          className="h-32 w-32 rounded-md border border-border-subtle object-cover object-top"
-        />
-      )}
-    </Link>
-  );
 }
 
 // ---------------------------------------------------------------------------

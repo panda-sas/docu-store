@@ -516,7 +516,6 @@ def create_container() -> Container:  # noqa: PLR0915
     )
     container[TriggerArtifactTagAggregationUseCase] = (
         lambda c: TriggerArtifactTagAggregationUseCase(
-            page_repository=c[PageRepository],
             workflow_orchestrator=c[WorkflowOrchestrator],
         )
     )
@@ -587,7 +586,6 @@ def create_container() -> Container:  # noqa: PLR0915
     )
     container[TriggerArtifactSummarizationUseCase] = lambda c: TriggerArtifactSummarizationUseCase(
         artifact_repository=c[ArtifactRepository],
-        page_repository=c[PageRepository],
         page_read_model=c[PageReadModel],
         workflow_orchestrator=c[WorkflowOrchestrator],
     )
@@ -663,10 +661,10 @@ def create_container() -> Container:  # noqa: PLR0915
     )
 
     # --- Chat (Agentic RAG) ---
-    from application.ports.chat_agent import ChatAgentPort, ChatAgentRouter  # noqa: PLC0415
+    from application.ports.chat_agent import ChatAgentPort  # noqa: PLC0415
+    from application.services.chat_agent_router import ChatAgentRouter  # noqa: PLC0415
     from application.ports.chat_repository import ChatRepository  # noqa: PLC0415
     from infrastructure.chat.agent import ChatAgent  # noqa: PLC0415
-    from infrastructure.chat.context_builder import ContextBuilder  # noqa: PLC0415
     from infrastructure.chat.mongo_chat_repository import MongoChatRepository  # noqa: PLC0415
     from infrastructure.chat.nodes.answer_synthesis import AnswerSynthesisNode  # noqa: PLC0415
     from infrastructure.chat.nodes.grounding_verification import GroundingVerificationNode  # noqa: PLC0415
@@ -689,9 +687,9 @@ def create_container() -> Container:  # noqa: PLR0915
     )
 
     # --- Quick Mode nodes (existing pipeline) ---
-    container[QuestionAnalysisNode] = lambda _: QuestionAnalysisNode(
+    container[QuestionAnalysisNode] = lambda c: QuestionAnalysisNode(
         llm_client=chat_llm_client,
-        prompt_repository=container[PromptRepositoryPort],
+        prompt_repository=c[PromptRepositoryPort],
     )
     container[RetrievalNode] = lambda c: RetrievalNode(
         hierarchical_search=c[HierarchicalSearchUseCase],
@@ -699,13 +697,13 @@ def create_container() -> Container:  # noqa: PLR0915
         page_read_model=c[PageReadModel],
         max_results=settings.chat_max_retrieval_results,
     )
-    container[AnswerSynthesisNode] = lambda _: AnswerSynthesisNode(
+    container[AnswerSynthesisNode] = lambda c: AnswerSynthesisNode(
         llm_client=chat_llm_client,
-        prompt_repository=container[PromptRepositoryPort],
+        prompt_repository=c[PromptRepositoryPort],
     )
-    container[GroundingVerificationNode] = lambda _: GroundingVerificationNode(
+    container[GroundingVerificationNode] = lambda c: GroundingVerificationNode(
         llm_client=chat_llm_client,
-        prompt_repository=container[PromptRepositoryPort],
+        prompt_repository=c[PromptRepositoryPort],
     )
 
     quick_agent = lambda c: ChatAgent(
@@ -738,13 +736,13 @@ def create_container() -> Container:  # noqa: PLR0915
     )
 
     container[ContextAssemblyNode] = lambda _: ContextAssemblyNode()
-    container[AdaptiveSynthesisNode] = lambda _: AdaptiveSynthesisNode(
+    container[AdaptiveSynthesisNode] = lambda c: AdaptiveSynthesisNode(
         llm_client=chat_llm_client,
-        prompt_repository=container[PromptRepositoryPort],
+        prompt_repository=c[PromptRepositoryPort],
     )
-    container[InlineVerificationNode] = lambda _: InlineVerificationNode(
+    container[InlineVerificationNode] = lambda c: InlineVerificationNode(
         llm_client=chat_llm_client,
-        prompt_repository=container[PromptRepositoryPort],
+        prompt_repository=c[PromptRepositoryPort],
     )
 
     thinking_agent = lambda c: ThinkingAgent(
@@ -758,17 +756,10 @@ def create_container() -> Container:  # noqa: PLR0915
     )
 
     # --- Agent Router (dispatches to quick or thinking) ---
-    container[ChatAgentRouter] = lambda c: ChatAgentRouter(
+    container[ChatAgentPort] = lambda c: ChatAgentRouter(
         quick_agent=quick_agent(c),
         thinking_agent=thinking_agent(c),
         default_mode=settings.chat_default_mode,
-    )
-
-    container[ContextBuilder] = lambda c: ContextBuilder(
-        chat_repository=c[ChatRepository],
-        llm_client=chat_llm_client,
-        prompt_repository=c[PromptRepositoryPort],
-        max_recent_messages=settings.chat_max_history_messages,
     )
 
     # Chat Use Cases
@@ -786,7 +777,7 @@ def create_container() -> Container:  # noqa: PLR0915
     )
     container[SendMessageUseCase] = lambda c: SendMessageUseCase(
         chat_repository=c[ChatRepository],
-        chat_agent=c[ChatAgentRouter],
+        chat_agent=c[ChatAgentPort],
     )
 
     return container

@@ -8,7 +8,7 @@ import { Tag } from "primereact/tag";
 import { FilterMatchMode } from "primereact/api";
 import type { ArtifactBrowseItemDTO } from "@docu-store/types";
 import { ARTIFACT_TYPE_LABELS } from "@/lib/constants";
-import { TableThumbnail } from "@/components/ui/TableThumbnail";
+import { AuthThumbnail } from "@/components/ui/TableThumbnail";
 
 type BrowseItemWithSearch = ArtifactBrowseItemDTO & { _search: string };
 
@@ -53,7 +53,7 @@ export function FolderArtifactList({
     const href = `/${workspace}/documents/${row.artifact_id}`;
     return (
       <div className="flex items-center gap-3">
-        <TableThumbnail artifactId={row.artifact_id} href={href} size="md" />
+        <AuthThumbnail artifactId={row.artifact_id} href={href} size="md" />
         <div className="min-w-0">
           <Link
             href={href}

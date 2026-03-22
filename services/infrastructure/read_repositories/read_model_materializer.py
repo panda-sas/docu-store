@@ -93,6 +93,42 @@ class ReadModelMaterializer(Protocol):
         """
         ...
 
+    def add_to_artifact_array(
+        self,
+        artifact_id: str,
+        field: str,
+        values: list[Any],
+        tracking: Tracking,
+    ) -> None:
+        """Add values to an array field on an artifact (no duplicates).
+
+        Args:
+            artifact_id: Unique identifier for the artifact
+            field: Name of the array field
+            values: Values to add
+            tracking: Event tracking information for idempotency
+
+        """
+        ...
+
+    def pull_from_artifact_array(
+        self,
+        artifact_id: str,
+        field: str,
+        values: list[Any],
+        tracking: Tracking,
+    ) -> None:
+        """Remove values from an array field on an artifact.
+
+        Args:
+            artifact_id: Unique identifier for the artifact
+            field: Name of the array field
+            values: Values to remove
+            tracking: Event tracking information for idempotency
+
+        """
+        ...
+
     def max_tracking_id(self, application_name: str) -> int | None:
         """Get the highest notification ID processed for an application.
 

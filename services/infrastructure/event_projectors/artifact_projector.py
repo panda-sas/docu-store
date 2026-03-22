@@ -39,25 +39,21 @@ class ArtifactProjector:
 
     def pages_added(self, event: object, tracking: object) -> None:
         """Project PagesAdded event to read model."""
-        # Convert UUIDs to strings for storage
         page_ids_data = [str(page_id) for page_id in event.page_ids]  # type: ignore[attr-defined]
-        self._materializer.upsert_artifact(
+        self._materializer.add_to_artifact_array(
             artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
-            fields={
-                "pages": page_ids_data,
-            },
+            field="pages",
+            values=page_ids_data,
             tracking=tracking,  # type: ignore[arg-type]
         )
 
     def pages_removed(self, event: object, tracking: object) -> None:
         """Project PagesRemoved event to read model."""
-        # Convert UUIDs to strings for storage
         page_ids_data = [str(page_id) for page_id in event.page_ids]  # type: ignore[attr-defined]
-        self._materializer.upsert_artifact(
+        self._materializer.pull_from_artifact_array(
             artifact_id=str(event.originator_id),  # type: ignore[attr-defined]
-            fields={
-                "pages": page_ids_data,
-            },
+            field="pages",
+            values=page_ids_data,
             tracking=tracking,  # type: ignore[arg-type]
         )
 

@@ -7,13 +7,13 @@ think-then-answer planning step, then streams the final answer.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import structlog
 
-from infrastructure.config import settings
-
 from application.dtos.chat_dtos import AgentEvent
+from infrastructure.chat.utils import build_conversation_context
+from infrastructure.config import settings
 
 if TYPE_CHECKING:
     from application.dtos.chat_dtos import ChatMessageDTO
@@ -51,14 +51,14 @@ class AdaptiveSynthesisNode:
         sources_text: str,
         context_meta: ContextMetadata,
         conversation_history: list[ChatMessageDTO],
-    ) -> AsyncGenerator[str | AgentEvent, None]:
+    ) -> AsyncGenerator[tuple[Literal["token", "event"], str | AgentEvent], None]:
         """Stream answer tokens with adaptive prompting.
 
-        Yields str tokens for the answer, and may yield AgentEvent objects
-        for intermediate thinking content (e.g. the answer plan).
+        Yields tagged tuples: ("event", AgentEvent) for intermediate thinking
+        content, ("token", str) for answer tokens.
         """
         _debug = settings.chat_debug
-        conversation_context = _format_history(conversation_history)
+        conversation_context = build_conversation_context(conversation_history, max_chars=500)
 
         # Select query-type-specific system prompt
         system_key = _SYSTEM_PROMPT_MAP.get(plan.query_type, "chat_system_factual")
@@ -91,13 +91,13 @@ class AdaptiveSynthesisNode:
             )
 
         # Emit the answer plan as thinking content for the agent trace
-        yield AgentEvent(
+        yield ("event", AgentEvent(
             type="step_completed",
             step="synthesis",
             status="started",
             output="Answer plan generated",
             thinking_content=answer_plan,
-        )
+        ))
 
         # Build synthesis prompt
         user_prompt = await self._prompts.render_prompt(
@@ -123,7 +123,7 @@ class AdaptiveSynthesisNode:
             system_prompt=system_prompt,
         ):
             token_count += 1
-            yield token
+            yield ("token", token)
 
         if _debug:
             log.info("chat.debug.adaptive_synthesis.done", tokens=token_count)
@@ -176,13 +176,3 @@ class AdaptiveSynthesisNode:
             hints.append(f"The question was decomposed into {len(plan.sub_queries)} sub-queries. Address each aspect.")
 
         return " ".join(hints) if hints else "Standard context — proceed normally."
-
-
-def _format_history(history: list[ChatMessageDTO]) -> str:
-    if not history:
-        return ""
-    lines = []
-    for msg in history[-6:]:
-        role = "User" if msg.role == "user" else "Assistant"
-        lines.append(f"{role}: {msg.content[:500]}")
-    return "\n".join(lines)

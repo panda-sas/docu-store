@@ -207,7 +207,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "PageSummarizationWorkflow",
                 str(page_id),
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
             )
             logger.info("page_summarization_workflow_started", page_id=str(page_id))
         except Exception as e:
@@ -237,7 +237,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "ArtifactSummarizationWorkflow",
                 str(artifact_id),
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
             logger.info("artifact_summarization_workflow_started", artifact_id=str(artifact_id))
@@ -316,7 +316,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "DocumentMetadataExtractionWorkflow",
                 args=[str(artifact_id), str(page_id)],
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
             logger.info(
@@ -345,7 +345,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "NERExtractionWorkflow",
                 str(page_id),
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
             logger.info("ner_extraction_workflow_started", page_id=str(page_id))

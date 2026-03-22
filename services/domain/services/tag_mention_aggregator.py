@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
 
-def _normalize(name: str) -> str:
+def _normalize(name: str) -> str:  # noqa: PLW0603 — shared across domain services
     """Lowercase, strip, and collapse whitespace for tag matching."""
     return name.strip().lower().replace(" ", "")
 

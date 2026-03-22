@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -11,6 +10,7 @@ from uuid import uuid4
 import structlog
 
 from application.dtos.chat_dtos import AgentEvent
+from infrastructure.chat.utils import CITATION_RE, extract_cited_indices
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
@@ -168,7 +168,7 @@ class ChatAgent:
                 )
 
                 # Determine which citations were actually used in the answer
-                cited_indices = _extract_cited_indices(draft_answer)
+                cited_indices = extract_cited_indices(draft_answer)
                 used_citations = [c for c in citations if c.citation_index in cited_indices]
                 # Build source text for grounding using only cited sources
                 used_sources_text = _build_cited_sources_text(used_citations, sources_text)
@@ -282,13 +282,6 @@ class ChatAgent:
             )
 
 
-_CITATION_RE = re.compile(r"\[(\d{1,2})\]")
-
-
-def _extract_cited_indices(answer: str) -> set[int]:
-    """Extract the set of citation indices actually used in the answer text."""
-    return {int(m) for m in _CITATION_RE.findall(answer)}
-
 
 def _build_cited_sources_text(
     used_citations: list,
@@ -307,7 +300,7 @@ def _build_cited_sources_text(
     kept = []
     for section in sections:
         # Each section starts with [N] — extract the index
-        match = _CITATION_RE.match(section.strip())
+        match = CITATION_RE.match(section.strip())
         if match and int(match.group(1)) in used_indices:
             kept.append(section)
         elif not match:

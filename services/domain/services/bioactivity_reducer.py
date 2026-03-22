@@ -8,12 +8,8 @@ TagMention and discards orphan bioactivities.
 
 from __future__ import annotations
 
+from domain.services.tag_mention_aggregator import _normalize
 from domain.value_objects.tag_mention import TagMention
-
-
-def _normalize(name: str) -> str:
-    """Lowercase, strip, and collapse whitespace for compound-name matching."""
-    return name.strip().lower().replace(" ", "")
 
 
 def associate_bioactivities(tag_mentions: list[TagMention]) -> list[TagMention]:

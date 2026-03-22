@@ -82,6 +82,7 @@ class Page(Aggregate):
         self.text_embedding_metadata: EmbeddingMetadata | None = None
         self.smiles_embedding_metadata: EmbeddingMetadata | None = None
         self.is_deleted: bool = False
+        self.deleted_at: datetime | None = None
 
     def __hash__(self) -> int:
         """Return hash of the aggregate based on its ID."""
@@ -94,16 +95,27 @@ class Page(Aggregate):
         # We use the rich type here. The infrastructure layer
         # (transcoder) will handle the JSON serialization.
         compound_mentions: list[CompoundMention]
+        artifact_id: UUID
+        workspace_id: UUID | None = None
 
     def update_compound_mentions(self, compound_mentions: list[CompoundMention]) -> None:
         if self.is_deleted:
             msg = "Cannot update compound mentions on a deleted page"
             raise ValueError(msg)
-        # Trigger event
-        self.trigger_event(self.CompoundMentionsUpdated, compound_mentions=compound_mentions)
+        self.trigger_event(
+            self.CompoundMentionsUpdated,
+            compound_mentions=compound_mentions,
+            artifact_id=self.artifact_id,
+            workspace_id=self.workspace_id,
+        )
 
     @event(CompoundMentionsUpdated)
-    def _apply_compound_mentions_updated(self, compound_mentions: list[CompoundMention]) -> None:
+    def _apply_compound_mentions_updated(
+        self,
+        compound_mentions: list[CompoundMention],
+        artifact_id: UUID,  # noqa: ARG002
+        workspace_id: UUID | None = None,  # noqa: ARG002
+    ) -> None:
         # Update internal state, replace existing compound_mentions
         self.compound_mentions = compound_mentions
 
@@ -112,15 +124,27 @@ class Page(Aggregate):
     # ============================================================================
     class TagMentionsUpdated(Aggregate.Event):
         tag_mentions: list[TagMention]
+        artifact_id: UUID
+        workspace_id: UUID | None = None
 
     def update_tag_mentions(self, tag_mentions: list[TagMention]) -> None:
         if self.is_deleted:
             msg = "Cannot update tag mentions on a deleted page"
             raise ValueError(msg)
-        self.trigger_event(self.TagMentionsUpdated, tag_mentions=tag_mentions)
+        self.trigger_event(
+            self.TagMentionsUpdated,
+            tag_mentions=tag_mentions,
+            artifact_id=self.artifact_id,
+            workspace_id=self.workspace_id,
+        )
 
     @event(TagMentionsUpdated)
-    def _apply_tag_mentions_updated(self, tag_mentions: list[TagMention]) -> None:
+    def _apply_tag_mentions_updated(
+        self,
+        tag_mentions: list[TagMention],
+        artifact_id: UUID,  # noqa: ARG002
+        workspace_id: UUID | None = None,  # noqa: ARG002
+    ) -> None:
         self.tag_mentions = tag_mentions
 
     # ============================================================================
@@ -128,15 +152,27 @@ class Page(Aggregate):
     # ============================================================================
     class TextMentionUpdated(Aggregate.Event):
         text_mention: TextMention | None
+        artifact_id: UUID
+        workspace_id: UUID | None = None
 
     def update_text_mention(self, text_mention: TextMention | None) -> None:
         if self.is_deleted:
             msg = "Cannot update text mention on a deleted page"
             raise ValueError(msg)
-        self.trigger_event(self.TextMentionUpdated, text_mention=text_mention)
+        self.trigger_event(
+            self.TextMentionUpdated,
+            text_mention=text_mention,
+            artifact_id=self.artifact_id,
+            workspace_id=self.workspace_id,
+        )
 
     @event(TextMentionUpdated)
-    def _apply_text_mention_updated(self, text_mention: TextMention | None) -> None:
+    def _apply_text_mention_updated(
+        self,
+        text_mention: TextMention | None,
+        artifact_id: UUID,  # noqa: ARG002
+        workspace_id: UUID | None = None,  # noqa: ARG002
+    ) -> None:
         self.text_mention = text_mention
 
     # ============================================================================
@@ -144,15 +180,30 @@ class Page(Aggregate):
     # ============================================================================
     class SummaryCandidateUpdated(Aggregate.Event):
         summary_candidate: SummaryCandidate | None
+        artifact_id: UUID
+        workspace_id: UUID | None = None
 
     def update_summary_candidate(self, summary_candidate: SummaryCandidate | None) -> None:
         if self.is_deleted:
             msg = "Cannot update summary candidate on a deleted page"
             raise ValueError(msg)
-        self.trigger_event(self.SummaryCandidateUpdated, summary_candidate=summary_candidate)
+        if self.summary_candidate is not None and self.summary_candidate.is_locked:
+            msg = "Cannot overwrite a locked summary candidate"
+            raise ValueError(msg)
+        self.trigger_event(
+            self.SummaryCandidateUpdated,
+            summary_candidate=summary_candidate,
+            artifact_id=self.artifact_id,
+            workspace_id=self.workspace_id,
+        )
 
     @event(SummaryCandidateUpdated)
-    def _apply_summary_candidate_updated(self, summary_candidate: SummaryCandidate | None) -> None:
+    def _apply_summary_candidate_updated(
+        self,
+        summary_candidate: SummaryCandidate | None,
+        artifact_id: UUID,  # noqa: ARG002
+        workspace_id: UUID | None = None,  # noqa: ARG002
+    ) -> None:
         self.summary_candidate = summary_candidate
 
     # ============================================================================
@@ -162,6 +213,8 @@ class Page(Aggregate):
         """Emitted when a text embedding is generated for this page."""
 
         embedding_metadata: EmbeddingMetadata
+        artifact_id: UUID
+        workspace_id: UUID | None = None
 
     def update_text_embedding_metadata(self, embedding_metadata: EmbeddingMetadata) -> None:
         """Update the page with generated embedding metadata.
@@ -172,10 +225,20 @@ class Page(Aggregate):
         if self.is_deleted:
             msg = "Cannot update embedding on a deleted page"
             raise ValueError(msg)
-        self.trigger_event(self.TextEmbeddingGenerated, embedding_metadata=embedding_metadata)
+        self.trigger_event(
+            self.TextEmbeddingGenerated,
+            embedding_metadata=embedding_metadata,
+            artifact_id=self.artifact_id,
+            workspace_id=self.workspace_id,
+        )
 
     @event(TextEmbeddingGenerated)
-    def _apply_text_embedding_generated(self, embedding_metadata: EmbeddingMetadata) -> None:
+    def _apply_text_embedding_generated(
+        self,
+        embedding_metadata: EmbeddingMetadata,
+        artifact_id: UUID,  # noqa: ARG002
+        workspace_id: UUID | None = None,  # noqa: ARG002
+    ) -> None:
         self.text_embedding_metadata = embedding_metadata
 
     # ============================================================================
@@ -185,16 +248,28 @@ class Page(Aggregate):
         """Emitted when ChemBERTa SMILES embeddings are generated for this page."""
 
         embedding_metadata: EmbeddingMetadata
+        artifact_id: UUID
+        workspace_id: UUID | None = None
 
     def update_smiles_embedding_metadata(self, embedding_metadata: EmbeddingMetadata) -> None:
         """Record metadata about the SMILES embedding stored in the compound vector store."""
         if self.is_deleted:
             msg = "Cannot update embedding on a deleted page"
             raise ValueError(msg)
-        self.trigger_event(self.SmilesEmbeddingGenerated, embedding_metadata=embedding_metadata)
+        self.trigger_event(
+            self.SmilesEmbeddingGenerated,
+            embedding_metadata=embedding_metadata,
+            artifact_id=self.artifact_id,
+            workspace_id=self.workspace_id,
+        )
 
     @event(SmilesEmbeddingGenerated)
-    def _apply_smiles_embedding_generated(self, embedding_metadata: EmbeddingMetadata) -> None:
+    def _apply_smiles_embedding_generated(
+        self,
+        embedding_metadata: EmbeddingMetadata,
+        artifact_id: UUID,  # noqa: ARG002
+        workspace_id: UUID | None = None,  # noqa: ARG002
+    ) -> None:
         self.smiles_embedding_metadata = embedding_metadata
 
     # ============================================================================
@@ -202,12 +277,26 @@ class Page(Aggregate):
     # ============================================================================
     class Deleted(Aggregate.Event):
         deleted_at: datetime
+        artifact_id: UUID
+        workspace_id: UUID | None = None
 
     def delete(self) -> None:
-        """Delete this page aggregate."""
-        self.trigger_event(self.Deleted, deleted_at=datetime.now(UTC))
+        """Delete this page aggregate (idempotent — no-op if already deleted)."""
+        if self.is_deleted:
+            return
+        self.trigger_event(
+            self.Deleted,
+            deleted_at=datetime.now(UTC),
+            artifact_id=self.artifact_id,
+            workspace_id=self.workspace_id,
+        )
 
     @event(Deleted)
-    def _apply_deleted(self, deleted_at: datetime) -> None:
+    def _apply_deleted(
+        self,
+        deleted_at: datetime,
+        artifact_id: UUID,  # noqa: ARG002
+        workspace_id: UUID | None = None,  # noqa: ARG002
+    ) -> None:
         self.deleted_at = deleted_at
         self.is_deleted = True

@@ -16,6 +16,7 @@ from infrastructure.chat.models import (
     QUERY_FILTER_ENTITY_TYPES,
     QueryPlan,
 )
+from infrastructure.chat.utils import build_conversation_context, strip_markdown_fences
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
@@ -53,7 +54,7 @@ class QueryPlanningNode:
         question: str,
         conversation_history: list[ChatMessageDTO],
     ) -> QueryPlan:
-        conversation_context = _build_conversation_context(conversation_history)
+        conversation_context = build_conversation_context(conversation_history)
         _debug = settings.chat_debug
 
         if _debug:
@@ -158,13 +159,7 @@ class QueryPlanningNode:
         if settings.chat_debug:
             log.info("chat.debug.planning.llm_raw", raw_len=len(raw), raw=raw[:1000])
 
-        # Strip markdown fences
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
+        cleaned = strip_markdown_fences(raw)
 
         data = json.loads(cleaned)
 
@@ -184,13 +179,3 @@ def _default_llm_plan(question: str) -> QueryPlan:
         confidence=0.5,
         summary=question[:200],
     )
-
-
-def _build_conversation_context(history: list[ChatMessageDTO]) -> str:
-    if not history:
-        return ""
-    lines = []
-    for msg in history[-6:]:
-        role = "User" if msg.role == "user" else "Assistant"
-        lines.append(f"{role}: {msg.content[:300]}")
-    return "\n".join(lines)

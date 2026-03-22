@@ -15,12 +15,13 @@ from application.dtos.chat_dtos import (
     AgentStepDTO,
     AgentTraceDTO,
     ChatMessageDTO,
+    ConversationDetailDTO,
     ConversationDTO,
 )
 from application.dtos.errors import AppError
 
 if TYPE_CHECKING:
-    from application.ports.chat_agent import ChatAgentRouter
+    from application.ports.chat_agent import ChatAgentPort
     from application.ports.chat_repository import ChatRepository
 
 log = structlog.get_logger(__name__)
@@ -96,7 +97,7 @@ class GetConversationUseCase:
         workspace_id: UUID | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> Result[dict, AppError]:
+    ) -> Result[ConversationDetailDTO, AppError]:
         try:
             conversation = await self._repo.get_conversation(
                 conversation_id, workspace_id=workspace_id,
@@ -107,10 +108,10 @@ class GetConversationUseCase:
             messages = await self._repo.get_messages(
                 conversation_id, skip=skip, limit=limit,
             )
-            return Success({
-                "conversation": conversation,
-                "messages": messages,
-            })
+            return Success(ConversationDetailDTO(
+                **conversation.model_dump(),
+                messages=messages,
+            ))
         except Exception as e:
             log.exception("chat.conversation.get_failed", error=str(e))
             return Failure(AppError("internal_error", f"Failed to get conversation: {e!s}"))
@@ -152,7 +153,7 @@ class SendMessageUseCase:
     def __init__(
         self,
         chat_repository: ChatRepository,
-        chat_agent: ChatAgentRouter,
+        chat_agent: ChatAgentPort,
     ) -> None:
         self._repo = chat_repository
         self._agent = chat_agent

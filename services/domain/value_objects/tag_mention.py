@@ -8,6 +8,8 @@ from domain.value_objects.extraction_metadata import ExtractionMetadata
 class TagSource(BaseModel):
     """Provenance: which page contributed a tag to the artifact-level aggregate."""
 
+    model_config = {"frozen": True}
+
     page_id: UUID
     page_index: int = Field(ge=0)
     confidence: float | None = None

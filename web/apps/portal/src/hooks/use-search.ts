@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiClient } from "@docu-store/api-client";
 import { throwApiError } from "@/lib/api-error";
+import { queryKeys } from "@/lib/query-keys";
 
 export interface SearchParams {
   query_text: string;
@@ -15,7 +16,7 @@ export interface SearchParams {
 
 export function useTextSearchQuery(params: SearchParams | null) {
   return useQuery({
-    queryKey: ["search", "text", params?.query_text, params?.tags, params?.tag_match_mode],
+    queryKey: queryKeys.search.text(params?.query_text ?? "", params?.tags, params?.tag_match_mode),
     queryFn: async () => {
       const { data, error, response } = await apiClient.POST("/search/pages", {
         body: {
@@ -36,7 +37,7 @@ export function useTextSearchQuery(params: SearchParams | null) {
 
 export function useSummarySearchQuery(params: SearchParams | null) {
   return useQuery({
-    queryKey: ["search", "summary", params?.query_text, params?.tags, params?.tag_match_mode],
+    queryKey: queryKeys.search.summary(params?.query_text ?? "", params?.tags, params?.tag_match_mode),
     queryFn: async () => {
       const { data, error, response } = await apiClient.POST("/search/summaries", {
         body: {
@@ -57,7 +58,7 @@ export function useSummarySearchQuery(params: SearchParams | null) {
 
 export function useHierarchicalSearchQuery(params: (SearchParams & { include_chunks?: boolean }) | null) {
   return useQuery({
-    queryKey: ["search", "hierarchical", params?.query_text, params?.tags, params?.tag_match_mode],
+    queryKey: queryKeys.search.hierarchical(params?.query_text ?? "", params?.tags, params?.tag_match_mode),
     queryFn: async () => {
       const { data, error, response } = await apiClient.POST("/search/hierarchical", {
         body: {

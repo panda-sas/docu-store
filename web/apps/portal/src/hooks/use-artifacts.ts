@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@docu-store/api-client";
 import type { ArtifactResponse, WorkflowMap } from "@docu-store/types";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, workflowPollingInterval } from "@/lib/query-keys";
 import { getAuthzClient } from "@/lib/authz-client";
 import { API_URL } from "@/lib/constants";
 import { authFetch } from "@/lib/auth-fetch";
@@ -78,16 +78,7 @@ export function useArtifactWorkflows(id: string) {
       return result;
     },
     enabled: !!id,
-    // Poll every 3 s while any workflow is RUNNING; stop once all settle.
-    // The backend proxies to Temporal, so this drives real-time status updates.
-    refetchInterval: (query) => {
-      const workflows = (query.state.data as WorkflowMap | undefined)
-        ?.workflows;
-      const hasRunning = workflows
-        ? Object.values(workflows).some((w) => w.status === "RUNNING")
-        : false;
-      return hasRunning ? 3000 : false;
-    },
+    refetchInterval: workflowPollingInterval,
   });
 }
 

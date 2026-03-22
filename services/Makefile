@@ -21,13 +21,16 @@ run-read-models: ## Run the MongoDB read model projector
 run-workflow-worker: ## Run the Temporal workflow orchestration worker
 	uv run python -m infrastructure.pipeline_worker
 
-run-temporal-worker: ## Run the Temporal workflow worker
+run-temporal-worker: ## Run the Temporal CPU/IO workflow worker
 	uv run python -m infrastructure.temporal.worker
+
+run-llm-worker: ## Run the Temporal LLM workflow worker
+	uv run python -m infrastructure.temporal.llm_worker
 
 run-plugin-consumer: ## Run the plugin consumer (Kafka → plugin Temporal workflows)
 	uv run python -m infrastructure.plugins.plugin_consumer
 
-run-all: stop-all ## Start all services (API, read models, workflow worker, temporal worker, plugin consumer)
+run-all: stop-all ## Start all services (API, read models, workflow worker, temporal workers, plugin consumer)
 	@echo "Starting all services..."
 	@bash -c '\
 		trap "kill 0" SIGINT SIGTERM; \
@@ -35,6 +38,7 @@ run-all: stop-all ## Start all services (API, read models, workflow worker, temp
 		uv run python -m infrastructure.read_worker & \
 		uv run python -m infrastructure.pipeline_worker & \
 		uv run python -m infrastructure.temporal.worker & \
+		uv run python -m infrastructure.temporal.llm_worker & \
 		uv run python -m infrastructure.plugins.plugin_consumer & \
 		echo "All services started. Press Ctrl+C to stop all."; \
 		wait'
@@ -45,12 +49,14 @@ stop-all: ## Stop all services started by run-all
 	@-pkill -f "infrastructure\.read_worker" 2>/dev/null
 	@-pkill -f "infrastructure\.pipeline_worker" 2>/dev/null
 	@-pkill -f "infrastructure\.temporal\.worker" 2>/dev/null
+	@-pkill -f "infrastructure\.temporal\.llm_worker" 2>/dev/null
 	@-pkill -f "infrastructure\.plugins\.plugin_consumer" 2>/dev/null
 	@sleep 2
 	@-pkill -9 -f "uvicorn interfaces.api.main:app" 2>/dev/null
 	@-pkill -9 -f "infrastructure\.read_worker" 2>/dev/null
 	@-pkill -9 -f "infrastructure\.pipeline_worker" 2>/dev/null
 	@-pkill -9 -f "infrastructure\.temporal\.worker" 2>/dev/null
+	@-pkill -9 -f "infrastructure\.temporal\.llm_worker" 2>/dev/null
 	@-pkill -9 -f "infrastructure\.plugins\.plugin_consumer" 2>/dev/null
 	@-lsof -ti:8000 | xargs kill -9 2>/dev/null
 	@echo "All services stopped."

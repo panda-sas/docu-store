@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from infrastructure.chat.models import QuestionAnalysis
+from infrastructure.chat.utils import build_conversation_context, strip_markdown_fences
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ class QuestionAnalysisNode:
         question: str,
         conversation_history: list[ChatMessageDTO],
     ) -> QuestionAnalysis:
-        conversation_context = _build_conversation_context(conversation_history)
+        conversation_context = build_conversation_context(conversation_history)
 
         prompt = await self._prompts.render_prompt(
             "chat_question_analysis",
@@ -59,13 +60,7 @@ class QuestionAnalysisNode:
             if settings.chat_debug:
                 log.info("chat.debug.analysis.raw_response", raw_len=len(raw), raw=raw[:1000])
 
-            # Strip markdown fences if the LLM wrapped the JSON
-            cleaned = raw.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                cleaned = cleaned.strip()
+            cleaned = strip_markdown_fences(raw)
 
             data = json.loads(cleaned)
             analysis = QuestionAnalysis(**data)
@@ -88,15 +83,3 @@ class QuestionAnalysisNode:
                 search_strategy="hierarchical",
                 summary=question[:200],
             )
-
-
-def _build_conversation_context(history: list[ChatMessageDTO]) -> str:
-    """Build a concise context string from recent conversation history."""
-    if not history:
-        return ""
-    lines = []
-    for msg in history[-6:]:  # Last 3 pairs
-        role = "User" if msg.role == "user" else "Assistant"
-        text = msg.content[:300]
-        lines.append(f"{role}: {text}")
-    return "\n".join(lines)

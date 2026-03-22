@@ -17,5 +17,9 @@ class ConcurrencyError(DomainError):
     """Raised when a concurrency conflict occurs (optimistic locking)."""
 
 
-class InfrastructureError(DomainError):
-    """Raised when infrastructure operations fail (DB, network, etc.)."""
+class InfrastructureError(Exception):
+    """Raised when infrastructure operations fail (DB, network, etc.).
+
+    Note: This intentionally does NOT inherit from DomainError.
+    Infrastructure failures are operational concerns, not domain violations.
+    """

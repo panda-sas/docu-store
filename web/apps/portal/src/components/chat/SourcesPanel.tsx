@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, X, ChevronDown, ChevronRight, Users, Calendar } from "lucide-react";
-import { Skeleton } from "primereact/skeleton";
 import { Button } from "primereact/button";
 import type { SourceCitation } from "@docu-store/types";
-import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
+import { AuthThumbnail } from "@/components/ui/TableThumbnail";
 import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { API_URL } from "@/lib/constants";
@@ -101,7 +100,16 @@ function SourceArtifactCard({
     <div className="rounded-lg border border-border-default bg-surface-elevated overflow-hidden">
       {/* Thumbnail + title + metadata */}
       <div className="flex gap-3 p-3">
-        <SourceThumbnail src={thumbSrc} href={artifactHref} />
+        <AuthThumbnail
+          src={thumbSrc}
+          href={artifactHref}
+          size="xs"
+          errorFallback={
+            <Link href={artifactHref} className="flex items-center justify-center w-16 h-20 rounded bg-surface-elevated flex-shrink-0">
+              <FileText className="w-6 h-6 text-text-muted" />
+            </Link>
+          }
+        />
         <div className="min-w-0 flex-1">
           <Link
             href={artifactHref}
@@ -180,17 +188,16 @@ function SourcePageRow({
 }) {
   const highlightedCitation = useChatStore((s) => s.highlightedCitation);
   const rowRef = useRef<HTMLAnchorElement>(null);
+  const flashCount = useRef(0);
   const isHighlighted = highlightedCitation === citation.citation_index;
 
-  // Scroll into view and trigger flash animation when highlighted
+  // Increment counter to re-trigger animation via key change
+  if (isHighlighted) flashCount.current += 1;
+
+  // Scroll into view when highlighted
   useEffect(() => {
     if (isHighlighted && rowRef.current) {
       rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Re-trigger animation by removing and re-adding the class
-      rowRef.current.classList.remove("citation-highlight");
-      // Force reflow
-      void rowRef.current.offsetWidth;
-      rowRef.current.classList.add("citation-highlight");
     }
   }, [isHighlighted]);
 
@@ -200,9 +207,10 @@ function SourcePageRow({
 
   return (
     <Link
+      key={flashCount.current}
       ref={rowRef}
       href={pageHref}
-      className="flex items-start gap-2 px-3 py-2 hover:bg-surface-hover transition-colors border-t border-border-subtle rounded-sm"
+      className={`flex items-start gap-2 px-3 py-2 hover:bg-surface-hover transition-colors border-t border-border-subtle rounded-sm ${isHighlighted ? "citation-highlight" : ""}`}
     >
       <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-accent-light text-accent-text font-semibold text-[10px] flex-shrink-0 mt-0.5">
         {citation.citation_index}
@@ -228,32 +236,6 @@ function SourcePageRow({
           </div>
         )}
       </div>
-    </Link>
-  );
-}
-
-function SourceThumbnail({ src, href }: { src: string; href: string }) {
-  const { blobUrl, error } = useAuthBlobUrl(src);
-
-  if (error) {
-    return (
-      <Link href={href} className="flex items-center justify-center w-16 h-20 rounded bg-surface-elevated flex-shrink-0">
-        <FileText className="w-6 h-6 text-text-muted" />
-      </Link>
-    );
-  }
-
-  return (
-    <Link href={href} className="relative w-16 h-20 flex-shrink-0">
-      {!blobUrl ? (
-        <Skeleton width="4rem" height="5rem" borderRadius="0.375rem" />
-      ) : (
-        <img
-          src={blobUrl}
-          alt=""
-          className="w-16 h-20 rounded-md border border-border-default object-cover object-top"
-        />
-      )}
     </Link>
   );
 }

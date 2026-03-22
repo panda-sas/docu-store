@@ -111,6 +111,62 @@ class MongoReadModelMaterializer(MongoReadModelTracking):
             tracking_id=tracking.notification_id,
         )
 
+    def add_to_artifact_array(
+        self,
+        artifact_id: str,
+        field: str,
+        values: list[Any],
+        tracking: Tracking,
+    ) -> None:
+        """Add values to an array field on an artifact (no duplicates)."""
+
+        def _add(session: object) -> None:
+            self.artifacts.update_one(
+                {"artifact_id": artifact_id},
+                {
+                    "$addToSet": {field: {"$each": values}},
+                    "$set": {"updated_at": datetime.now(UTC)},
+                },
+                session=session,
+            )
+
+        self._run_in_transaction(tracking, _add)
+        logger.info(
+            "read_model_artifact_array_add",
+            artifact_id=artifact_id,
+            field=field,
+            count=len(values),
+            tracking_id=tracking.notification_id,
+        )
+
+    def pull_from_artifact_array(
+        self,
+        artifact_id: str,
+        field: str,
+        values: list[Any],
+        tracking: Tracking,
+    ) -> None:
+        """Remove values from an array field on an artifact."""
+
+        def _pull(session: object) -> None:
+            self.artifacts.update_one(
+                {"artifact_id": artifact_id},
+                {
+                    "$pull": {field: {"$in": values}},
+                    "$set": {"updated_at": datetime.now(UTC)},
+                },
+                session=session,
+            )
+
+        self._run_in_transaction(tracking, _pull)
+        logger.info(
+            "read_model_artifact_array_pull",
+            artifact_id=artifact_id,
+            field=field,
+            count=len(values),
+            tracking_id=tracking.notification_id,
+        )
+
     def delete_page(
         self,
         page_id: str,

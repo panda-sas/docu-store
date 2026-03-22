@@ -22,7 +22,7 @@ from application.ports.sparse_embedding_generator import SparseEmbeddingGenerato
 from application.ports.text_chunker import TextChunker
 from application.ports.vector_store import VectorStore
 from domain.exceptions import AggregateNotFoundError
-from domain.value_objects.embedding_metadata import EmbeddingMetadata
+from domain.value_objects.embedding_metadata import EmbeddingMetadata, EmbeddingType
 
 logger = structlog.get_logger()
 
@@ -223,7 +223,7 @@ class GeneratePageEmbeddingUseCase:
                 model_name=first_embedding.model_name,
                 dimensions=first_embedding.dimensions,
                 generated_at=first_embedding.generated_at,
-                embedding_type="text",
+                embedding_type=EmbeddingType.TEXT,
             )
             page.update_text_embedding_metadata(embedding_metadata)
 

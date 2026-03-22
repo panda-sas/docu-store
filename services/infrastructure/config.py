@@ -95,6 +95,15 @@ class Settings(BaseSettings):
         validation_alias="TEMPORAL_MAX_CONCURRENT_ACTIVITIES",
         description="Max concurrent Temporal activities. Lower on dev to save memory.",
     )
+    temporal_llm_task_queue: str = Field(
+        default="llm_processing",
+        validation_alias="TEMPORAL_LLM_TASK_QUEUE",
+    )
+    temporal_max_concurrent_llm_activities: int = Field(
+        default=2,
+        validation_alias="TEMPORAL_MAX_CONCURRENT_LLM_ACTIVITIES",
+        description="Max concurrent LLM activities. Ollama: 1-2, Cloud API: 5-10.",
+    )
 
     # Qdrant (Vector Store)
     qdrant_url: str = Field(

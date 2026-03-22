@@ -8,7 +8,6 @@ Uses the same AgentEvent SSE schema as the Quick Mode ChatAgent.
 
 from __future__ import annotations
 
-import re
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -17,6 +16,7 @@ from uuid import uuid4
 import structlog
 
 from application.dtos.chat_dtos import AgentEvent
+from infrastructure.chat.utils import extract_cited_indices
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
@@ -31,8 +31,6 @@ if TYPE_CHECKING:
     from infrastructure.chat.nodes.query_planning import QueryPlanningNode
 
 log = structlog.get_logger(__name__)
-
-_CITATION_RE = re.compile(r"\[(\d{1,2})\]")
 
 
 class ThinkingAgent:
@@ -214,15 +212,15 @@ class ThinkingAgent:
                 )
 
                 draft_answer = ""
-                async for item in self._synthesis.run(
+                async for kind, payload in self._synthesis.run(
                     message, plan, sources_text, context_meta, conversation_history,
                 ):
-                    if isinstance(item, AgentEvent):
-                        yield item  # Forward thinking events (e.g. answer plan)
+                    if kind == "event":
+                        yield payload  # Forward thinking events (e.g. answer plan)
                     else:
-                        draft_answer += item
+                        draft_answer += payload
                         total_tokens += 1
-                        yield AgentEvent(type="token", delta=item)
+                        yield AgentEvent(type="token", delta=payload)
 
                 synthesis_ms = int((time.monotonic() - t4) * 1000)
                 yield AgentEvent(
@@ -232,7 +230,7 @@ class ThinkingAgent:
                 )
 
                 # Filter to actually-cited sources
-                cited_indices = {int(m) for m in _CITATION_RE.findall(draft_answer)}
+                cited_indices = extract_cited_indices(draft_answer)
                 used_citations = [c for c in citations if c.citation_index in cited_indices]
 
                 if _debug:

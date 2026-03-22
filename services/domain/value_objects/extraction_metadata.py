@@ -12,6 +12,8 @@ class ExtractionMetadata(BaseModel):
     including confidence scores, extraction timestamps, and model information.
     """
 
+    model_config = {"frozen": True}
+
     confidence: float | None = Field(
         None,
         ge=0.0,
