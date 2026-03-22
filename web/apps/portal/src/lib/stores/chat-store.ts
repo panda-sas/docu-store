@@ -10,7 +10,7 @@ interface StepTiming {
   durationMs: number | null;
 }
 
-export type ChatMode = "quick" | "thinking";
+export type ChatMode = "quick" | "thinking" | "deep_thinking";
 
 interface ChatState {
   // Pipeline mode

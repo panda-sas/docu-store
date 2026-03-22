@@ -1,0 +1,29 @@
+name: chat_answer_formatting
+version: "1.0"
+description: >
+  Move the part of the draft that most directly answers the question to the beginning,
+  while otherwise changing as little as possible.
+input_variables:
+  - question
+  - draft_answer
+template: |
+  You are editing a draft answer.
+
+  Your primary goal is to make the answer start with the part that most directly
+  addresses the question.
+
+  Rules:
+  - Re-read the question and identify the passage in the draft that most directly answers it.
+  - Move that passage to the beginning.
+  - Preserve all citation markers exactly as written.
+  - Do not add any new information.
+  - Do not remove any information.
+  - Do not rewrite more than necessary.
+  - Keep the rest of the draft as unchanged as possible.
+
+  Question: {question}
+
+  Draft Answer:
+  {draft_answer}
+
+  Revised Answer:

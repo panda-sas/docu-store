@@ -3,11 +3,18 @@
 Pipeline: Query Planning → Agentic Retrieval Loop → Context Assembly
           → Adaptive Synthesis (stream) → Inline Verification
 
+Factual-mode optimisation: when NER filters produce sufficient results,
+the unfiltered seed search is skipped. If verification fails, the retry
+broadens search scope (includes unfiltered) before falling back to the
+standard query-augmentation retry strategy.
+
 Uses the same AgentEvent SSE schema as the Quick Mode ChatAgent.
 """
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -23,9 +30,11 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from application.dtos.chat_dtos import ChatMessageDTO, SourceCitationDTO
+    from application.ports.blob_store import BlobStore
     from application.ports.repositories.tag_dictionary_read_model import TagDictionaryReadModel
     from infrastructure.chat.nodes.adaptive_synthesis import AdaptiveSynthesisNode
     from infrastructure.chat.nodes.agentic_retrieval import AgenticRetrievalNode
+    from infrastructure.chat.nodes.answer_formatting import AnswerFormattingNode
     from infrastructure.chat.nodes.context_assembly import ContextAssemblyNode
     from infrastructure.chat.nodes.inline_verification import InlineVerificationNode
     from infrastructure.chat.nodes.query_planning import QueryPlanningNode
@@ -43,16 +52,22 @@ class ThinkingAgent:
         context_assembly: ContextAssemblyNode,
         adaptive_synthesis: AdaptiveSynthesisNode,
         inline_verification: InlineVerificationNode,
+        answer_formatting: AnswerFormattingNode,
         tag_dictionary: TagDictionaryReadModel,
         max_retries: int = 1,
+        blob_store: BlobStore | None = None,
+        include_images: bool = False,
     ) -> None:
         self._planning = query_planning
         self._retrieval = agentic_retrieval
         self._assembly = context_assembly
         self._synthesis = adaptive_synthesis
         self._verification = inline_verification
+        self._formatting = answer_formatting
         self._tag_dict = tag_dictionary
         self._max_retries = max_retries
+        self._blob_store = blob_store
+        self._include_images = include_images
 
     async def run(
         self,
@@ -123,6 +138,14 @@ class ThinkingAgent:
                     authors=plan.author_mentions,
                 )
 
+            # Factual + NER filters → try filtered-only first, broaden on retry
+            has_filters = bool(plan.ner_entity_filters or plan.author_mentions)
+            skipped_unfiltered = (
+                plan.query_type == "factual"
+                and has_filters
+                and settings.chat_factual_skip_unfiltered
+            )
+
             retry_count = 0
             while retry_count <= self._max_retries:
                 # ── Stage 2: Agentic Retrieval (iterative) ──
@@ -140,6 +163,7 @@ class ThinkingAgent:
                 retrieval_results = []
                 async for kind, payload in self._retrieval.run(
                     plan, workspace_id, allowed_artifact_ids, question=message,
+                    skip_unfiltered_seed=skipped_unfiltered,
                 ):
                     if kind == "event":
                         yield payload  # Forward step events to SSE
@@ -202,6 +226,28 @@ class ThinkingAgent:
                         unique_artifacts=context_meta.unique_artifacts,
                     )
 
+                # ── Stage 3.5: Image Loading (Deep Thinking only) ──
+                images_b64: list[str] | None = None
+                if self._include_images and self._blob_store:
+                    yield AgentEvent(
+                        type="step_started",
+                        step="image_loading",
+                        status="started",
+                        description="Loading page images for visual analysis...",
+                    )
+                    images_b64 = await self._load_page_images(citations)
+                    yield AgentEvent(
+                        type="step_completed",
+                        step="image_loading",
+                        status="completed",
+                        output=f"Loaded {len(images_b64)} page images",
+                    )
+                    if _debug:
+                        log.info(
+                            "chat.debug.thinking.images_loaded",
+                            count=len(images_b64),
+                        )
+
                 # ── Stage 4: Adaptive Synthesis (streaming) ──
                 t4 = time.monotonic()
                 yield AgentEvent(
@@ -214,19 +260,20 @@ class ThinkingAgent:
                 draft_answer = ""
                 async for kind, payload in self._synthesis.run(
                     message, plan, sources_text, context_meta, conversation_history,
+                    images_b64=images_b64,
                 ):
                     if kind == "event":
                         yield payload  # Forward thinking events (e.g. answer plan)
                     else:
                         draft_answer += payload
                         total_tokens += 1
-                        yield AgentEvent(type="token", delta=payload)
 
                 synthesis_ms = int((time.monotonic() - t4) * 1000)
                 yield AgentEvent(
                     type="step_completed",
                     step="synthesis",
                     status="completed",
+                    thinking_content=draft_answer,
                 )
 
                 # Filter to actually-cited sources
@@ -290,21 +337,63 @@ class ThinkingAgent:
                 if grounding.is_grounded or retry_count >= self._max_retries:
                     break
 
-                # Retry: only re-run synthesis (Stage 4) with augmented prompt
-                log.info(
-                    "chat.thinking.retry",
-                    retry=retry_count + 1,
-                    unsupported=grounding.unsupported_claims,
-                )
-                plan = plan.model_copy(
-                    update={
-                        "reformulated_query": (
-                            f"{plan.reformulated_query} "
-                            f"(focus on: {', '.join(grounding.unsupported_claims[:3])})"
-                        ),
-                    },
-                )
+                if skipped_unfiltered:
+                    # Retry strategy A: broaden search by including unfiltered results
+                    log.info(
+                        "chat.thinking.retry_broaden",
+                        retry=retry_count + 1,
+                        unsupported=grounding.unsupported_claims,
+                    )
+                    skipped_unfiltered = False  # Next pass includes unfiltered seed
+                else:
+                    # Retry strategy B: augment query with unsupported claims
+                    log.info(
+                        "chat.thinking.retry_augment",
+                        retry=retry_count + 1,
+                        unsupported=grounding.unsupported_claims,
+                    )
+                    plan = plan.model_copy(
+                        update={
+                            "reformulated_query": (
+                                f"{plan.reformulated_query} "
+                                f"(focus on: {', '.join(grounding.unsupported_claims[:3])})"
+                            ),
+                        },
+                    )
                 retry_count += 1
+
+            # ── Stage 6: Answer Formatting ──
+            t6 = time.monotonic()
+            yield AgentEvent(
+                type="step_started",
+                step="formatting",
+                status="started",
+                description="Formatting answer...",
+            )
+            formatted_answer = ""
+            async for token in self._formatting.run(message, draft_answer):
+                formatted_answer += token
+                total_tokens += 1
+                yield AgentEvent(type="token", delta=token)
+
+            formatting_ms = int((time.monotonic() - t6) * 1000)
+            yield AgentEvent(
+                type="step_completed",
+                step="formatting",
+                status="completed",
+                output=f"Formatted ({formatting_ms}ms)",
+            )
+
+            # Re-extract citations from formatted answer
+            cited_indices = extract_cited_indices(formatted_answer)
+            used_citations = [c for c in citations if c.citation_index in cited_indices]
+
+            if _debug:
+                log.info(
+                    "chat.debug.thinking.formatting_done",
+                    duration_ms=formatting_ms,
+                    formatted_len=len(formatted_answer),
+                )
 
             elapsed_ms = int((time.monotonic() - start) * 1000)
 
@@ -381,3 +470,56 @@ class ThinkingAgent:
             )
             return plan.model_copy(update={"author_mentions": deduped})
         return plan
+
+    async def _load_page_images(
+        self, citations: list[SourceCitationDTO],
+    ) -> list[str]:
+        """Load page PNG images for the most relevant cited pages."""
+        assert self._blob_store is not None  # noqa: S101
+
+        max_images = settings.chat_deep_thinking_max_images
+
+        # Deduplicate by (artifact_id, page_index), keep highest score
+        seen: set[tuple[str, int]] = set()
+        candidates: list[SourceCitationDTO] = []
+        for c in citations:
+            if c.page_index is None:
+                continue
+            key = (str(c.artifact_id), c.page_index)
+            if key not in seen:
+                seen.add(key)
+                candidates.append(c)
+
+        # Sort by relevance, take top N
+        candidates.sort(
+            key=lambda c: c.similarity_score or 0.0, reverse=True,
+        )
+        candidates = candidates[:max_images]
+
+        # Load images in parallel via thread pool (blob store is sync)
+        blob_store = self._blob_store
+
+        async def _load_one(c: SourceCitationDTO) -> str | None:
+            image_key = f"artifacts/{c.artifact_id}/pages/{c.page_index}.png"
+            try:
+                exists = await asyncio.to_thread(blob_store.exists, image_key)
+                if not exists:
+                    return None
+                raw = await asyncio.to_thread(blob_store.get_bytes, image_key)
+                return base64.b64encode(raw).decode("ascii")
+            except Exception:
+                log.warning(
+                    "chat.thinking.image_load_failed",
+                    image_key=image_key, exc_info=True,
+                )
+                return None
+
+        results = await asyncio.gather(*[_load_one(c) for c in candidates])
+        images = [img for img in results if img is not None]
+
+        log.info(
+            "chat.thinking.images_loaded",
+            requested=len(candidates),
+            loaded=len(images),
+        )
+        return images

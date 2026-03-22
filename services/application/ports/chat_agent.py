@@ -23,5 +23,5 @@ class ChatAgentPort(Protocol):
         conversation_history: list[ChatMessageDTO],
         workspace_id: UUID,
         allowed_artifact_ids: list[UUID] | None = None,
-        mode: Literal["quick", "thinking"] | None = None,
+        mode: Literal["quick", "thinking", "deep_thinking"] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]: ...

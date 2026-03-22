@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Send, Zap, Brain } from "lucide-react";
+import { Send, Zap, Brain, Eye } from "lucide-react";
 import { InputTextarea } from "primereact/inputtextarea";
 import { Button } from "primereact/button";
 import { Tooltip } from "primereact/tooltip";
@@ -39,8 +39,10 @@ export function ChatInput({
     }
   };
 
+  const modes: ChatMode[] = ["quick", "thinking", "deep_thinking"];
   const toggleMode = useCallback(() => {
-    setChatMode(chatMode === "thinking" ? "quick" : "thinking");
+    const idx = modes.indexOf(chatMode);
+    setChatMode(modes[(idx + 1) % modes.length]);
   }, [chatMode, setChatMode]);
 
   return (
@@ -73,6 +75,32 @@ export function ChatInput({
   );
 }
 
+const MODE_CONFIG: Record<ChatMode, {
+  icon: typeof Zap;
+  label: string;
+  tooltip: string;
+  style: string;
+}> = {
+  quick: {
+    icon: Zap,
+    label: "Quick",
+    tooltip: "Quick: fast 4-step pipeline",
+    style: "bg-surface-elevated border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text-secondary",
+  },
+  thinking: {
+    icon: Brain,
+    label: "Thinking",
+    tooltip: "Thinking: deeper analysis, multi-query search, NER filtering",
+    style: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20",
+  },
+  deep_thinking: {
+    icon: Eye,
+    label: "Deep",
+    tooltip: "Deep Thinking: visual analysis with page images",
+    style: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20",
+  },
+};
+
 function ModeToggle({
   mode,
   onToggle,
@@ -82,7 +110,8 @@ function ModeToggle({
   onToggle: () => void;
   disabled: boolean;
 }) {
-  const isThinking = mode === "thinking";
+  const config = MODE_CONFIG[mode];
+  const Icon = config.icon;
 
   return (
     <>
@@ -94,24 +123,12 @@ function ModeToggle({
         className={`chat-mode-toggle flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium
           transition-all flex-shrink-0 border
           ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-          ${
-            isThinking
-              ? "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20"
-              : "bg-surface-elevated border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text-secondary"
-          }`}
-        data-pr-tooltip={
-          isThinking
-            ? "Thinking: deeper analysis, multi-query search, NER filtering"
-            : "Quick: fast 4-step pipeline"
-        }
-        aria-label={`Mode: ${isThinking ? "Thinking" : "Quick"}. Click to switch.`}
+          ${config.style}`}
+        data-pr-tooltip={config.tooltip}
+        aria-label={`Mode: ${config.label}. Click to switch.`}
       >
-        {isThinking ? (
-          <Brain className="w-3.5 h-3.5" />
-        ) : (
-          <Zap className="w-3.5 h-3.5" />
-        )}
-        <span>{isThinking ? "Thinking" : "Quick"}</span>
+        <Icon className="w-3.5 h-3.5" />
+        <span>{config.label}</span>
       </button>
     </>
   );

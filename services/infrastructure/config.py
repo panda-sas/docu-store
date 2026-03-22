@@ -294,10 +294,10 @@ class Settings(BaseSettings):
     )
 
     # Thinking Mode settings
-    chat_default_mode: Literal["quick", "thinking"] = Field(
+    chat_default_mode: Literal["quick", "thinking", "deep_thinking"] = Field(
         default="thinking",
         validation_alias="CHAT_DEFAULT_MODE",
-        description="Default chat pipeline mode. 'quick' = existing 4-step, 'thinking' = advanced 5-stage.",
+        description="Default chat pipeline mode. 'quick' = 4-step, 'thinking' = 5-stage, 'deep_thinking' = thinking + page images.",
     )
     chat_enable_sub_queries: bool = Field(
         default=True,
@@ -328,6 +328,25 @@ class Settings(BaseSettings):
         default=0.4,
         validation_alias="CHAT_VERIFICATION_RELEVANCE_THRESHOLD",
         description="Avg relevance score below which LLM verification is triggered.",
+    )
+
+    # Factual mode optimisation: skip unfiltered seed when NER-filtered results suffice
+    chat_factual_skip_unfiltered: bool = Field(
+        default=True,
+        validation_alias="CHAT_FACTUAL_SKIP_UNFILTERED",
+        description="In factual mode with NER filters, skip the unfiltered seed search when filtered results are sufficient.",
+    )
+    chat_factual_min_filtered_results: int = Field(
+        default=3,
+        validation_alias="CHAT_FACTUAL_MIN_FILTERED_RESULTS",
+        description="Minimum filtered seed results required to skip unfiltered search in factual mode.",
+    )
+
+    # Deep Thinking Mode settings
+    chat_deep_thinking_max_images: int = Field(
+        default=5,
+        validation_alias="CHAT_DEEP_THINKING_MAX_IMAGES",
+        description="Max page images to include in Deep Thinking synthesis prompt.",
     )
 
     # Agentic retrieval settings (Thinking Mode v2)

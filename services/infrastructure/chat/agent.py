@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from application.dtos.chat_dtos import ChatMessageDTO, SourceCitationDTO
+    from infrastructure.chat.nodes.answer_formatting import AnswerFormattingNode
     from infrastructure.chat.nodes.answer_synthesis import AnswerSynthesisNode
     from infrastructure.chat.nodes.grounding_verification import GroundingVerificationNode
     from infrastructure.chat.nodes.question_analysis import QuestionAnalysisNode
@@ -38,12 +39,14 @@ class ChatAgent:
         retrieval: RetrievalNode,
         answer_synthesis: AnswerSynthesisNode,
         grounding_verification: GroundingVerificationNode,
+        answer_formatting: AnswerFormattingNode,
         max_retries: int = 1,
     ) -> None:
         self._analysis = question_analysis
         self._retrieval = retrieval
         self._synthesis = answer_synthesis
         self._grounding = grounding_verification
+        self._formatting = answer_formatting
         self._max_retries = max_retries
 
     async def run(
@@ -158,13 +161,13 @@ class ChatAgent:
                 ):
                     draft_answer += token
                     total_tokens += 1
-                    yield AgentEvent(type="token", delta=token)
 
                 synthesis_ms = int((time.monotonic() - t3) * 1000)
                 yield AgentEvent(
                     type="step_completed",
                     step="synthesis",
                     status="completed",
+                    thinking_content=draft_answer,
                 )
 
                 # Determine which citations were actually used in the answer
@@ -245,6 +248,39 @@ class ChatAgent:
                     },
                 )
                 retry_count += 1
+
+            # ── Step 5: Answer Formatting ──
+            t5 = time.monotonic()
+            yield AgentEvent(
+                type="step_started",
+                step="formatting",
+                status="started",
+                description="Formatting answer...",
+            )
+            formatted_answer = ""
+            async for token in self._formatting.run(message, draft_answer):
+                formatted_answer += token
+                total_tokens += 1
+                yield AgentEvent(type="token", delta=token)
+
+            formatting_ms = int((time.monotonic() - t5) * 1000)
+            yield AgentEvent(
+                type="step_completed",
+                step="formatting",
+                status="completed",
+                output=f"Formatted ({formatting_ms}ms)",
+            )
+
+            # Re-extract citations from formatted answer
+            cited_indices = extract_cited_indices(formatted_answer)
+            used_citations = [c for c in citations if c.citation_index in cited_indices]
+
+            if _debug:
+                log.info(
+                    "chat.debug.agent.formatting_done",
+                    duration_ms=formatting_ms,
+                    formatted_len=len(formatted_answer),
+                )
 
             elapsed_ms = int((time.monotonic() - start) * 1000)
 

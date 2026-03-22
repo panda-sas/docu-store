@@ -42,6 +42,7 @@ class LLMClientPort(Protocol):
         *,
         system_prompt: str | None = None,
         temperature: float | None = None,
+        images_b64: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream tokens one by one from the model.
 
@@ -49,6 +50,7 @@ class LLMClientPort(Protocol):
             prompt: The user prompt to send to the model
             system_prompt: Optional system/instruction prompt
             temperature: Override instance temperature for this call
+            images_b64: Optional list of base64-encoded images (PNG/JPEG) for multimodal prompting
 
         Yields:
             String token deltas as they are generated

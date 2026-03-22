@@ -165,7 +165,7 @@ class SendMessageUseCase:
         owner_id: UUID,
         message: str,
         allowed_artifact_ids: list[UUID] | None = None,
-        mode: Literal["quick", "thinking"] | None = None,
+        mode: Literal["quick", "thinking", "deep_thinking"] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         # Verify conversation exists
         conversation = await self._repo.get_conversation(

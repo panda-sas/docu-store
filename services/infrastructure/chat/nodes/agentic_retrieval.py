@@ -48,6 +48,7 @@ class AgenticRetrievalNode:
         workspace_id: UUID,
         allowed_artifact_ids: list[UUID] | None,
         question: str,
+        skip_unfiltered_seed: bool = False,
     ) -> AsyncGenerator[
         tuple[Literal["event", "results"], AgentEvent | list[RetrievalResult]],
         None,
@@ -92,32 +93,55 @@ class AgenticRetrievalNode:
         # Second search: same query, NO filters — catches pages missed by NER
         seed_summary = filtered_summary
         new_from_unfiltered = 0
+        did_skip_unfiltered = False
         if has_filters:
-            unfiltered_args = {"query": plan.reformulated_query, "limit": 10}
-            unfiltered_results, unfiltered_summary = await self._tools.execute(
-                "search_documents", unfiltered_args, workspace_id, allowed_artifact_ids,
+            min_threshold = settings.chat_factual_min_filtered_results
+            should_skip = (
+                skip_unfiltered_seed
+                and len(filtered_results) >= min_threshold
             )
-            new_from_unfiltered = accumulator.add_results(
-                unfiltered_results, f"{plan.reformulated_query}_unfiltered",
-            )
-            if new_from_unfiltered > 0:
-                seed_summary += (
-                    f"\n\nBroader search (no entity filters) added "
-                    f"{new_from_unfiltered} more results:\n{unfiltered_summary}"
+
+            if should_skip:
+                did_skip_unfiltered = True
+                log.info(
+                    "chat.agentic_retrieval.skip_unfiltered",
+                    filtered_count=len(filtered_results),
+                    threshold=min_threshold,
                 )
+            else:
+                if skip_unfiltered_seed:
+                    log.info(
+                        "chat.agentic_retrieval.skip_unfiltered_fallthrough",
+                        filtered_count=len(filtered_results),
+                        threshold=min_threshold,
+                    )
+                unfiltered_args = {"query": plan.reformulated_query, "limit": 10}
+                unfiltered_results, unfiltered_summary = await self._tools.execute(
+                    "search_documents", unfiltered_args, workspace_id, allowed_artifact_ids,
+                )
+                new_from_unfiltered = accumulator.add_results(
+                    unfiltered_results, f"{plan.reformulated_query}_unfiltered",
+                )
+                if new_from_unfiltered > 0:
+                    seed_summary += (
+                        f"\n\nBroader search (no entity filters) added "
+                        f"{new_from_unfiltered} more results:\n{unfiltered_summary}"
+                    )
 
         total_seed = len(filtered_results) + new_from_unfiltered
+        output_parts = [f"Initial search: {len(filtered_results)} filtered"]
+        if has_filters and not did_skip_unfiltered:
+            output_parts.append(f" + {new_from_unfiltered} unfiltered")
+        elif did_skip_unfiltered:
+            output_parts.append(" (unfiltered skipped — factual mode)")
+        output_parts.append(f" = {total_seed} results")
         yield (
             "event",
             AgentEvent(
                 type="step_completed",
                 step="retrieval",
                 status="completed",
-                output=(
-                    f"Initial search: {len(filtered_results)} filtered"
-                    + (f" + {new_from_unfiltered} unfiltered" if has_filters else "")
-                    + f" = {total_seed} results"
-                ),
+                output="".join(output_parts),
             ),
         )
 

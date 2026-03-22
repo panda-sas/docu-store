@@ -51,6 +51,7 @@ class AdaptiveSynthesisNode:
         sources_text: str,
         context_meta: ContextMetadata,
         conversation_history: list[ChatMessageDTO],
+        images_b64: list[str] | None = None,
     ) -> AsyncGenerator[tuple[Literal["token", "event"], str | AgentEvent], None]:
         """Stream answer tokens with adaptive prompting.
 
@@ -75,6 +76,11 @@ class AdaptiveSynthesisNode:
 
         # Build context hints from metadata
         context_hints = self._build_context_hints(context_meta, plan)
+        if images_b64:
+            context_hints += (
+                f" {len(images_b64)} page images are attached for visual context."
+                " Reference figures, charts, or diagrams visible in the images when relevant."
+            )
 
         # Think-then-answer planning step (small non-streaming call)
         answer_plan = await self._plan_answer(
@@ -121,6 +127,7 @@ class AdaptiveSynthesisNode:
         async for token in self._llm.stream(
             user_prompt,
             system_prompt=system_prompt,
+            images_b64=images_b64,
         ):
             token_count += 1
             yield ("token", token)

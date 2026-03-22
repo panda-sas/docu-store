@@ -71,6 +71,7 @@ class OllamaLLMClient:
         *,
         system_prompt: str | None = None,
         temperature: float | None = None,
+        images_b64: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
 
@@ -81,7 +82,17 @@ class OllamaLLMClient:
         messages = []
         if system_prompt:
             messages.append(SystemMessage(content=system_prompt))
-        messages.append(HumanMessage(content=prompt))
+
+        if images_b64:
+            content: list[dict] = [{"type": "text", "text": prompt}]
+            for img in images_b64:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img}"},
+                })
+            messages.append(HumanMessage(content=content))
+        else:
+            messages.append(HumanMessage(content=prompt))
 
         log.debug("ollama.stream", model=self._model_name, prompt_len=len(prompt))
         config = {"callbacks": [self._langfuse_handler]} if self._langfuse_handler else {}

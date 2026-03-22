@@ -666,6 +666,7 @@ def create_container() -> Container:  # noqa: PLR0915
     from application.ports.chat_repository import ChatRepository  # noqa: PLC0415
     from infrastructure.chat.agent import ChatAgent  # noqa: PLC0415
     from infrastructure.chat.mongo_chat_repository import MongoChatRepository  # noqa: PLC0415
+    from infrastructure.chat.nodes.answer_formatting import AnswerFormattingNode  # noqa: PLC0415
     from infrastructure.chat.nodes.answer_synthesis import AnswerSynthesisNode  # noqa: PLC0415
     from infrastructure.chat.nodes.grounding_verification import GroundingVerificationNode  # noqa: PLC0415
     from infrastructure.chat.nodes.question_analysis import QuestionAnalysisNode  # noqa: PLC0415
@@ -706,11 +707,17 @@ def create_container() -> Container:  # noqa: PLR0915
         prompt_repository=c[PromptRepositoryPort],
     )
 
+    container[AnswerFormattingNode] = lambda c: AnswerFormattingNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+    )
+
     quick_agent = lambda c: ChatAgent(
         question_analysis=c[QuestionAnalysisNode],
         retrieval=c[RetrievalNode],
         answer_synthesis=c[AnswerSynthesisNode],
         grounding_verification=c[GroundingVerificationNode],
+        answer_formatting=c[AnswerFormattingNode],
         max_retries=settings.chat_max_retries,
     )
 
@@ -751,14 +758,30 @@ def create_container() -> Container:  # noqa: PLR0915
         context_assembly=c[ContextAssemblyNode],
         adaptive_synthesis=c[AdaptiveSynthesisNode],
         inline_verification=c[InlineVerificationNode],
+        answer_formatting=c[AnswerFormattingNode],
         tag_dictionary=c[TagDictionaryReadModel],
         max_retries=settings.chat_max_retries,
     )
 
-    # --- Agent Router (dispatches to quick or thinking) ---
+    # --- Deep Thinking Mode (thinking + page images) ---
+    deep_thinking_agent = lambda c: ThinkingAgent(
+        query_planning=c[QueryPlanningNode],
+        agentic_retrieval=c[AgenticRetrievalNode],
+        context_assembly=c[ContextAssemblyNode],
+        adaptive_synthesis=c[AdaptiveSynthesisNode],
+        inline_verification=c[InlineVerificationNode],
+        answer_formatting=c[AnswerFormattingNode],
+        tag_dictionary=c[TagDictionaryReadModel],
+        max_retries=settings.chat_max_retries,
+        blob_store=c[BlobStore],
+        include_images=True,
+    )
+
+    # --- Agent Router (dispatches to quick, thinking, or deep thinking) ---
     container[ChatAgentPort] = lambda c: ChatAgentRouter(
         quick_agent=quick_agent(c),
         thinking_agent=thinking_agent(c),
+        deep_thinking_agent=deep_thinking_agent(c),
         default_mode=settings.chat_default_mode,
     )
 
