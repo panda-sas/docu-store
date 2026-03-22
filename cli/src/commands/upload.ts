@@ -57,7 +57,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function uploadCommand(
-  directory: string,
+  pathArg: string,
   opts: UploadOptions,
 ): Promise<void> {
   const config = loadConfig();
@@ -65,27 +65,56 @@ export async function uploadCommand(
   const delayMs = parseFloat(opts.delay) * 1000;
   const pattern = opts.glob || "*.pdf";
 
-  // Validate directory
-  const dir = resolvePath(directory);
+  const resolved = resolvePath(pathArg);
+  let stat;
   try {
-    const stat = statSync(dir);
-    if (!stat.isDirectory()) {
-      log.error(`${directory} is not a directory`);
-      process.exit(1);
-    }
+    stat = statSync(resolved);
   } catch {
-    log.error(`Directory not found: ${directory}`);
+    log.error(`Path not found: ${pathArg}`);
     process.exit(1);
   }
+
+  // Single file upload
+  if (stat.isFile()) {
+    const creds = await getAuthCredentials();
+    const fileName = resolved.split("/").pop()!;
+    log.info(`Uploading ${fileName} (${formatSize(stat.size)})...`);
+
+    if (opts.dryRun) {
+      log.info(`Dry run: would upload ${fileName}`);
+      return;
+    }
+
+    try {
+      const fileData = readFileSync(resolved);
+      const start = performance.now();
+      const result = await uploadFile(apiUrl, creds, resolved, fileName, fileData, opts.type, opts.visibility);
+      const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+      const pageCount = Array.isArray(result.pages) ? result.pages.length : "?";
+      log.success(`${fileName} -> ${result.artifact_id} (${pageCount} pages, ${elapsed}s)`);
+    } catch (err) {
+      log.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (!stat.isDirectory()) {
+    log.error(`${pathArg} is not a file or directory`);
+    process.exit(1);
+  }
+
+  // Directory upload
+  const dir = resolved;
 
   // Find files
   const files = findFiles(dir, pattern, !!opts.recursive);
   if (files.length === 0) {
-    log.info(`No ${pattern} files found in ${directory}`);
+    log.info(`No ${pattern} files found in ${pathArg}`);
     return;
   }
 
-  log.info(`Found ${files.length} files in ${directory}`);
+  log.info(`Found ${files.length} files in ${pathArg}`);
 
   // Dry run — just list
   if (opts.dryRun) {

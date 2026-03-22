@@ -24,11 +24,13 @@ export async function loginCommand(opts: LoginOptions): Promise<void> {
   }
 
   // Browser OAuth flow
-  const { idpToken } = await startOAuthFlow(
+  const oauthResult = await startOAuthFlow(
     sentinelUrl,
     opts.provider,
     config.google_client_id,
+    config.google_client_secret,
   );
+  const { idpToken } = oauthResult;
   log.success("IdP token received");
 
   // Step 1: Resolve without workspace to get user + workspace list
@@ -84,6 +86,12 @@ export async function loginCommand(opts: LoginOptions): Promise<void> {
     user_email: result.user.email,
     user_name: result.user.name,
     expires_at: Date.now() / 1000 + result.expires_in,
+    refresh_token: oauthResult.refreshToken,
+    idp_token_expires_at: oauthResult.idpExpiresIn
+      ? Date.now() / 1000 + oauthResult.idpExpiresIn
+      : undefined,
+    google_client_id: opts.provider === "google" ? config.google_client_id : undefined,
+    google_client_secret: opts.provider === "google" ? config.google_client_secret : undefined,
   };
 
   saveCredentials(creds);

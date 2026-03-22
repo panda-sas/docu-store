@@ -6,12 +6,14 @@ export interface AppConfig {
   sentinel_url: string;
   api_url: string;
   google_client_id: string;
+  google_client_secret: string;
 }
 
 const DEFAULTS: AppConfig = {
   sentinel_url: "http://localhost:9003",
   api_url: "http://localhost:8000",
   google_client_id: "",
+  google_client_secret: "",
 };
 
 function configDir(): string {
@@ -41,6 +43,8 @@ export function loadConfig(): AppConfig {
       process.env.DOCU_API_URL || file.api_url || DEFAULTS.api_url,
     google_client_id:
       process.env.DOCU_GOOGLE_CLIENT_ID || file.google_client_id || DEFAULTS.google_client_id,
+    google_client_secret:
+      process.env.DOCU_GOOGLE_CLIENT_SECRET || file.google_client_secret || DEFAULTS.google_client_secret,
   };
 }
 
@@ -68,6 +72,7 @@ export function showConfig(): Record<string, string> {
     sentinel_url: config.sentinel_url,
     api_url: config.api_url,
     google_client_id: config.google_client_id || "(not set)",
+    google_client_secret: config.google_client_secret ? "(set)" : "(not set)",
     config_file: configPath(),
   };
 }

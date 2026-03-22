@@ -10,7 +10,11 @@ export interface Credentials {
   workspace_slug: string | null;
   user_email: string | null;
   user_name: string | null;
-  expires_at: number; // unix seconds
+  expires_at: number; // unix seconds — authz token expiry
+  refresh_token?: string; // Google OAuth refresh token (for indefinite sessions)
+  idp_token_expires_at?: number; // unix seconds — when the IdP token expires
+  google_client_id?: string; // needed for refresh_token exchange
+  google_client_secret?: string; // needed for refresh_token exchange
 }
 
 const REFRESH_BUFFER_SECONDS = 30;

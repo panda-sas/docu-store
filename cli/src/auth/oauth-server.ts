@@ -1,12 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import open from "open";
+import { exchangeCodeForTokens } from "./google.js";
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const FIXED_CALLBACK_PORT = 18549; // Fixed port for OAuth redirect URI registration
+const FIXED_CALLBACK_PORT = 18549;
 
-/** HTML served at the callback URL — extracts hash fragment and POSTs to local server. */
-const CALLBACK_HTML = `<!DOCTYPE html>
+/** HTML for GitHub flow — extracts id_token from hash fragment and POSTs to local server. */
+const HASH_CALLBACK_HTML = `<!DOCTYPE html>
 <html><head><title>docu-store login</title>
 <style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#111;color:#eee}p{font-size:1.1rem}</style>
 </head><body>
@@ -38,63 +39,92 @@ if (token) {
 </script>
 </body></html>`;
 
-interface OAuthResult {
+const SUCCESS_HTML = `<!DOCTYPE html>
+<html><head><title>docu-store login</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#111;color:#eee}p{font-size:1.1rem}</style>
+</head><body><p>Login successful! You can close this tab.</p></body></html>`;
+
+const ERROR_HTML = (msg: string) => `<!DOCTYPE html>
+<html><head><title>docu-store login</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#111;color:#eee}p{font-size:1.1rem;color:#f66}</style>
+</head><body><p>Login failed: ${msg}</p></body></html>`;
+
+export interface OAuthResult {
   idpToken: string;
+  refreshToken?: string;
+  idpExpiresIn?: number; // seconds until IdP token expires
 }
 
-/** Provider-specific login URL builders. */
-const PROVIDER_CONFIGS: Record<
-  string,
-  (opts: { sentinelUrl: string; callbackUrl: string; nonce: string; googleClientId?: string }) => string
-> = {
-  github: ({ sentinelUrl, callbackUrl, nonce }) =>
-    `${sentinelUrl.replace(/\/$/, "")}/authz/idp/github/login` +
-    `?redirect_uri=${encodeURIComponent(callbackUrl)}&nonce=${nonce}`,
-
-  google: ({ callbackUrl, nonce, googleClientId }) => {
-    if (!googleClientId) {
-      throw new Error(
-        "Google login requires a client ID. Set it with:\n" +
-        "  docu config set google-client-id YOUR_GOOGLE_CLIENT_ID\n" +
-        "  or: export DOCU_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID",
-      );
-    }
-    const params = new URLSearchParams({
-      client_id: googleClientId,
-      redirect_uri: callbackUrl,
-      response_type: "id_token",
-      scope: "openid email profile",
-      nonce,
-    });
-    return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-  },
-};
+/** Generate PKCE code_verifier and code_challenge. */
+function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
+  const codeVerifier = randomBytes(32).toString("base64url");
+  const codeChallenge = createHash("sha256")
+    .update(codeVerifier)
+    .digest("base64url");
+  return { codeVerifier, codeChallenge };
+}
 
 /**
  * Start a local HTTP server, open the browser to the IdP login,
  * and wait for the callback with the IdP token.
  *
- * - GitHub: routes through Sentinel's server-side proxy (/authz/idp/github/login)
- * - Google: goes directly to Google's OIDC implicit flow (id_token in hash)
+ * - GitHub: routes through Sentinel's proxy, token in hash fragment
+ * - Google: authorization code + PKCE flow, code in query params
  */
 export async function startOAuthFlow(
   sentinelUrl: string,
   provider: string,
   googleClientId?: string,
+  googleClientSecret?: string,
 ): Promise<OAuthResult> {
   const nonce = randomBytes(16).toString("base64url");
+  const pkce = generatePKCE();
+  const callbackUrl = `http://localhost:${FIXED_CALLBACK_PORT}/callback`;
 
   return new Promise<OAuthResult>((resolvePromise, rejectPromise) => {
     let settled = false;
 
-    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       if (req.method === "GET" && req.url?.startsWith("/callback")) {
-        // Serve the callback HTML that extracts the token from the URL hash
+        const url = new URL(req.url, `http://localhost:${FIXED_CALLBACK_PORT}`);
+        const code = url.searchParams.get("code");
+
+        if (code && provider === "google" && googleClientId) {
+          // Google auth code flow — exchange code for tokens server-side
+          try {
+            const tokens = await exchangeCodeForTokens(
+              code,
+              googleClientId,
+              googleClientSecret || "",
+              callbackUrl,
+              pkce.codeVerifier,
+            );
+
+            res.writeHead(200, { "Content-Type": "text/html" });
+            res.end(SUCCESS_HTML);
+
+            settled = true;
+            cleanup();
+            resolvePromise({
+              idpToken: tokens.id_token,
+              refreshToken: tokens.refresh_token,
+              idpExpiresIn: tokens.expires_in,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            res.writeHead(200, { "Content-Type": "text/html" });
+            res.end(ERROR_HTML(msg));
+          }
+          return;
+        }
+
+        // GitHub flow — serve HTML that extracts token from hash fragment
         res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(CALLBACK_HTML);
+        res.end(HASH_CALLBACK_HTML);
         return;
       }
 
+      // GitHub flow — receive token POSTed from callback page JS
       if (req.method === "POST" && req.url === "/token") {
         let body = "";
         req.on("data", (chunk: Buffer) => {
@@ -104,8 +134,6 @@ export async function startOAuthFlow(
           try {
             const data = JSON.parse(body) as { token?: string; nonce?: string };
 
-            // Validate nonce if present (GitHub/Sentinel includes it in the hash;
-            // Google OIDC embeds it inside the JWT, so it's not in the hash).
             if (data.nonce && data.nonce !== nonce) {
               res.writeHead(400, { "Content-Type": "application/json" });
               res.end(JSON.stringify({ error: "nonce mismatch" }));
@@ -149,7 +177,6 @@ export async function startOAuthFlow(
       server.close();
     }
 
-    // Listen on fixed port so OAuth redirect URIs can be pre-registered
     server.listen(FIXED_CALLBACK_PORT, "127.0.0.1", () => {
       const addr = server.address();
       if (!addr || typeof addr === "string") {
@@ -159,24 +186,16 @@ export async function startOAuthFlow(
         return;
       }
 
-      const port = addr.port;
-      const callbackUrl = `http://localhost:${port}/callback`;
-
-      const buildUrl = PROVIDER_CONFIGS[provider];
-      if (!buildUrl) {
-        settled = true;
-        cleanup();
-        rejectPromise(
-          new Error(
-            `Unsupported provider "${provider}". Supported: ${Object.keys(PROVIDER_CONFIGS).join(", ")}`,
-          ),
-        );
-        return;
-      }
-
+      // Build login URL based on provider
       let loginUrl: string;
       try {
-        loginUrl = buildUrl({ sentinelUrl, callbackUrl, nonce, googleClientId });
+        loginUrl = buildLoginUrl(provider, {
+          sentinelUrl,
+          callbackUrl,
+          nonce,
+          googleClientId,
+          codeChallenge: pkce.codeChallenge,
+        });
       } catch (err) {
         settled = true;
         cleanup();
@@ -192,4 +211,48 @@ export async function startOAuthFlow(
       });
     });
   });
+}
+
+function buildLoginUrl(
+  provider: string,
+  opts: {
+    sentinelUrl: string;
+    callbackUrl: string;
+    nonce: string;
+    googleClientId?: string;
+    codeChallenge: string;
+  },
+): string {
+  if (provider === "github") {
+    return (
+      `${opts.sentinelUrl.replace(/\/$/, "")}/authz/idp/github/login` +
+      `?redirect_uri=${encodeURIComponent(opts.callbackUrl)}&nonce=${opts.nonce}`
+    );
+  }
+
+  if (provider === "google") {
+    if (!opts.googleClientId) {
+      throw new Error(
+        "Google login requires a client ID. Set it with:\n" +
+          "  docu config set google-client-id YOUR_GOOGLE_CLIENT_ID\n" +
+          "  or: export DOCU_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID",
+      );
+    }
+    const params = new URLSearchParams({
+      client_id: opts.googleClientId,
+      redirect_uri: opts.callbackUrl,
+      response_type: "code",
+      scope: "openid email profile",
+      access_type: "offline",
+      prompt: "consent",
+      nonce: opts.nonce,
+      code_challenge: opts.codeChallenge,
+      code_challenge_method: "S256",
+    });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+  }
+
+  throw new Error(
+    `Unsupported provider "${provider}". Supported: github, google`,
+  );
 }

@@ -318,11 +318,12 @@ async def get_artifact_summary(
             detail="No summary available for this artifact yet",
         )
 
+    de = artifact.summary_candidate.date_extracted
     return SummaryDetailResponse(
         entity_id=str(artifact_id),
         summary=artifact.summary_candidate.summary,
         model_name=artifact.summary_candidate.model_name,
-        date_extracted=artifact.summary_candidate.date_extracted,
+        date_extracted=de.isoformat() if de else None,
         is_locked=artifact.summary_candidate.is_locked,
         hil_correction=artifact.summary_candidate.hil_correction,
     )

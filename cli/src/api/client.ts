@@ -4,13 +4,47 @@ import {
   saveCredentials,
   type Credentials,
 } from "../auth/credentials.js";
+import { refreshGoogleToken } from "../auth/google.js";
 import { resolve, SentinelError } from "../auth/sentinel.js";
 import { loadConfig } from "../utils/config.js";
 import * as log from "../utils/logger.js";
 
+/** Check if the IdP token itself has expired (Google ~1hr). */
+function isIdpTokenExpired(creds: Credentials): boolean {
+  if (!creds.idp_token_expires_at) return false; // GitHub tokens don't expire
+  return Date.now() / 1000 > creds.idp_token_expires_at - 60; // 60s buffer
+}
+
 /**
- * Get a valid set of credentials, auto-refreshing the authz token if expired.
- * Exits on auth failure.
+ * Ensure the IdP token is fresh. For Google, uses refresh_token to get a new id_token.
+ * Returns true if the IdP token was refreshed (meaning authz token also needs refresh).
+ */
+async function ensureFreshIdpToken(creds: Credentials): Promise<boolean> {
+  if (!isIdpTokenExpired(creds)) return false;
+
+  if (!creds.refresh_token || !creds.google_client_id || !creds.google_client_secret) {
+    log.error("Google ID token expired and no refresh token available. Run: docu login");
+    process.exit(1);
+  }
+
+  log.info("Refreshing Google ID token...");
+  try {
+    const result = await refreshGoogleToken(creds.refresh_token, creds.google_client_id, creds.google_client_secret);
+    creds.idp_token = result.id_token;
+    creds.idp_token_expires_at = Date.now() / 1000 + result.expires_in;
+    saveCredentials(creds);
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    log.error(`Google token refresh failed: ${msg}. Run: docu login`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Get a valid set of credentials, auto-refreshing tokens as needed.
+ * For Google: refreshes IdP token (via refresh_token) then authz token.
+ * For GitHub: IdP token never expires, only refreshes authz token.
  */
 export async function getAuthCredentials(): Promise<Credentials> {
   const creds = loadCredentials();
@@ -19,11 +53,14 @@ export async function getAuthCredentials(): Promise<Credentials> {
     process.exit(1);
   }
 
-  if (!isExpired(creds)) {
+  // Step 1: Ensure IdP token is fresh (Google only)
+  const idpRefreshed = await ensureFreshIdpToken(creds);
+
+  // Step 2: Refresh authz token if expired or if IdP token was just refreshed
+  if (!isExpired(creds) && !idpRefreshed) {
     return creds;
   }
 
-  // Try to refresh
   if (!creds.idp_token) {
     log.error("Token expired and no IdP token for refresh. Run: docu login");
     process.exit(1);
@@ -78,7 +115,10 @@ export async function uploadFile(
   visibility: string,
 ): Promise<{ artifact_id: string; pages: unknown[] }> {
   const formData = new FormData();
-  formData.append("file", new Blob([fileData]), fileName);
+  const mimeType = fileName.toLowerCase().endsWith(".pdf")
+    ? "application/pdf"
+    : "application/octet-stream";
+  formData.append("file", new Blob([fileData], { type: mimeType }), fileName);
   formData.append("artifact_type", artifactType);
   formData.append("visibility", visibility);
 
