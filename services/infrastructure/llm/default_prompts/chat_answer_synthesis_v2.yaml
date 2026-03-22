@@ -1,7 +1,7 @@
 name: chat_answer_synthesis_v2
-version: "1.0"
+version: "1.1"
 description: >
-  Thinking Mode answer synthesis — enriched with answer plan and context hints
+  Thinking Mode answer synthesis — sources first, then plan + instructions (recency bias layout)
 input_variables:
   - question
   - sources
@@ -10,8 +10,10 @@ input_variables:
   - answer_plan
   - context_hints
 template: |
-  Answer the user's specific question using ONLY the provided sources.
-  Focus on what was asked — do not include unrelated information even if it appears in the sources.
+  Retrieved sources:
+  {sources}
+
+  --- END SOURCES ---
 
   Question: {question}
   Analysis: {analysis_summary}
@@ -20,11 +22,9 @@ template: |
   Conversation context:
   {conversation_context}
 
-  Your answer plan:
+  --- ANSWER GUIDANCE ---
+  Your answer plan (follow this closely):
   {answer_plan}
-
-  Retrieved sources:
-  {sources}
 
   INSTRUCTIONS:
   1. Follow your answer plan above — it maps sources to question parts.
@@ -36,3 +36,6 @@ template: |
   7. Do NOT invent information not present in the sources.
   8. Do NOT add a "Sources" or "References" section at the end — inline citations are sufficient.
   9. FOCUS: Only include information that directly answers or supports the user's question. Mentioning the same entity is NOT enough — the information must be relevant to what was asked about that entity.
+
+  Answer the user's specific question using ONLY the provided sources.
+  Focus on what was asked — do not include unrelated information even if it appears in the sources.

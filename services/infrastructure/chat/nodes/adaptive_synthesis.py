@@ -13,6 +13,8 @@ import structlog
 
 from infrastructure.config import settings
 
+from application.dtos.chat_dtos import AgentEvent
+
 if TYPE_CHECKING:
     from application.dtos.chat_dtos import ChatMessageDTO
     from application.ports.llm_client import LLMClientPort
@@ -49,8 +51,12 @@ class AdaptiveSynthesisNode:
         sources_text: str,
         context_meta: ContextMetadata,
         conversation_history: list[ChatMessageDTO],
-    ) -> AsyncGenerator[str, None]:
-        """Stream answer tokens with adaptive prompting."""
+    ) -> AsyncGenerator[str | AgentEvent, None]:
+        """Stream answer tokens with adaptive prompting.
+
+        Yields str tokens for the answer, and may yield AgentEvent objects
+        for intermediate thinking content (e.g. the answer plan).
+        """
         _debug = settings.chat_debug
         conversation_context = _format_history(conversation_history)
 
@@ -83,6 +89,15 @@ class AdaptiveSynthesisNode:
                 answer_plan_len=len(answer_plan),
                 answer_plan_preview=answer_plan[:300],
             )
+
+        # Emit the answer plan as thinking content for the agent trace
+        yield AgentEvent(
+            type="step_completed",
+            step="synthesis",
+            status="started",
+            output="Answer plan generated",
+            thinking_content=answer_plan,
+        )
 
         # Build synthesis prompt
         user_prompt = await self._prompts.render_prompt(

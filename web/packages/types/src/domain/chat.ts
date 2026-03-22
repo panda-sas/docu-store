@@ -38,6 +38,7 @@ export interface AgentStep {
   completed_at: string | null;
   input_summary: string | null;
   output_summary: string | null;
+  thinking_content: string | null;
 }
 
 export interface AgentTrace {
@@ -98,6 +99,7 @@ export interface AgentEvent {
   status?: "started" | "completed" | "failed";
   description?: string;
   output?: string;
+  thinking_content?: string;
   delta?: string;
   sources?: SourceCitation[];
   block?: ContentBlock;

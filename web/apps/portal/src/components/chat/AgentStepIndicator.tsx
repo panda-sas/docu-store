@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Loader2, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Check, Loader2, AlertCircle, Brain, ChevronRight, ChevronDown } from "lucide-react";
 import type { AgentStep } from "@docu-store/types";
 
 const STEP_LABELS: Record<string, string> = {
@@ -22,7 +23,9 @@ interface AgentStepIndicatorProps {
 }
 
 export function AgentStepIndicator({ step, durationMs, devMode }: AgentStepIndicatorProps) {
+  const [thinkingExpanded, setThinkingExpanded] = useState(false);
   const label = STEP_LABELS[step.step] ?? step.step;
+  const hasThinking = !!step.thinking_content;
 
   return (
     <div className="flex items-start gap-2 text-xs">
@@ -50,11 +53,29 @@ export function AgentStepIndicator({ step, durationMs, devMode }: AgentStepIndic
               {durationMs}ms
             </span>
           )}
+          {hasThinking && (
+            <button
+              onClick={() => setThinkingExpanded(!thinkingExpanded)}
+              className="flex items-center gap-0.5 text-[10px] text-accent-text/70 hover:text-accent-text transition-colors"
+            >
+              <Brain className="w-3 h-3" />
+              {thinkingExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+            </button>
+          )}
         </div>
         {step.output_summary && (
           <p className={`text-text-muted mt-0.5 ${devMode ? "whitespace-pre-wrap break-words" : "truncate"}`}>
             {step.output_summary}
           </p>
+        )}
+        {hasThinking && thinkingExpanded && (
+          <div className="mt-1.5 rounded bg-surface-primary/50 border border-border-subtle px-2.5 py-2 text-[11px] text-text-muted whitespace-pre-wrap break-words leading-relaxed">
+            {step.thinking_content}
+          </div>
         )}
       </div>
     </div>

@@ -232,6 +232,17 @@ class AgenticRetrievalNode:
 
             # No tool calls → model is done
             if not response.tool_calls:
+                if response.content:
+                    yield (
+                        "event",
+                        AgentEvent(
+                            type="step_completed",
+                            step="retrieval",
+                            status="completed",
+                            output=f"Model finished retrieval ({accumulator.result_count} sources)",
+                            thinking_content=response.content[:2000],
+                        ),
+                    )
                 if _debug:
                     log.info(
                         "chat.debug.agentic_retrieval.model_done",
@@ -252,6 +263,7 @@ class AgenticRetrievalNode:
                             step="retrieval",
                             status="completed",
                             output=f"Model finished retrieval ({accumulator.result_count} sources)",
+                            thinking_content=(response.content[:2000] if response.content else None),
                         ),
                     )
                     # Break out of both loops

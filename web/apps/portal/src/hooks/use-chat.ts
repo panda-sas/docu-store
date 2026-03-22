@@ -174,13 +174,15 @@ function handleAgentEvent(
         completed_at: null,
         input_summary: null,
         output_summary: event.description ?? null,
+        thinking_content: null,
       });
       break;
 
     case "step_completed":
       store.updateStep(event.step ?? "", {
-        status: "completed",
+        status: event.status === "started" ? "started" : "completed",
         output_summary: event.output ?? null,
+        ...(event.thinking_content ? { thinking_content: event.thinking_content } : {}),
       });
       break;
 

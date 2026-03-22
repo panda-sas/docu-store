@@ -28,6 +28,7 @@ class AgentEvent(BaseModel):
     status: Literal["started", "completed", "failed"] | None = None
     description: str | None = None
     output: str | None = None
+    thinking_content: str | None = None  # LLM intermediate reasoning (for agent trace)
     delta: str | None = None
     sources: list[SourceCitationDTO] | None = None
     block: ContentBlockDTO | None = None
@@ -82,6 +83,7 @@ class AgentStepDTO(BaseModel):
     completed_at: datetime | None = None
     input_summary: str | None = None
     output_summary: str | None = None
+    thinking_content: str | None = None  # LLM intermediate reasoning
 
 
 class AgentTraceDTO(BaseModel):

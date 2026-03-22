@@ -226,6 +226,8 @@ class SendMessageUseCase:
                     trace_steps[event.step].status = "completed"
                     trace_steps[event.step].completed_at = datetime.now(UTC)
                     trace_steps[event.step].output_summary = event.output
+                    if event.thinking_content:
+                        trace_steps[event.step].thinking_content = event.thinking_content
             elif event.type == "grounding_result":
                 grounding_is_grounded = event.grounding_is_grounded
                 grounding_confidence = event.grounding_confidence

@@ -214,12 +214,15 @@ class ThinkingAgent:
                 )
 
                 draft_answer = ""
-                async for token in self._synthesis.run(
+                async for item in self._synthesis.run(
                     message, plan, sources_text, context_meta, conversation_history,
                 ):
-                    draft_answer += token
-                    total_tokens += 1
-                    yield AgentEvent(type="token", delta=token)
+                    if isinstance(item, AgentEvent):
+                        yield item  # Forward thinking events (e.g. answer plan)
+                    else:
+                        draft_answer += item
+                        total_tokens += 1
+                        yield AgentEvent(type="token", delta=item)
 
                 synthesis_ms = int((time.monotonic() - t4) * 1000)
                 yield AgentEvent(
