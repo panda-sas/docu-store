@@ -87,6 +87,24 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
             "summary_candidate.summary": {"$exists": True, "$ne": ""},
         })
 
+    async def get_pages_by_artifact_ids(
+        self,
+        artifact_ids: list[UUID],
+        workspace_id: UUID | None = None,
+    ) -> list[PageResponse]:
+        """Return pages belonging to the given artifacts, sorted by index."""
+        if not artifact_ids:
+            return []
+        query: dict = {"artifact_id": {"$in": [str(aid) for aid in artifact_ids]}}
+        if workspace_id is not None:
+            query["workspace_id"] = str(workspace_id)
+        cursor = self.pages.find(query).sort("index", 1)
+        pages = []
+        async for doc in cursor:
+            doc["page_id"] = doc.get("page_id") or str(doc.pop("_id"))
+            pages.append(PageResponse(**doc))
+        return pages
+
     async def get_artifact_by_id(
         self,
         artifact_id: UUID,
@@ -782,3 +800,24 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         })
 
         return await self.tag_dictionary.aggregate(pipeline).to_list(100)
+
+    async def get_artifact_ids_for_tag(
+        self,
+        tag: str,
+        entity_type: str | None = None,
+        workspace_id: UUID | None = None,
+    ) -> list[str]:
+        """Return artifact IDs that have this tag in the tag dictionary."""
+        import re as _re  # noqa: PLC0415
+
+        escaped = _re.escape(tag)
+        query: dict = {"tag_normalized": {"$regex": f"^{escaped}$", "$options": "i"}}
+        if entity_type is not None:
+            query["entity_type"] = entity_type
+        if workspace_id is not None:
+            query["workspace_id"] = str(workspace_id)
+
+        doc = await self.tag_dictionary.find_one(query, {"artifact_ids": 1, "_id": 0})
+        if doc and "artifact_ids" in doc:
+            return doc["artifact_ids"]
+        return []

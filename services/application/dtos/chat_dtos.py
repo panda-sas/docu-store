@@ -21,6 +21,7 @@ class AgentEvent(BaseModel):
         "token",
         "structured_block",
         "grounding_result",
+        "query_context",
         "done",
         "error",
     ]
@@ -40,6 +41,11 @@ class AgentEvent(BaseModel):
     # Grounding verification result (emitted as grounding_result event)
     grounding_is_grounded: bool | None = None
     grounding_confidence: float | None = None
+    # Query context (emitted as query_context event)
+    query_context_entities: list[dict] | None = None
+    query_context_authors: list[str] | None = None
+    query_context_type: str | None = None
+    query_context_reformulated: str | None = None
 
 
 # --- Source Citations ---
@@ -74,6 +80,16 @@ class ContentBlockDTO(BaseModel):
 
 
 # --- Thinking Blocks ---
+
+class QueryContextDTO(BaseModel):
+    """Captured query context from the planning stage — persisted on assistant messages."""
+
+    ner_entities: list[dict] = Field(default_factory=list)  # [{entity_text, entity_type}]
+    authors: list[str] = Field(default_factory=list)
+    query_type: str = ""
+    reformulated_query: str = ""
+    grounded: bool = False
+
 
 class ThinkingBlockDTO(BaseModel):
     """A single labeled thinking block from an LLM call."""
@@ -129,6 +145,7 @@ class ChatMessageDTO(BaseModel):
     sources: list[SourceCitationDTO] = Field(default_factory=list)
     agent_trace: AgentTraceDTO | None = None
     token_usage: TokenUsageDTO | None = None
+    query_context: QueryContextDTO | None = None
     created_at: datetime
 
 

@@ -13,6 +13,7 @@ from application.dtos.chat_dtos import (
     ChatMessageDTO,
     ContentBlockDTO,
     ConversationDTO,
+    QueryContextDTO,
     SourceCitationDTO,
     TokenUsageDTO,
 )
@@ -277,6 +278,8 @@ def _message_to_doc(msg: ChatMessageDTO) -> dict:
         doc["agent_trace"] = msg.agent_trace.model_dump(mode="json")
     if msg.token_usage:
         doc["token_usage"] = msg.token_usage.model_dump(mode="json")
+    if msg.query_context:
+        doc["query_context"] = msg.query_context.model_dump(mode="json")
     return doc
 
 
@@ -293,6 +296,9 @@ def _doc_to_message(doc: dict) -> ChatMessageDTO:
     token_usage = None
     if doc.get("token_usage"):
         token_usage = TokenUsageDTO(**doc["token_usage"])
+    query_context = None
+    if doc.get("query_context"):
+        query_context = QueryContextDTO(**doc["query_context"])
 
     return ChatMessageDTO(
         conversation_id=UUID(doc["conversation_id"]),
@@ -303,5 +309,6 @@ def _doc_to_message(doc: dict) -> ChatMessageDTO:
         sources=sources,
         agent_trace=agent_trace,
         token_usage=token_usage,
+        query_context=query_context,
         created_at=doc["created_at"],
     )

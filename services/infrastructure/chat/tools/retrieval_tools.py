@@ -18,6 +18,7 @@ from infrastructure.chat.models import RetrievalResult
 
 if TYPE_CHECKING:
     from application.ports.repositories.page_read_models import PageReadModel
+    from application.ports.repositories.tag_dictionary_read_model import TagDictionaryReadModel
     from application.use_cases.search_use_cases import (
         HierarchicalSearchUseCase,
         SearchSummariesUseCase,
@@ -75,6 +76,16 @@ SEARCH_SUMMARIES_DEF = ToolDefinition(
             "query": {
                 "type": "string",
                 "description": "The search query for summaries.",
+            },
+            "entity_types": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional NER entity type filters: target, gene_name, compound_name.",
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional tag filters (entity names, author names).",
             },
             "limit": {
                 "type": "integer",
@@ -142,13 +153,20 @@ class SearchDocumentsTool:
         tags = args.get("tags") or None
         limit = args.get("limit", 10)
 
+        # Use strict page-level tag matching for compound queries
+        use_page_tags = (
+            tags
+            and entity_types
+            and entity_types == ["compound_name"]
+        )
+
         request = HierarchicalSearchRequest(
             query_text=query,
             limit=limit,
             include_chunks=True,
             entity_types_filter=entity_types,
             tags=tags,
-            tag_match_mode="any",
+            tag_match_mode="page_any" if use_page_tags else "any",
         )
 
         result = await self._search.execute(
@@ -231,11 +249,23 @@ class SearchSummariesTool:
         allowed_artifact_ids: list[UUID] | None,
     ) -> tuple[list[RetrievalResult], str]:
         query = args.get("query", "")
+        entity_types = args.get("entity_types") or None
+        tags = args.get("tags") or None
         limit = args.get("limit", 5)
+
+        _PAGE_ENTITY_TYPES = {"target", "gene_name", "compound_name"}
+        use_page_tags = (
+            tags
+            and entity_types
+            and all(et in _PAGE_ENTITY_TYPES for et in entity_types)
+        )
 
         request = SummarySearchRequest(
             query_text=query,
             limit=limit,
+            entity_types_filter=entity_types,
+            tags=tags,
+            tag_match_mode="page_any" if use_page_tags else "any",
         )
 
         result = await self._search.execute(
@@ -324,6 +354,165 @@ class GetPageContentTool:
         return [result], summary
 
 
+SEARCH_STRUCTURED_BIOACTIVITY_DEF = ToolDefinition(
+    name="search_structured_bioactivity",
+    description=(
+        "Search for structured bioactivity data (IC50, EC50, Ki, etc.) for a specific compound. "
+        "Optionally filter by target. Returns pre-extracted assay data from documents."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "compound_name": {
+                "type": "string",
+                "description": "The compound name to search for bioactivity data.",
+            },
+            "target_name": {
+                "type": "string",
+                "description": "Optional target/gene name to filter bioactivity data.",
+            },
+        },
+        "required": ["compound_name"],
+    },
+)
+
+
+class SearchStructuredBioactivityTool:
+    """Searches pre-extracted bioactivity data from compound tag mentions."""
+
+    def __init__(
+        self,
+        tag_dictionary: TagDictionaryReadModel,
+        page_read_model: PageReadModel,
+    ) -> None:
+        self._tag_dict = tag_dictionary
+        self._pages = page_read_model
+
+    @property
+    def definition(self) -> ToolDefinition:
+        return SEARCH_STRUCTURED_BIOACTIVITY_DEF
+
+    async def execute(
+        self,
+        args: dict[str, Any],
+        workspace_id: UUID,
+        allowed_artifact_ids: list[UUID] | None,
+    ) -> tuple[list[RetrievalResult], str]:
+        compound = args.get("compound_name", "")
+        target = args.get("target_name")
+
+        if not compound:
+            return [], "No compound name provided."
+
+        # 1. Find artifacts with this compound
+        compound_artifact_ids = await self._tag_dict.get_artifact_ids_for_tag(
+            compound, entity_type="compound_name", workspace_id=workspace_id,
+        )
+        if not compound_artifact_ids:
+            return [], f"No documents found containing compound '{compound}'."
+
+        # 2. If target specified, intersect with target artifacts
+        matched_ids = set(compound_artifact_ids)
+        if target:
+            target_ids = await self._tag_dict.get_artifact_ids_for_tag(
+                target, entity_type="target", workspace_id=workspace_id,
+            )
+            if not target_ids:
+                # Fallback: try gene_name
+                target_ids = await self._tag_dict.get_artifact_ids_for_tag(
+                    target, entity_type="gene_name", workspace_id=workspace_id,
+                )
+            if target_ids:
+                matched_ids &= set(target_ids)
+
+        # 3. Access control
+        if allowed_artifact_ids:
+            allowed_set = {str(aid) for aid in allowed_artifact_ids}
+            matched_ids &= allowed_set
+
+        if not matched_ids:
+            return [], f"No accessible documents with compound '{compound}'" + (
+                f" and target '{target}'" if target else ""
+            ) + "."
+
+        # 4. Get pages from matched artifacts
+        matched_uuids = [UUID(aid) for aid in matched_ids]
+        pages = await self._pages.get_pages_by_artifact_ids(
+            matched_uuids, workspace_id=workspace_id,
+        )
+
+        # 5. Extract bioactivity data from compound tag_mentions
+        retrieval_results: list[RetrievalResult] = []
+        table_rows: list[str] = []
+        co_targets: set[str] = set()
+
+        for page in pages:
+            page_matched = False
+            for tm in page.tag_mentions:
+                if tm.entity_type == "compound_name" and tm.tag.lower() == compound.lower():
+                    page_matched = True
+                    bioactivities = (tm.additional_model_params or {}).get("bioactivities", [])
+                    for bio in bioactivities:
+                        assay_type = bio.get("assay_type", "")
+                        value = bio.get("value", "")
+                        unit = bio.get("unit", "")
+                        bio_target = bio.get("target", "")
+
+                        if target and bio_target and target.lower() not in bio_target.lower():
+                            continue
+
+                        row = f"| {compound} | {bio_target} | {assay_type} | {value} {unit} |"
+                        table_rows.append(row)
+
+                # Collect co-occurring targets for context
+                if not target and tm.entity_type in ("target", "gene_name"):
+                    co_targets.add(tm.tag)
+
+            # Only include page summary for pages that matched the compound
+            if page_matched and page.summary_candidate and page.summary_candidate.summary:
+                retrieval_results.append(
+                    RetrievalResult(
+                        source_type="chunk",
+                        artifact_id=page.artifact_id,
+                        page_id=page.page_id,
+                        page_index=page.index,
+                        page_name=page.name,
+                        expanded_text=page.summary_candidate.summary[:1500],
+                        matched_text=page.summary_candidate.summary[:500],
+                        similarity_score=0.8,
+                        query_source=f"tool_bioactivity:{compound}",
+                    ),
+                )
+
+        # 6. Format as structured text
+        if table_rows:
+            header = "| Compound | Target | Assay | Value |"
+            separator = "|----------|--------|-------|-------|"
+            table_text = "\n".join([header, separator, *table_rows[:30]])
+        else:
+            table_text = f"No structured bioactivity data found for {compound}."
+
+        if co_targets and not target:
+            table_text += f"\n\nCo-occurring targets: {', '.join(sorted(co_targets)[:10])}"
+
+        # Add a synthetic result with the table for the LLM
+        if table_rows:
+            retrieval_results.insert(
+                0,
+                RetrievalResult(
+                    source_type="chunk",
+                    artifact_id=UUID(next(iter(matched_ids))),
+                    expanded_text=table_text,
+                    matched_text=table_text[:500],
+                    similarity_score=0.9,
+                    query_source=f"tool_bioactivity:{compound}",
+                ),
+            )
+
+        summary = f"Bioactivity search for '{compound}': {len(table_rows)} data points from {len(matched_ids)} documents."
+        return retrieval_results, summary
+
+
 # ── Tool Registry ──
 
 
@@ -335,12 +524,18 @@ class ToolRegistry:
         hierarchical_search: HierarchicalSearchUseCase,
         summary_search: SearchSummariesUseCase,
         page_read_model: PageReadModel,
+        tag_dictionary: TagDictionaryReadModel | None = None,
     ) -> None:
-        self._tools: dict[str, SearchDocumentsTool | SearchSummariesTool | GetPageContentTool] = {
+        self._tools: dict[str, SearchDocumentsTool | SearchSummariesTool | GetPageContentTool | SearchStructuredBioactivityTool] = {
             "search_documents": SearchDocumentsTool(hierarchical_search),
             "search_summaries": SearchSummariesTool(summary_search),
             "get_page_content": GetPageContentTool(page_read_model),
         }
+        if tag_dictionary is not None:
+            self._tools["search_structured_bioactivity"] = SearchStructuredBioactivityTool(
+                tag_dictionary=tag_dictionary,
+                page_read_model=page_read_model,
+            )
 
     @property
     def definitions(self) -> list[ToolDefinition]:

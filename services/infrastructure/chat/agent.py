@@ -55,6 +55,7 @@ class ChatAgent:
         conversation_history: list[ChatMessageDTO],
         workspace_id: UUID,
         allowed_artifact_ids: list[UUID] | None = None,
+        previous_citations: list[SourceCitationDTO] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         start = time.monotonic()
         message_id = uuid4()
@@ -102,6 +103,14 @@ class ChatAgent:
                     entities=analysis.entities,
                     smiles_detected=analysis.smiles_detected,
                 )
+
+            # Emit query_context for NER accumulation
+            yield AgentEvent(
+                type="query_context",
+                query_context_entities=[],  # Quick mode has no NER
+                query_context_type=analysis.query_type,
+                query_context_reformulated=analysis.reformulated_query,
+            )
 
             retry_count = 0
             while retry_count <= self._max_retries:

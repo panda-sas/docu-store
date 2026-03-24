@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from typing import Literal
 from uuid import UUID
 
-from application.dtos.chat_dtos import AgentEvent, ChatMessageDTO
+from application.dtos.chat_dtos import AgentEvent, ChatMessageDTO, SourceCitationDTO
 from application.ports.chat_agent import ChatAgentPort
 
 
@@ -32,6 +32,7 @@ class ChatAgentRouter:
         workspace_id: UUID,
         allowed_artifact_ids: list[UUID] | None = None,
         mode: Literal["quick", "thinking", "deep_thinking"] | None = None,
+        previous_citations: list[SourceCitationDTO] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         effective_mode = mode or self._default_mode
         if effective_mode == "deep_thinking":
@@ -46,5 +47,6 @@ class ChatAgentRouter:
             conversation_history=conversation_history,
             workspace_id=workspace_id,
             allowed_artifact_ids=allowed_artifact_ids,
+            previous_citations=previous_citations,
         ):
             yield event

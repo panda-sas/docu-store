@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from typing import Literal, Protocol
 from uuid import UUID
 
-from application.dtos.chat_dtos import AgentEvent, ChatMessageDTO
+from application.dtos.chat_dtos import AgentEvent, ChatMessageDTO, SourceCitationDTO
 
 
 class ChatAgentPort(Protocol):
@@ -24,4 +24,5 @@ class ChatAgentPort(Protocol):
         workspace_id: UUID,
         allowed_artifact_ids: list[UUID] | None = None,
         mode: Literal["quick", "thinking", "deep_thinking"] | None = None,
+        previous_citations: list[SourceCitationDTO] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]: ...

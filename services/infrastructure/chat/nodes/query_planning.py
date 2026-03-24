@@ -16,7 +16,7 @@ from infrastructure.chat.models import (
     QUERY_FILTER_ENTITY_TYPES,
     QueryPlan,
 )
-from infrastructure.chat.utils import build_conversation_context, strip_markdown_fences
+from infrastructure.chat.utils import build_follow_up_context, strip_markdown_fences
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
@@ -55,7 +55,7 @@ class QueryPlanningNode:
         conversation_history: list[ChatMessageDTO],
     ) -> tuple[QueryPlan, str]:
         """Return (plan, raw_llm_output) — raw output is the LLM's reasoning."""
-        conversation_context = build_conversation_context(conversation_history)
+        conversation_context = build_follow_up_context(conversation_history)
         _debug = settings.chat_debug
 
         if _debug:
@@ -95,6 +95,9 @@ class QueryPlanningNode:
                 "author_mentions": author_mentions,
             },
         )
+
+        # Merge NER context from previous grounded turns
+        plan = self._merge_ner_context(plan, conversation_history)
 
         if _debug:
             log.info(
@@ -175,6 +178,132 @@ class QueryPlanningNode:
             data["sub_queries"] = data["sub_queries"][:3]
 
         return QueryPlan(**data), raw
+
+
+    def _merge_ner_context(
+        self,
+        plan: QueryPlan,
+        conversation_history: list[ChatMessageDTO],
+    ) -> QueryPlan:
+        """Merge NER entities from previous grounded turns into the current plan.
+
+        Merge strategy based on query_type:
+        - follow_up + no new NER → inherit grounded entities
+        - follow_up + new NER → union (new wins on entity_text conflict)
+        - not follow_up + overlap with accumulated → union (continuation)
+        - not follow_up + no overlap → new only (topic switch)
+        """
+        # Scan last 3 grounded assistant messages for accumulated context
+        accumulated_entities: list[NEREntityFilter] = []
+        accumulated_authors: list[str] = []
+
+        grounded_msgs = [
+            m for m in conversation_history
+            if m.role == "assistant"
+            and m.query_context is not None
+            and m.query_context.grounded
+        ]
+
+        for msg in grounded_msgs[-3:]:
+            qc = msg.query_context
+            assert qc is not None  # noqa: S101
+            for ent in qc.ner_entities:
+                if ent.get("entity_text") and ent.get("entity_type"):
+                    accumulated_entities.append(
+                        NEREntityFilter(
+                            entity_text=ent["entity_text"],
+                            entity_type=ent["entity_type"],
+                        ),
+                    )
+            accumulated_authors.extend(qc.authors)
+
+        if not accumulated_entities and not accumulated_authors:
+            if settings.chat_debug:
+                log.info(
+                    "chat.debug.planning.ner_merge_skip",
+                    reason="no_accumulated_context",
+                    grounded_msgs=len(grounded_msgs),
+                    current_ner=[f.entity_text for f in plan.ner_entity_filters],
+                )
+            return plan
+
+        # Deduplicate accumulated
+        seen_ent: set[str] = set()
+        deduped_entities: list[NEREntityFilter] = []
+        for e in accumulated_entities:
+            key = e.entity_text.lower()
+            if key not in seen_ent:
+                seen_ent.add(key)
+                deduped_entities.append(e)
+
+        seen_auth: set[str] = set()
+        deduped_authors: list[str] = []
+        for a in accumulated_authors:
+            key = a.lower()
+            if key not in seen_auth:
+                seen_auth.add(key)
+                deduped_authors.append(a)
+
+        new_ent_texts = {f.entity_text.lower() for f in plan.ner_entity_filters}
+        new_author_texts = {a.lower() for a in plan.author_mentions}
+        acc_ent_texts = {e.entity_text.lower() for e in deduped_entities}
+
+        is_follow_up = plan.query_type == "follow_up"
+        has_new_ner = bool(plan.ner_entity_filters)
+        has_overlap = bool(new_ent_texts & acc_ent_texts)
+
+        if is_follow_up and not has_new_ner:
+            # Inherit all grounded entities
+            merged_entities = deduped_entities
+            merged_authors = deduped_authors
+        elif is_follow_up and has_new_ner:
+            # Union — new wins on conflict
+            merged_entities = list(plan.ner_entity_filters)
+            for e in deduped_entities:
+                if e.entity_text.lower() not in new_ent_texts:
+                    merged_entities.append(e)
+            merged_authors = list(plan.author_mentions)
+            for a in deduped_authors:
+                if a.lower() not in new_author_texts:
+                    merged_authors.append(a)
+        elif not is_follow_up and has_overlap:
+            # Continuation — union
+            merged_entities = list(plan.ner_entity_filters)
+            for e in deduped_entities:
+                if e.entity_text.lower() not in new_ent_texts:
+                    merged_entities.append(e)
+            merged_authors = list(plan.author_mentions)
+            for a in deduped_authors:
+                if a.lower() not in new_author_texts:
+                    merged_authors.append(a)
+        else:
+            # Topic switch — keep new only
+            if settings.chat_debug:
+                log.info(
+                    "chat.debug.planning.ner_merge_skip",
+                    reason="topic_switch",
+                    current_ner=[f.entity_text for f in plan.ner_entity_filters],
+                    accumulated_ner=[e.entity_text for e in deduped_entities],
+                )
+            return plan
+
+        log.info(
+            "chat.planning.ner_merged",
+            original_ner=[f.entity_text for f in plan.ner_entity_filters],
+            merged_ner=[f.entity_text for f in merged_entities],
+            original_authors=plan.author_mentions,
+            merged_authors=merged_authors,
+            strategy="follow_up_inherit" if is_follow_up and not has_new_ner
+            else "union" if is_follow_up or has_overlap
+            else "new_only",
+        )
+
+        return plan.model_copy(
+            update={
+                "ner_entity_filters": merged_entities,
+                "author_mentions": merged_authors,
+            },
+        )
 
 
 def _default_llm_plan(question: str) -> QueryPlan:

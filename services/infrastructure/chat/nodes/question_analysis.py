@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from infrastructure.chat.models import QuestionAnalysis
-from infrastructure.chat.utils import build_conversation_context, strip_markdown_fences
+from infrastructure.chat.utils import build_follow_up_context, strip_markdown_fences
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class QuestionAnalysisNode:
         question: str,
         conversation_history: list[ChatMessageDTO],
     ) -> QuestionAnalysis:
-        conversation_context = build_conversation_context(conversation_history)
+        conversation_context = build_follow_up_context(conversation_history)
 
         prompt = await self._prompts.render_prompt(
             "chat_question_analysis",

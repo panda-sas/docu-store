@@ -364,6 +364,11 @@ class Settings(BaseSettings):
         validation_alias="CHAT_AGENT_TOOL_CALLING_MODE",
         description="Tool calling mode: 'auto' picks based on provider, 'native' for OpenAI, 'react' for Ollama.",
     )
+    chat_follow_up_context_budget: int = Field(
+        default=4000,
+        validation_alias="CHAT_FOLLOW_UP_CONTEXT_BUDGET",
+        description="Character budget for follow-up conversation context window.",
+    )
 
     # Sentinel (AuthZ mode)
     sentinel_url: str = Field(default="http://localhost:9003", validation_alias="SENTINEL_URL")

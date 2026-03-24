@@ -241,13 +241,20 @@ class SummaryQdrantStore(SummaryVectorStore):
         self,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[models.Condition]:
         """Build Qdrant filter conditions for tag-based filtering."""
         conditions: list[models.Condition] = []
         if tags:
             normalized = [t.lower() for t in tags]
-            if tag_match_mode == "any":
+            if tag_match_mode == "page_any":
+                conditions.append(
+                    models.FieldCondition(
+                        key="tag_normalized",
+                        match=models.MatchAny(any=normalized),
+                    ),
+                )
+            elif tag_match_mode == "any":
                 conditions.append(
                     models.Filter(
                         should=[
@@ -298,7 +305,7 @@ class SummaryQdrantStore(SummaryVectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[SummarySearchResult]:
         client = await self._get_client()
 

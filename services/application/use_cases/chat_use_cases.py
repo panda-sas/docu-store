@@ -17,6 +17,8 @@ from application.dtos.chat_dtos import (
     ChatMessageDTO,
     ConversationDetailDTO,
     ConversationDTO,
+    QueryContextDTO,
+    SourceCitationDTO,
     ThinkingBlockDTO,
 )
 from application.dtos.errors import AppError
@@ -199,6 +201,27 @@ class SendMessageUseCase:
         # Get conversation history for context
         history = await self._repo.get_recent_messages(conversation_id, limit=10)
 
+        # Extract previous citations from last grounded assistant message
+        previous_citations: list[SourceCitationDTO] | None = None
+        for msg in reversed(history):
+            if (
+                msg.role == "assistant"
+                and msg.sources
+                and msg.query_context is not None
+                and msg.query_context.grounded
+            ):
+                previous_citations = msg.sources
+                break
+
+        log.info(
+            "chat.send_message.context",
+            conversation_id=str(conversation_id),
+            history_len=len(history),
+            has_previous_citations=previous_citations is not None,
+            previous_citation_count=len(previous_citations) if previous_citations else 0,
+            mode=mode,
+        )
+
         # Run agent pipeline and stream events, accumulating step trace
         draft_answer = ""
         final_sources: list = []
@@ -207,6 +230,7 @@ class SendMessageUseCase:
         thinking_blocks: list[ThinkingBlockDTO] = []
         grounding_is_grounded: bool | None = None
         grounding_confidence: float | None = None
+        query_context: QueryContextDTO | None = None
 
         async for event in self._agent.run(
             message=message,
@@ -214,6 +238,7 @@ class SendMessageUseCase:
             workspace_id=workspace_id,
             allowed_artifact_ids=allowed_artifact_ids,
             mode=mode,
+            previous_citations=previous_citations,
         ):
             if event.type == "token":
                 draft_answer += event.delta or ""
@@ -241,6 +266,13 @@ class SendMessageUseCase:
                             step=event.step or "unknown",
                             content=event.thinking_content,
                         ))
+            elif event.type == "query_context":
+                query_context = QueryContextDTO(
+                    ner_entities=event.query_context_entities or [],
+                    authors=event.query_context_authors or [],
+                    query_type=event.query_context_type or "",
+                    reformulated_query=event.query_context_reformulated or "",
+                )
             elif event.type == "grounding_result":
                 grounding_is_grounded = event.grounding_is_grounded
                 grounding_confidence = event.grounding_confidence
@@ -249,6 +281,17 @@ class SendMessageUseCase:
                 if event.sources:
                     final_sources = event.sources
             yield event
+
+        # Update query_context grounded flag from grounding result
+        if query_context is not None:
+            query_context.grounded = grounding_is_grounded or False
+            log.info(
+                "chat.send_message.query_context_captured",
+                entities=[e.get("entity_text") for e in query_context.ner_entities],
+                authors=query_context.authors,
+                query_type=query_context.query_type,
+                grounded=query_context.grounded,
+            )
 
         # Save assistant response with full step trace + grounding result
         # Sources are already filtered to cited-only by the agent's done event
@@ -269,6 +312,7 @@ class SendMessageUseCase:
                 content=draft_answer,
                 sources=final_sources,
                 agent_trace=agent_trace,
+                query_context=query_context,
                 created_at=datetime.now(UTC),
             )
             await self._repo.append_message(assistant_msg)

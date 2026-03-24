@@ -25,3 +25,12 @@ class PageReadModel(ABC):
     async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
         """Count pages belonging to an artifact that have a non-empty summary."""
         pass
+
+    @abstractmethod
+    async def get_pages_by_artifact_ids(
+        self,
+        artifact_ids: list[UUID],
+        workspace_id: UUID | None = None,
+    ) -> list[PageResponse]:
+        """Return pages belonging to the given artifacts, sorted by index."""
+        pass

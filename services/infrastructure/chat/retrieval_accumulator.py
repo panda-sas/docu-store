@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 
 from infrastructure.chat.models import RetrievalResult
 from infrastructure.config import settings
+
+if TYPE_CHECKING:
+    from application.dtos.chat_dtos import SourceCitationDTO
 
 log = structlog.get_logger(__name__)
 
@@ -55,6 +60,37 @@ class RetrievalAccumulator:
             chars_used=self._chars_used,
             budget=self._budget,
         )
+        return added
+
+    def seed_carried_forward(self, citations: list[SourceCitationDTO]) -> int:
+        """Seed the accumulator with citations from the previous grounded turn.
+
+        Converts SourceCitationDTOs to RetrievalResults with a low baseline score
+        so they participate in context assembly but don't dominate high-relevance slots.
+
+        Returns:
+            Number of new results seeded.
+        """
+        results: list[RetrievalResult] = []
+        for c in citations:
+            results.append(
+                RetrievalResult(
+                    source_type="chunk",
+                    artifact_id=c.artifact_id,
+                    artifact_title=c.artifact_title,
+                    authors=c.authors,
+                    presentation_date=c.presentation_date,
+                    page_id=c.page_id,
+                    page_index=c.page_index,
+                    page_name=c.page_name,
+                    expanded_text=c.text_excerpt or "",
+                    matched_text=c.text_excerpt or "",
+                    similarity_score=0.5,
+                    query_source="carried_forward",
+                ),
+            )
+        added = self.add_results(results, "carried_forward")
+        log.info("accumulator.seed_carried_forward", seeded=added, total_citations=len(citations))
         return added
 
     def get_all_results(self) -> list[RetrievalResult]:

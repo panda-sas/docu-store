@@ -22,6 +22,7 @@ from infrastructure.config import settings
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from application.dtos.chat_dtos import SourceCitationDTO
     from application.ports.prompt_repository import PromptRepositoryPort
     from application.ports.tool_calling_llm import ToolCallingLLMPort
     from infrastructure.chat.tools.retrieval_tools import ToolRegistry
@@ -49,6 +50,7 @@ class AgenticRetrievalNode:
         allowed_artifact_ids: list[UUID] | None,
         question: str,
         skip_unfiltered_seed: bool = False,
+        previous_citations: list[SourceCitationDTO] | None = None,
     ) -> AsyncGenerator[
         tuple[Literal["event", "results"], AgentEvent | list[RetrievalResult]],
         None,
@@ -65,6 +67,41 @@ class AgenticRetrievalNode:
         total_timeout = settings.chat_agent_total_timeout_s
         accumulator = RetrievalAccumulator()
         loop_start = time.monotonic()
+
+        # ── 0. Seed carried-forward citations from previous grounded turn ──
+        carried_forward_count = 0
+        if previous_citations:
+            carried_forward_count = accumulator.seed_carried_forward(previous_citations)
+            log.info(
+                "chat.agentic_retrieval.carried_forward",
+                citation_count=len(previous_citations),
+                seeded=carried_forward_count,
+                artifact_titles=[c.artifact_title for c in previous_citations[:5]],
+            )
+
+        # Detect explicit citation references like [2] in the question
+        import re  # noqa: PLC0415
+        explicit_refs = {int(m) for m in re.findall(r"\[(\d{1,2})\]", question)}
+        if explicit_refs and previous_citations:
+            log.info(
+                "chat.agentic_retrieval.explicit_refs_detected",
+                refs=sorted(explicit_refs),
+            )
+            for c in previous_citations:
+                if c.citation_index in explicit_refs and c.page_id:
+                    page_results, _ = await self._tools.execute(
+                        "get_page_content",
+                        {"page_id": str(c.page_id)},
+                        workspace_id,
+                        allowed_artifact_ids,
+                    )
+                    if page_results:
+                        accumulator.add_results(page_results, f"explicit_ref_{c.citation_index}")
+                        log.info(
+                            "chat.agentic_retrieval.explicit_ref_loaded",
+                            citation_index=c.citation_index,
+                            page_id=str(c.page_id),
+                        )
 
         # ── 1. Auto-seed first search using the query plan ──
         entity_types = list({f.entity_type for f in plan.ner_entity_filters})
@@ -117,12 +154,67 @@ class AgenticRetrievalNode:
                         f"{new_from_unfiltered} more results:\n{unfiltered_summary}"
                     )
 
-        total_seed = len(filtered_results) + new_from_unfiltered
+        # ── 1b. Deterministic bioactivity pre-fetch for compound NER ──
+        bioactivity_count = 0
+        compound_entities = [
+            f for f in plan.ner_entity_filters if f.entity_type == "compound_name"
+        ]
+        target_entities = [
+            f for f in plan.ner_entity_filters
+            if f.entity_type in ("target", "gene_name")
+        ]
+        if compound_entities and "search_structured_bioactivity" in self._tools._tools:
+            for compound in compound_entities:
+                bio_args: dict[str, str] = {"compound_name": compound.entity_text}
+                if target_entities:
+                    bio_args["target_name"] = target_entities[0].entity_text
+                bio_results, bio_summary = await self._tools.execute(
+                    "search_structured_bioactivity",
+                    bio_args,
+                    workspace_id,
+                    allowed_artifact_ids,
+                )
+                new_bio = accumulator.add_results(
+                    bio_results, f"bioactivity:{compound.entity_text}",
+                )
+                bioactivity_count += new_bio
+                if bio_summary:
+                    seed_summary += f"\n\nStructured bioactivity data:\n{bio_summary}"
+
+                # Always log bioactivity fetch (key diagnostic)
+                log.info(
+                    "chat.agentic_retrieval.bioactivity_prefetch",
+                    compound=compound.entity_text,
+                    target=bio_args.get("target_name"),
+                    results=len(bio_results),
+                    new=new_bio,
+                    summary=bio_summary[:300] if bio_summary else "",
+                )
+
+                # Emit SSE event so frontend shows what was found
+                yield (
+                    "event",
+                    AgentEvent(
+                        type="step_completed",
+                        step="retrieval",
+                        status="completed",
+                        output=(
+                            f"Bioactivity pre-fetch: {compound.entity_text}"
+                            + (f" × {bio_args.get('target_name')}" if bio_args.get("target_name") else "")
+                            + f" → {len(bio_results)} results ({new_bio} new)"
+                            + (f": {bio_summary[:200]}" if bio_summary and new_bio > 0 else "")
+                        ),
+                    ),
+                )
+
+        total_seed = len(filtered_results) + new_from_unfiltered + bioactivity_count
         output_parts = [f"Initial search: {len(filtered_results)} filtered"]
         if has_filters and not did_skip_unfiltered:
             output_parts.append(f" + {new_from_unfiltered} unfiltered")
         elif did_skip_unfiltered:
             output_parts.append(" (unfiltered skipped — factual mode)")
+        if bioactivity_count > 0:
+            output_parts.append(f" + {bioactivity_count} bioactivity")
         output_parts.append(f" = {total_seed} results")
         yield (
             "event",
@@ -171,13 +263,20 @@ class AgenticRetrievalNode:
             conversation_context="",
         )
 
+        carried_note = ""
+        if carried_forward_count > 0:
+            carried_note = (
+                f"\n\nNote: {carried_forward_count} sources were carried forward from "
+                "the previous turn. They are already in the accumulator."
+            )
+
         messages: list[dict] = [
             {
                 "role": "user",
                 "content": (
                     f"I need to answer: {question}\n\n"
                     f"Here are the initial search results:\n{seed_summary}\n\n"
-                    f"{accumulator.summary_for_model()}\n\n"
+                    f"{accumulator.summary_for_model()}{carried_note}\n\n"
                     "Evaluate these results. If they are sufficient, call finish_retrieval. "
                     "Otherwise, search for additional information."
                 ),
@@ -288,14 +387,30 @@ class AgenticRetrievalNode:
                     iterations = max_iterations  # Force outer loop exit
                     break
 
-                # In factual mode, force-inject NER filters into search_documents
-                # calls so the LLM can't bypass entity scoping.
+                # In factual mode, force-inject NER filters so the LLM
+                # can't bypass entity scoping.
                 tool_args = tc.tool_args
-                if skip_unfiltered_seed and tc.tool_name == "search_documents":
-                    if entity_types and "entity_types" not in tool_args:
-                        tool_args = {**tool_args, "entity_types": entity_types}
-                    if tags and "tags" not in tool_args:
-                        tool_args = {**tool_args, "tags": tags}
+                if skip_unfiltered_seed:
+                    if tc.tool_name in ("search_documents", "search_summaries"):
+                        if entity_types and "entity_types" not in tool_args:
+                            tool_args = {**tool_args, "entity_types": entity_types}
+                        if tags and "tags" not in tool_args:
+                            tool_args = {**tool_args, "tags": tags}
+                    elif tc.tool_name == "search_structured_bioactivity":
+                        compound_tags = [
+                            f.entity_text for f in plan.ner_entity_filters
+                            if f.entity_type == "compound_name"
+                        ]
+                        if compound_tags and "compound_name" not in tool_args:
+                            tool_args = {**tool_args, "compound_name": compound_tags[0]}
+
+                if tool_args is not tc.tool_args:
+                    log.info(
+                        "chat.agentic_retrieval.force_injected",
+                        tool=tc.tool_name,
+                        original_args=tc.tool_args,
+                        injected_args=tool_args,
+                    )
 
                 # Execute the tool
                 tool_results, tool_summary = await self._tools.execute(

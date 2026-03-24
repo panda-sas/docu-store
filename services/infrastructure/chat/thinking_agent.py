@@ -75,6 +75,7 @@ class ThinkingAgent:
         conversation_history: list[ChatMessageDTO],
         workspace_id: UUID,
         allowed_artifact_ids: list[UUID] | None = None,
+        previous_citations: list[SourceCitationDTO] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         start = time.monotonic()
         message_id = uuid4()
@@ -88,6 +89,8 @@ class ThinkingAgent:
                 message=message[:300],
                 history_len=len(conversation_history),
                 workspace_id=str(workspace_id),
+                has_previous_citations=previous_citations is not None,
+                previous_citation_count=len(previous_citations) if previous_citations else 0,
             )
 
         try:
@@ -140,6 +143,18 @@ class ThinkingAgent:
                     authors=plan.author_mentions,
                 )
 
+            # Emit query_context for NER accumulation
+            yield AgentEvent(
+                type="query_context",
+                query_context_entities=[
+                    {"entity_text": f.entity_text, "entity_type": f.entity_type}
+                    for f in plan.ner_entity_filters
+                ],
+                query_context_authors=plan.author_mentions,
+                query_context_type=plan.query_type,
+                query_context_reformulated=plan.reformulated_query,
+            )
+
             # Factual + NER filters → try filtered-only first, broaden on retry
             has_filters = bool(plan.ner_entity_filters or plan.author_mentions)
             skipped_unfiltered = (
@@ -166,6 +181,7 @@ class ThinkingAgent:
                 async for kind, payload in self._retrieval.run(
                     plan, workspace_id, allowed_artifact_ids, question=message,
                     skip_unfiltered_seed=skipped_unfiltered,
+                    previous_citations=previous_citations,
                 ):
                     if kind == "event":
                         yield payload  # Forward step events to SSE

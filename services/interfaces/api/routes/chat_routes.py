@@ -178,6 +178,7 @@ def _map_event_type(event_type: str) -> str:
         "token": "token",
         "structured_block": "structured_block",
         "grounding_result": "grounding_result",
+        "query_context": "query_context",
         "done": "done",
         "error": "error",
     }

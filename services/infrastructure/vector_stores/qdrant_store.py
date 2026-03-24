@@ -348,13 +348,27 @@ class QdrantStore(VectorStore):
         self,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[models.Condition]:
-        """Build Qdrant filter conditions for tag-based filtering."""
+        """Build Qdrant filter conditions for tag-based filtering.
+
+        Modes:
+            any — match page-level OR artifact-level tags (broad)
+            all — require ALL tags, each matching page OR artifact level
+            page_any — match page-level tags only (strict, for compound queries)
+        """
         conditions: list[models.Condition] = []
         if tags:
             normalized = [t.lower() for t in tags]
-            if tag_match_mode == "any":
+            if tag_match_mode == "page_any":
+                # Strict: only match page-level tags, not artifact-level
+                conditions.append(
+                    models.FieldCondition(
+                        key="tag_normalized",
+                        match=models.MatchAny(any=normalized),
+                    ),
+                )
+            elif tag_match_mode == "any":
                 conditions.append(
                     models.Filter(
                         should=[
@@ -401,7 +415,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> models.Filter | None:
         """Build a combined Qdrant filter from all filter parameters."""
         must_conditions: list[models.Condition] = []
@@ -439,7 +453,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[PageSearchResult]:
         """Find pages similar to the query embedding using cosine similarity.
 
@@ -495,7 +509,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
         group_size: int = 1,
     ) -> list[PageSearchResult]:
         """Search with server-side deduplication by page_id.
@@ -581,7 +595,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[PageSearchResult]:
         """Hybrid search: dense + sparse, fused with Reciprocal Rank Fusion."""
         client = await self._get_client()
@@ -644,7 +658,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
         group_size: int = 1,
     ) -> list[PageSearchResult]:
         """Hybrid search with server-side dedup by page_id via RRF fusion."""

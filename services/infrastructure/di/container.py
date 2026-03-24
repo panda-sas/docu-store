@@ -735,6 +735,7 @@ def create_container() -> Container:  # noqa: PLR0915
         hierarchical_search=c[HierarchicalSearchUseCase],
         summary_search=c[SearchSummariesUseCase],
         page_read_model=c[PageReadModel],
+        tag_dictionary=c[TagDictionaryReadModel],
     )
     container[AgenticRetrievalNode] = lambda c: AgenticRetrievalNode(
         tool_llm=tool_calling_llm,

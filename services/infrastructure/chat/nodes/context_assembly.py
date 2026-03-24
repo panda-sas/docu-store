@@ -60,6 +60,13 @@ class ContextAssemblyNode:
         # Apply budget — drop low first, then truncate medium
         selected, chars_used = self._apply_budget(high, medium, low, budget)
 
+        carried_forward_count = sum(
+            1 for r in results if r.query_source == "carried_forward"
+        )
+        bioactivity_count = sum(
+            1 for r in results if r.query_source.startswith("tool_bioactivity:")
+        )
+
         if _debug:
             log.info(
                 "chat.debug.assembly.tiers",
@@ -69,6 +76,8 @@ class ContextAssemblyNode:
                 selected=len(selected),
                 chars_used=chars_used,
                 budget=budget,
+                carried_forward=carried_forward_count,
+                bioactivity=bioactivity_count,
             )
 
         # Group by artifact for hierarchical formatting
@@ -90,6 +99,8 @@ class ContextAssemblyNode:
             high_relevance=meta.high_relevance_count,
             avg_score=f"{meta.avg_relevance_score:.3f}",
             unique_artifacts=meta.unique_artifacts,
+            carried_forward=carried_forward_count,
+            bioactivity=bioactivity_count,
         )
 
         return citations, formatted, meta
@@ -103,6 +114,16 @@ class ContextAssemblyNode:
     ) -> tuple[list[RetrievalResult], list[RetrievalResult], list[RetrievalResult]]:
         high, medium, low = [], [], []
         for r in results:
+            # Carried-forward sources go to MEDIUM regardless of score
+            if r.query_source == "carried_forward":
+                medium.append(r)
+                continue
+
+            # Bioactivity results always HIGH (deterministic structured data)
+            if r.query_source.startswith("tool_bioactivity:"):
+                high.append(r)
+                continue
+
             score = self._score(r)
             has_rerank = r.rerank_score is not None
 
@@ -139,8 +160,19 @@ class ContextAssemblyNode:
         selected: list[RetrievalResult] = []
         chars_used = 0
 
+        # Bioactivity results get reserved budget first (deterministic, compact)
+        bio_high = [r for r in high if r.query_source.startswith("tool_bioactivity:")]
+        other_high = [r for r in high if not r.query_source.startswith("tool_bioactivity:")]
+
+        for r in bio_high:
+            text_len = len(r.expanded_text)
+            if chars_used + text_len > budget:
+                break
+            selected.append(r)
+            chars_used += text_len
+
         # High tier: full expanded text
-        for r in high:
+        for r in other_high:
             text_len = len(r.expanded_text)
             if chars_used + text_len > budget:
                 break
@@ -213,7 +245,10 @@ class ContextAssemblyNode:
                     display_text = r.matched_text[:1000]
 
                 # Format citation
-                if r.source_type == "chunk":
+                if r.query_source.startswith("tool_bioactivity:"):
+                    compound_name = r.query_source.split(":", 1)[1] if ":" in r.query_source else ""
+                    label = f"STRUCTURED BIOACTIVITY DATA for {compound_name}"
+                elif r.source_type == "chunk":
                     label = f"Page {r.page_index}" if r.page_index is not None else "Page"
                     if r.page_name:
                         label = f"{r.page_name} (Page {r.page_index})"
