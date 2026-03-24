@@ -68,7 +68,7 @@ export function MarkdownRenderer({ content, messageId }: MarkdownRendererProps) 
   );
 }
 
-const CITATION_PATTERN = /\[(\d{1,2})\]/g;
+const CITATION_PATTERN = /\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\]/g;
 
 type HighlightFn = (index: number, messageId?: string) => void;
 
@@ -101,18 +101,20 @@ function replaceCitationsInText(text: string, messageId: string | undefined, onH
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
-    const idx = match[1];
-    const citationNum = parseInt(idx, 10);
-    parts.push(
-      <button
-        key={`c${match.index}`}
-        type="button"
-        onClick={() => onHighlight(citationNum, messageId)}
-        className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 mx-0.5 rounded bg-accent-light text-accent-text text-[10px] font-semibold align-baseline cursor-pointer hover:bg-accent-muted transition-colors"
-      >
-        {idx}
-      </button>,
-    );
+    const nums = match[1].split(",").map((s) => s.trim());
+    for (const num of nums) {
+      const citationNum = parseInt(num, 10);
+      parts.push(
+        <button
+          key={`c${match.index}-${num}`}
+          type="button"
+          onClick={() => onHighlight(citationNum, messageId)}
+          className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 mx-0.5 rounded bg-accent-light text-accent-text text-[10px] font-semibold align-baseline cursor-pointer hover:bg-accent-muted transition-colors"
+        >
+          {num}
+        </button>,
+      );
+    }
     lastIndex = match.index + match[0].length;
   }
 

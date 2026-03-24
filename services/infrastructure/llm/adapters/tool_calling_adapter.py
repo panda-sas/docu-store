@@ -74,6 +74,9 @@ def _parse_react_response(text: str) -> ToolCallResult:
     tool_name = match.group("tool").strip()
     raw_input = match.group("input").strip()
 
+    # Preserve the model's reasoning (everything before the Action line)
+    thought_text = text[: match.start()].strip() or None
+
     # Try to parse as JSON
     try:
         tool_args = json.loads(raw_input)
@@ -82,6 +85,7 @@ def _parse_react_response(text: str) -> ToolCallResult:
         tool_args = {"query": raw_input.strip('"').strip("'")}
 
     return ToolCallResult(
+        content=thought_text,
         tool_calls=[
             ToolCallRequest(tool_name=tool_name, tool_args=tool_args),
         ],

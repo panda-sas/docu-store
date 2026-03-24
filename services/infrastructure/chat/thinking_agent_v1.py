@@ -82,7 +82,7 @@ class ThinkingAgent:
                 description="Planning query strategy...",
             )
 
-            plan = await self._planning.run(message, conversation_history)
+            plan, planning_llm_output = await self._planning.run(message, conversation_history)
 
             planning_ms = int((time.monotonic() - t1) * 1000)
             ner_desc = ", ".join(
@@ -101,6 +101,7 @@ class ThinkingAgent:
                     + (f" NER filters: {ner_desc}." if ner_desc else "")
                     + (f" Authors: {author_desc}." if author_desc else "")
                 ),
+                thinking_content=planning_llm_output or None,
             )
 
             if _debug:
@@ -239,7 +240,7 @@ class ThinkingAgent:
                     description="Verifying citations...",
                 )
 
-                grounding = await self._verification.run(
+                grounding, verification_llm_output = await self._verification.run(
                     draft_answer, sources_text, plan, context_meta,
                 )
 
@@ -257,6 +258,7 @@ class ThinkingAgent:
                             else ""
                         )
                     ),
+                    thinking_content=verification_llm_output or None,
                 )
 
                 yield AgentEvent(

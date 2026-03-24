@@ -11,6 +11,7 @@ import type {
   AgentStep,
   GroundingStatus,
   SourceCitation,
+  ThinkingBlock,
 } from "@docu-store/types";
 
 // ── Conversation CRUD ──────────────────────────────────────────────────────
@@ -115,6 +116,7 @@ interface ChatStoreActions {
   appendToken: (delta: string) => void;
   addStep: (step: AgentStep) => void;
   updateStep: (stepName: string, update: Partial<AgentStep>) => void;
+  pushThinkingBlock: (block: ThinkingBlock) => void;
   setSources: (sources: SourceCitation[]) => void;
   setFinalSources: (sources: SourceCitation[]) => void;
   setGroundingResult: (result: GroundingStatus) => void;
@@ -184,6 +186,13 @@ function handleAgentEvent(
         output_summary: event.output ?? null,
         ...(event.thinking_content ? { thinking_content: event.thinking_content } : {}),
       });
+      if (event.thinking_content) {
+        store.pushThinkingBlock({
+          label: event.thinking_label ?? `${event.step ?? "unknown"} thought`,
+          step: event.step ?? "unknown",
+          content: event.thinking_content,
+        });
+      }
       break;
 
     case "retrieval_results":

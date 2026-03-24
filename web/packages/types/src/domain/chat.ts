@@ -41,8 +41,15 @@ export interface AgentStep {
   thinking_content: string | null;
 }
 
+export interface ThinkingBlock {
+  label: string;
+  step: string;
+  content: string;
+}
+
 export interface AgentTrace {
   steps: AgentStep[];
+  thinking_blocks?: ThinkingBlock[];
   total_duration_ms: number | null;
   retry_count: number;
   grounding_is_grounded: boolean | null;
@@ -100,6 +107,7 @@ export interface AgentEvent {
   description?: string;
   output?: string;
   thinking_content?: string;
+  thinking_label?: string;
   delta?: string;
   sources?: SourceCitation[];
   block?: ContentBlock;

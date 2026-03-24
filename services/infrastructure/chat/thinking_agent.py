@@ -100,7 +100,7 @@ class ThinkingAgent:
                 description="Planning query strategy...",
             )
 
-            plan = await self._planning.run(message, conversation_history)
+            plan, planning_llm_output = await self._planning.run(message, conversation_history)
 
             # Expand partial author names via tag dictionary prefix search
             if plan.author_mentions:
@@ -123,6 +123,8 @@ class ThinkingAgent:
                     + (f" NER filters: {ner_desc}." if ner_desc else "")
                     + (f" Authors: {author_desc}." if author_desc else "")
                 ),
+                thinking_content=planning_llm_output or None,
+                thinking_label="Query Analysis",
             )
 
             if _debug:
@@ -273,7 +275,6 @@ class ThinkingAgent:
                     type="step_completed",
                     step="synthesis",
                     status="completed",
-                    thinking_content=draft_answer,
                 )
 
                 # Filter to actually-cited sources
@@ -300,7 +301,7 @@ class ThinkingAgent:
                     description="Verifying citations...",
                 )
 
-                grounding = await self._verification.run(
+                grounding, verification_llm_output = await self._verification.run(
                     draft_answer, sources_text, plan, context_meta,
                 )
 
@@ -318,6 +319,8 @@ class ThinkingAgent:
                             else ""
                         )
                     ),
+                    thinking_content=verification_llm_output or None,
+                    thinking_label="Citation Verification",
                 )
 
                 yield AgentEvent(

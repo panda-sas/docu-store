@@ -53,7 +53,8 @@ class QueryPlanningNode:
         self,
         question: str,
         conversation_history: list[ChatMessageDTO],
-    ) -> QueryPlan:
+    ) -> tuple[QueryPlan, str]:
+        """Return (plan, raw_llm_output) — raw output is the LLM's reasoning."""
         conversation_context = build_conversation_context(conversation_history)
         _debug = settings.chat_debug
 
@@ -69,7 +70,7 @@ class QueryPlanningNode:
         author_task = self._run_author_detection(question)
         llm_task = self._run_llm_planning(question, conversation_context)
 
-        ner_filters, author_mentions, llm_plan = await asyncio.gather(
+        ner_filters, author_mentions, llm_result = await asyncio.gather(
             ner_task, author_task, llm_task, return_exceptions=True,
         )
 
@@ -80,9 +81,12 @@ class QueryPlanningNode:
         if isinstance(author_mentions, BaseException):
             log.warning("chat.planning.author_failed", error=str(author_mentions))
             author_mentions = []
-        if isinstance(llm_plan, BaseException):
-            log.warning("chat.planning.llm_failed", error=str(llm_plan))
+        raw_llm_output = ""
+        if isinstance(llm_result, BaseException):
+            log.warning("chat.planning.llm_failed", error=str(llm_result))
             llm_plan = _default_llm_plan(question)
+        else:
+            llm_plan, raw_llm_output = llm_result
 
         # Merge into QueryPlan
         plan = llm_plan.model_copy(
@@ -104,7 +108,7 @@ class QueryPlanningNode:
                 hyde=plan.hyde_hypothesis is not None,
             )
 
-        return plan
+        return plan, raw_llm_output
 
     async def _run_ner(self, question: str) -> list[NEREntityFilter]:
         """Extract entities via StructfloNER, filter to whitelist."""
@@ -138,8 +142,11 @@ class QueryPlanningNode:
         self,
         question: str,
         conversation_context: str,
-    ) -> QueryPlan:
-        """LLM call for query classification, sub-queries, HyDE, confidence."""
+    ) -> tuple[QueryPlan, str]:
+        """LLM call for query classification, sub-queries, HyDE, confidence.
+
+        Returns (plan, raw_llm_output).
+        """
         enable_sub = "ENABLED — decompose if multi-faceted" if settings.chat_enable_sub_queries else "DISABLED — leave empty"
         enable_hyde = "ENABLED — generate for exploratory queries" if settings.chat_enable_hyde else "DISABLED — set to null"
 
@@ -167,7 +174,7 @@ class QueryPlanningNode:
         if "sub_queries" in data and len(data["sub_queries"]) > 3:
             data["sub_queries"] = data["sub_queries"][:3]
 
-        return QueryPlan(**data)
+        return QueryPlan(**data), raw
 
 
 def _default_llm_plan(question: str) -> QueryPlan:

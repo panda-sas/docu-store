@@ -17,6 +17,7 @@ from application.dtos.chat_dtos import (
     ChatMessageDTO,
     ConversationDetailDTO,
     ConversationDTO,
+    ThinkingBlockDTO,
 )
 from application.dtos.errors import AppError
 
@@ -203,6 +204,7 @@ class SendMessageUseCase:
         final_sources: list = []
         final_event: AgentEvent | None = None
         trace_steps: dict[str, AgentStepDTO] = {}
+        thinking_blocks: list[ThinkingBlockDTO] = []
         grounding_is_grounded: bool | None = None
         grounding_confidence: float | None = None
 
@@ -224,11 +226,21 @@ class SendMessageUseCase:
                 )
             elif event.type == "step_completed" and event.step:
                 if event.step in trace_steps:
-                    trace_steps[event.step].status = "completed"
-                    trace_steps[event.step].completed_at = datetime.now(UTC)
-                    trace_steps[event.step].output_summary = event.output
+                    s = trace_steps[event.step]
+                    if event.status != "started":
+                        s.status = "completed"
+                        s.completed_at = datetime.now(UTC)
+                    s.output_summary = event.output
                     if event.thinking_content:
-                        trace_steps[event.step].thinking_content = event.thinking_content
+                        if s.thinking_content:
+                            s.thinking_content += "\n\n---\n\n" + event.thinking_content
+                        else:
+                            s.thinking_content = event.thinking_content
+                        thinking_blocks.append(ThinkingBlockDTO(
+                            label=event.thinking_label or f"{event.step} thought",
+                            step=event.step or "unknown",
+                            content=event.thinking_content,
+                        ))
             elif event.type == "grounding_result":
                 grounding_is_grounded = event.grounding_is_grounded
                 grounding_confidence = event.grounding_confidence
@@ -243,6 +255,7 @@ class SendMessageUseCase:
         if draft_answer:
             agent_trace = AgentTraceDTO(
                 steps=list(trace_steps.values()),
+                thinking_blocks=thinking_blocks,
                 total_duration_ms=final_event.duration_ms if final_event else None,
                 retry_count=0,
                 grounding_is_grounded=grounding_is_grounded,

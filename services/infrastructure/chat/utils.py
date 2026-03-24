@@ -8,12 +8,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from application.dtos.chat_dtos import ChatMessageDTO
 
-CITATION_RE = re.compile(r"\[(\d{1,2})\]")
+CITATION_RE = re.compile(r"\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\]")
 
 
 def extract_cited_indices(answer: str) -> set[int]:
     """Extract the set of citation indices actually used in the answer text."""
-    return {int(m) for m in CITATION_RE.findall(answer)}
+    indices: set[int] = set()
+    for group in CITATION_RE.findall(answer):
+        for part in group.split(","):
+            indices.add(int(part.strip()))
+    return indices
 
 
 def build_conversation_context(

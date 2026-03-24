@@ -29,6 +29,7 @@ class AgentEvent(BaseModel):
     description: str | None = None
     output: str | None = None
     thinking_content: str | None = None  # LLM intermediate reasoning (for agent trace)
+    thinking_label: str | None = None  # Human-readable label for thinking block
     delta: str | None = None
     sources: list[SourceCitationDTO] | None = None
     block: ContentBlockDTO | None = None
@@ -72,6 +73,16 @@ class ContentBlockDTO(BaseModel):
     sources: list[SourceCitationDTO] | None = None
 
 
+# --- Thinking Blocks ---
+
+class ThinkingBlockDTO(BaseModel):
+    """A single labeled thinking block from an LLM call."""
+
+    label: str
+    step: str
+    content: str
+
+
 # --- Agent Trace ---
 
 class AgentStepDTO(BaseModel):
@@ -90,6 +101,7 @@ class AgentTraceDTO(BaseModel):
     """Full execution trace of the agent pipeline."""
 
     steps: list[AgentStepDTO] = Field(default_factory=list)
+    thinking_blocks: list[ThinkingBlockDTO] = Field(default_factory=list)
     total_duration_ms: int | None = None
     retry_count: int = 0
     grounding_is_grounded: bool | None = None

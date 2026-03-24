@@ -73,8 +73,15 @@ export function AgentStepIndicator({ step, durationMs, devMode }: AgentStepIndic
           </p>
         )}
         {hasThinking && thinkingExpanded && (
-          <div className="mt-1.5 rounded bg-surface-primary/50 border border-border-subtle px-2.5 py-2 text-[11px] text-text-muted whitespace-pre-wrap break-words leading-relaxed">
-            {step.thinking_content}
+          <div className="mt-1.5 space-y-2">
+            {step.thinking_content!.split("\n\n---\n\n").map((block, i) => (
+              <div
+                key={i}
+                className="rounded bg-surface-primary/50 border border-border-subtle px-2.5 py-2 text-[11px] text-text-muted whitespace-pre-wrap break-words leading-relaxed"
+              >
+                {block}
+              </div>
+            ))}
           </div>
         )}
       </div>

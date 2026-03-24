@@ -103,6 +103,7 @@ class AdaptiveSynthesisNode:
             status="started",
             output="Answer plan generated",
             thinking_content=answer_plan,
+            thinking_label="Answer Planning",
         ))
 
         # Build synthesis prompt

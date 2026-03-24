@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { AgentEvent, AgentStep, GroundingStatus, SourceCitation } from "@docu-store/types";
+import type { AgentEvent, AgentStep, GroundingStatus, SourceCitation, ThinkingBlock } from "@docu-store/types";
 
 interface StepTiming {
   step: string;
@@ -25,6 +25,9 @@ interface ChatState {
 
   // User message shown immediately while agent processes
   pendingUserMessage: string | null;
+
+  // Chronological thinking blocks (one per LLM thought)
+  streamingThinkingBlocks: ThinkingBlock[];
 
   // Grounding verification state
   groundingResult: GroundingStatus | null;
@@ -51,6 +54,7 @@ interface ChatState {
   appendToken: (delta: string) => void;
   addStep: (step: AgentStep) => void;
   updateStep: (stepName: string, update: Partial<AgentStep>) => void;
+  pushThinkingBlock: (block: ThinkingBlock) => void;
   setSources: (sources: SourceCitation[]) => void;
   setFinalSources: (sources: SourceCitation[]) => void;
   setGroundingResult: (result: GroundingStatus) => void;
@@ -69,6 +73,7 @@ export const useChatStore = create<ChatState>((set) => ({
   finalSources: null,
   pendingUserMessage: null,
   queuedMessage: null,
+  streamingThinkingBlocks: [],
   groundingResult: null,
   highlightedCitation: null,
   activeSourcesMessageId: null,
@@ -99,6 +104,7 @@ export const useChatStore = create<ChatState>((set) => ({
       streamingSources: [],
       finalSources: null,
       pendingUserMessage: userMessage,
+      streamingThinkingBlocks: [],
       groundingResult: null,
       stepTimings: [],
       rawEvents: [],
@@ -123,9 +129,15 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => {
       const now = Date.now();
       return {
-        streamingSteps: state.streamingSteps.map((s) =>
-          s.step === stepName ? { ...s, ...update } : s,
-        ),
+        streamingSteps: state.streamingSteps.map((s) => {
+          if (s.step !== stepName) return s;
+          const merged = { ...s, ...update };
+          // Accumulate thinking_content instead of overwriting
+          if (update.thinking_content && s.thinking_content) {
+            merged.thinking_content = s.thinking_content + "\n\n---\n\n" + update.thinking_content;
+          }
+          return merged;
+        }),
         stepTimings: state.stepTimings.map((t) =>
           t.step === stepName && t.completedAt === null
             ? { ...t, completedAt: now, durationMs: now - t.startedAt }
@@ -133,6 +145,11 @@ export const useChatStore = create<ChatState>((set) => ({
         ),
       };
     }),
+
+  pushThinkingBlock: (block) =>
+    set((state) => ({
+      streamingThinkingBlocks: [...state.streamingThinkingBlocks, block],
+    })),
 
   setSources: (sources) => set({ streamingSources: sources }),
 
@@ -157,6 +174,7 @@ export const useChatStore = create<ChatState>((set) => ({
       streamingSources: [],
       finalSources: null,
       pendingUserMessage: null,
+      streamingThinkingBlocks: [],
       groundingResult: null,
       highlightedCitation: null,
       activeSourcesMessageId: null,

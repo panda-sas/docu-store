@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Clock } from "lucide-react";
-import type { AgentTrace, AgentStep } from "@docu-store/types";
+import { ChevronDown, ChevronRight, Clock, Brain } from "lucide-react";
+import type { AgentTrace, AgentStep, ThinkingBlock } from "@docu-store/types";
 import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { AgentStepIndicator } from "./AgentStepIndicator";
@@ -25,7 +25,7 @@ function getStepDuration(step: AgentStep, streamingTimings: { step: string; dura
 export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelProps) {
   const [expanded, setExpanded] = useState(true);
   const devMode = useDevModeStore((s) => s.enabled);
-  const { stepTimings, doneEvent, rawEvents } = useChatStore();
+  const { stepTimings, doneEvent, rawEvents, streamingThinkingBlocks } = useChatStore();
   const steps = trace.steps;
   if (!steps.length) return null;
 
@@ -34,6 +34,11 @@ export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelPro
   const label = isStreaming
     ? `Thinking (${completedCount}/${steps.length} steps)...`
     : `Thinking history (${completedCount} steps${totalMs ? `, ${(totalMs / 1000).toFixed(1)}s` : ""})`;
+
+  // Resolve thinking blocks: streaming → persisted → fallback from step thinking_content
+  const thinkingBlocks = isStreaming
+    ? streamingThinkingBlocks
+    : resolveThinkingBlocks(trace);
 
   return (
     <div className="mb-2">
@@ -63,6 +68,11 @@ export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelPro
         </div>
       )}
 
+      {/* Chronological thinking log — all LLM thoughts across steps */}
+      {expanded && thinkingBlocks.length > 0 && (
+        <ThinkingLog blocks={thinkingBlocks} />
+      )}
+
       {/* Dev-mode: pipeline summary — works for both streaming and persisted */}
       {devMode && expanded && (
         <DevPipelineSummary
@@ -77,6 +87,80 @@ export function AgentThinkingPanel({ trace, isStreaming }: AgentThinkingPanelPro
     </div>
   );
 }
+
+// --- Thinking Log ---
+
+const STEP_COLORS: Record<string, string> = {
+  planning: "bg-blue-500/15 text-blue-400",
+  retrieval: "bg-amber-500/15 text-amber-400",
+  synthesis: "bg-purple-500/15 text-purple-400",
+  verification: "bg-emerald-500/15 text-emerald-400",
+};
+
+function resolveThinkingBlocks(trace: AgentTrace): ThinkingBlock[] {
+  // Use structured thinking_blocks if available (new messages)
+  if (trace.thinking_blocks && trace.thinking_blocks.length > 0) {
+    return trace.thinking_blocks;
+  }
+  // Fallback: extract from step thinking_content (old messages)
+  const blocks: ThinkingBlock[] = [];
+  for (const step of trace.steps) {
+    if (!step.thinking_content) continue;
+    const parts = step.thinking_content.split("\n\n---\n\n");
+    for (let i = 0; i < parts.length; i++) {
+      blocks.push({
+        label: parts.length > 1 ? `${step.step} thought ${i + 1}` : `${step.step} thought`,
+        step: step.step,
+        content: parts[i],
+      });
+    }
+  }
+  return blocks;
+}
+
+function ThinkingLog({ blocks }: { blocks: ThinkingBlock[] }) {
+  const [logExpanded, setLogExpanded] = useState(true);
+
+  return (
+    <div className="mt-2 ml-2">
+      <button
+        onClick={() => setLogExpanded(!logExpanded)}
+        className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors mb-1.5"
+      >
+        <Brain className="w-3 h-3" />
+        {logExpanded ? (
+          <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronRight className="w-3 h-3" />
+        )}
+        <span>Agent thoughts ({blocks.length})</span>
+      </button>
+
+      {logExpanded && (
+        <div className="pl-3 border-l-2 border-border-subtle space-y-2">
+          {blocks.map((block, i) => {
+            const colorClass = STEP_COLORS[block.step] ?? "bg-zinc-500/15 text-zinc-400";
+            return (
+              <div key={i} className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${colorClass}`}>
+                    {block.step}
+                  </span>
+                  <span className="text-[11px] text-text-secondary font-medium">{block.label}</span>
+                </div>
+                <div className="rounded bg-surface-primary/50 border border-border-subtle px-2.5 py-2 text-[11px] text-text-muted whitespace-pre-wrap break-words leading-relaxed">
+                  {block.content}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Dev Pipeline Summary ---
 
 function DevPipelineSummary({
   trace,

@@ -48,7 +48,7 @@ class InlineVerificationNode:
         sources_text: str,
         plan: QueryPlan,
         context_meta: ContextMetadata,
-    ) -> GroundingResult:
+    ) -> tuple[GroundingResult, str]:
         _debug = settings.chat_debug
 
         # Step 1: Algorithmic citation check
@@ -75,17 +75,18 @@ class InlineVerificationNode:
                 coverage=coverage["ratio"],
                 query_type=plan.query_type,
             )
+            summary = (
+                f"Algorithmic check: {coverage['ratio']:.0%} citation coverage "
+                f"({coverage['cited_sentences']}/{coverage['factual_sentences']} factual sentences cited). "
+                "LLM verification skipped."
+            )
             return GroundingResult(
                 is_grounded=True,
                 confidence=min(coverage["ratio"] + 0.1, 1.0),
                 supported_claims=[],
                 unsupported_claims=[],
-                verification_summary=(
-                    f"Algorithmic check: {coverage['ratio']:.0%} citation coverage "
-                    f"({coverage['cited_sentences']}/{coverage['factual_sentences']} factual sentences cited). "
-                    "LLM verification skipped."
-                ),
-            )
+                verification_summary=summary,
+            ), summary
 
         # Step 3: Full LLM grounding check (same as Quick Mode)
         log.info(
@@ -152,8 +153,11 @@ class InlineVerificationNode:
 
         return True
 
-    async def _llm_verify(self, answer: str, sources_text: str) -> GroundingResult:
-        """Full LLM grounding verification (same logic as GroundingVerificationNode)."""
+    async def _llm_verify(self, answer: str, sources_text: str) -> tuple[GroundingResult, str]:
+        """Full LLM grounding verification (same logic as GroundingVerificationNode).
+
+        Returns (result, raw_llm_output).
+        """
         try:
             prompt = await self._prompts.render_prompt(
                 "chat_grounding_verification",
@@ -172,14 +176,15 @@ class InlineVerificationNode:
                 is_grounded=result.is_grounded,
                 confidence=result.confidence,
             )
-            return result
+            return result, raw
 
         except (json.JSONDecodeError, Exception) as exc:
             log.warning("chat.inline_verification.llm_fallback", error=str(exc))
+            fallback_summary = f"LLM verification failed: {exc!s}"
             return GroundingResult(
                 is_grounded=True,
                 confidence=0.5,
                 supported_claims=[],
                 unsupported_claims=[],
-                verification_summary=f"LLM verification failed: {exc!s}",
-            )
+                verification_summary=fallback_summary,
+            ), fallback_summary

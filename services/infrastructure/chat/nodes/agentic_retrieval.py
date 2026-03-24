@@ -254,6 +254,7 @@ class AgenticRetrievalNode:
                             status="completed",
                             output=f"Model finished retrieval ({accumulator.result_count} sources)",
                             thinking_content=response.content[:2000],
+                            thinking_label=f"Retrieval Reasoning (iteration {iterations + 1})",
                         ),
                     )
                 if _debug:
@@ -264,7 +265,10 @@ class AgenticRetrievalNode:
                     )
                 break
 
-            # Process tool calls
+            # Process tool calls — emit model reasoning once per LLM response
+            iteration_thought = response.content[:2000] if response.content else None
+            thought_emitted = False
+
             for tc in response.tool_calls:
                 if tc.tool_name == "finish_retrieval":
                     if _debug:
@@ -276,7 +280,8 @@ class AgenticRetrievalNode:
                             step="retrieval",
                             status="completed",
                             output=f"Model finished retrieval ({accumulator.result_count} sources)",
-                            thinking_content=(response.content[:2000] if response.content else None),
+                            thinking_content=iteration_thought,
+                            thinking_label=f"Retrieval Complete (iteration {iterations + 1})",
                         ),
                     )
                     # Break out of both loops
@@ -298,6 +303,10 @@ class AgenticRetrievalNode:
                 )
                 new_count = accumulator.add_results(tool_results, str(tc.tool_args.get("query", "")))
 
+                # Attach model reasoning to the first tool call event only
+                tc_thinking = iteration_thought if not thought_emitted else None
+                thought_emitted = True
+
                 yield (
                     "event",
                     AgentEvent(
@@ -308,6 +317,8 @@ class AgenticRetrievalNode:
                             f"Searched: {tc.tool_args.get('query', tc.tool_name)[:80]} "
                             f"→ {len(tool_results)} results ({new_count} new)"
                         ),
+                        thinking_content=tc_thinking,
+                        thinking_label=f"Search Iteration {iterations + 1}" if tc_thinking else None,
                     ),
                 )
 
