@@ -336,12 +336,6 @@ class Settings(BaseSettings):
         validation_alias="CHAT_FACTUAL_SKIP_UNFILTERED",
         description="In factual mode with NER filters, skip the unfiltered seed search when filtered results are sufficient.",
     )
-    chat_factual_min_filtered_results: int = Field(
-        default=3,
-        validation_alias="CHAT_FACTUAL_MIN_FILTERED_RESULTS",
-        description="Minimum filtered seed results required to skip unfiltered search in factual mode.",
-    )
-
     # Deep Thinking Mode settings
     chat_deep_thinking_max_images: int = Field(
         default=5,

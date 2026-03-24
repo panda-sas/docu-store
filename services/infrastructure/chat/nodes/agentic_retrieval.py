@@ -91,30 +91,19 @@ class AgenticRetrievalNode:
         accumulator.add_results(filtered_results, plan.reformulated_query)
 
         # Second search: same query, NO filters — catches pages missed by NER
+        # In factual mode (skip_unfiltered_seed=True), always skip the unfiltered
+        # seed. Unfiltered search only runs on verification failure retry.
         seed_summary = filtered_summary
         new_from_unfiltered = 0
         did_skip_unfiltered = False
         if has_filters:
-            min_threshold = settings.chat_factual_min_filtered_results
-            should_skip = (
-                skip_unfiltered_seed
-                and len(filtered_results) >= min_threshold
-            )
-
-            if should_skip:
+            if skip_unfiltered_seed:
                 did_skip_unfiltered = True
                 log.info(
                     "chat.agentic_retrieval.skip_unfiltered",
                     filtered_count=len(filtered_results),
-                    threshold=min_threshold,
                 )
             else:
-                if skip_unfiltered_seed:
-                    log.info(
-                        "chat.agentic_retrieval.skip_unfiltered_fallthrough",
-                        filtered_count=len(filtered_results),
-                        threshold=min_threshold,
-                    )
                 unfiltered_args = {"query": plan.reformulated_query, "limit": 10}
                 unfiltered_results, unfiltered_summary = await self._tools.execute(
                     "search_documents", unfiltered_args, workspace_id, allowed_artifact_ids,
@@ -294,9 +283,18 @@ class AgenticRetrievalNode:
                     iterations = max_iterations  # Force outer loop exit
                     break
 
+                # In factual mode, force-inject NER filters into search_documents
+                # calls so the LLM can't bypass entity scoping.
+                tool_args = tc.tool_args
+                if skip_unfiltered_seed and tc.tool_name == "search_documents":
+                    if entity_types and "entity_types" not in tool_args:
+                        tool_args = {**tool_args, "entity_types": entity_types}
+                    if tags and "tags" not in tool_args:
+                        tool_args = {**tool_args, "tags": tags}
+
                 # Execute the tool
                 tool_results, tool_summary = await self._tools.execute(
-                    tc.tool_name, tc.tool_args, workspace_id, allowed_artifact_ids,
+                    tc.tool_name, tool_args, workspace_id, allowed_artifact_ids,
                 )
                 new_count = accumulator.add_results(tool_results, str(tc.tool_args.get("query", "")))
 
