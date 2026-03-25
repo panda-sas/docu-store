@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from application.dtos.chat_dtos import ChatMessageDTO, SourceCitationDTO
     from application.ports.blob_store import BlobStore
     from application.ports.repositories.tag_dictionary_read_model import TagDictionaryReadModel
+    from infrastructure.chat.models import QueryPlan
     from infrastructure.chat.nodes.adaptive_synthesis import AdaptiveSynthesisNode
     from infrastructure.chat.nodes.agentic_retrieval import AgenticRetrievalNode
     from infrastructure.chat.nodes.answer_formatting import AnswerFormattingNode
@@ -184,7 +185,10 @@ class ThinkingAgent:
 
                 retrieval_results = []
                 async for kind, payload in self._retrieval.run(
-                    plan, workspace_id, allowed_artifact_ids, question=message,
+                    plan,
+                    workspace_id,
+                    allowed_artifact_ids,
+                    question=message,
                     skip_unfiltered_seed=skipped_unfiltered,
                     previous_citations=previous_citations,
                 ):
@@ -282,7 +286,11 @@ class ThinkingAgent:
 
                 draft_answer = ""
                 async for kind, payload in self._synthesis.run(
-                    message, plan, sources_text, context_meta, conversation_history,
+                    message,
+                    plan,
+                    sources_text,
+                    context_meta,
+                    conversation_history,
                     images_b64=images_b64,
                 ):
                     if kind == "event":
@@ -323,7 +331,10 @@ class ThinkingAgent:
                 )
 
                 grounding, verification_llm_output = await self._verification.run(
-                    draft_answer, sources_text, plan, context_meta,
+                    draft_answer,
+                    sources_text,
+                    plan,
+                    context_meta,
                 )
 
                 verification_ms = int((time.monotonic() - t5) * 1000)
@@ -451,25 +462,32 @@ class ThinkingAgent:
             token_counter.__exit__(None, None, None)
 
     async def _expand_author_mentions(
-        self, plan: QueryPlan, workspace_id: UUID,
+        self,
+        plan: QueryPlan,
+        workspace_id: UUID,
     ) -> QueryPlan:
         """Expand partial author names (e.g. 'Tanya') to full names ('Tanya Parish')
-        using tag dictionary prefix search."""
+        using tag dictionary prefix search.
+        """
         expanded: list[str] = []
         for name in plan.author_mentions:
             try:
                 suggestions = await self._tag_dict.suggest_tags(
-                    query=name, workspace_id=workspace_id, limit=5,
+                    query=name,
+                    workspace_id=workspace_id,
+                    limit=5,
                 )
                 # Keep author-type suggestions that start with the partial name
                 matches = [
-                    s["tag"] for s in suggestions
+                    s["tag"]
+                    for s in suggestions
                     if s.get("entity_type") == "author"
                     and s["tag"].lower().startswith(name.lower())
                 ]
                 log.info(
                     "chat.thinking.author_suggest",
-                    name=name, matches=matches,
+                    name=name,
+                    matches=matches,
                 )
                 if matches:
                     expanded.extend(matches)
@@ -480,7 +498,8 @@ class ThinkingAgent:
             except Exception:
                 log.warning(
                     "chat.thinking.author_expand_failed",
-                    name=name, exc_info=True,
+                    name=name,
+                    exc_info=True,
                 )
                 expanded.append(name)
 
@@ -503,7 +522,8 @@ class ThinkingAgent:
         return plan
 
     async def _load_page_images(
-        self, citations: list[SourceCitationDTO],
+        self,
+        citations: list[SourceCitationDTO],
     ) -> list[str]:
         """Load page PNG images for the most relevant cited pages."""
         assert self._blob_store is not None  # noqa: S101
@@ -523,7 +543,8 @@ class ThinkingAgent:
 
         # Sort by relevance, take top N
         candidates.sort(
-            key=lambda c: c.similarity_score or 0.0, reverse=True,
+            key=lambda c: c.similarity_score or 0.0,
+            reverse=True,
         )
         candidates = candidates[:max_images]
 
@@ -541,7 +562,8 @@ class ThinkingAgent:
             except Exception:
                 log.warning(
                     "chat.thinking.image_load_failed",
-                    image_key=image_key, exc_info=True,
+                    image_key=image_key,
+                    exc_info=True,
                 )
                 return None
 

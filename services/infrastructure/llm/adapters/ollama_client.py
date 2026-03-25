@@ -25,7 +25,7 @@ class OllamaLLMClient:
         model_name: str = "gemma3:27b",
         base_url: str = "http://localhost:11434",
         temperature: float = 0.1,
-        langfuse_handler: Any | None = None,  # noqa: ANN401
+        langfuse_handler: Any | None = None,
     ) -> None:
         self._model_name = model_name
         self._base_url = base_url
@@ -35,7 +35,7 @@ class OllamaLLMClient:
 
     def _get_llm(self) -> ChatOllama:
         if self._llm is None:
-            from langchain_ollama import ChatOllama  # noqa: PLC0415
+            from langchain_ollama import ChatOllama
 
             self._llm = ChatOllama(
                 model=self._model_name,
@@ -51,7 +51,7 @@ class OllamaLLMClient:
         system_prompt: str | None = None,
         temperature: float | None = None,
     ) -> str:
-        from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         llm = self._get_llm()
         if temperature is not None:
@@ -77,7 +77,7 @@ class OllamaLLMClient:
         temperature: float | None = None,
         images_b64: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
-        from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         llm = self._get_llm()
         if temperature is not None:
@@ -90,10 +90,12 @@ class OllamaLLMClient:
         if images_b64:
             content: list[dict] = [{"type": "text", "text": prompt}]
             for img in images_b64:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{img}"},
-                })
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{img}"},
+                    },
+                )
             messages.append(HumanMessage(content=content))
         else:
             messages.append(HumanMessage(content=prompt))
@@ -116,7 +118,7 @@ class OllamaLLMClient:
         *,
         system_prompt: str | None = None,
     ) -> str:
-        from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         llm = self._get_llm()
 

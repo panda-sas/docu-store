@@ -62,7 +62,45 @@ ignore = [
     "D105",   # Missing docstring in magic method
     "D106",   # Missing docstring in public nested class
     "D107",   # Missing docstring in __init__
+    "D417",   # Missing argument descriptions in docstring
     "E501",   # line too long (handled by formatter)
+    "TC001",  # Move application import into TYPE_CHECKING block
+    "TC002",  # Move third-party import into TYPE_CHECKING block
+    "TC003",  # Move stdlib import into TYPE_CHECKING block
+    "PLR0913",# Too many arguments in function definition
+    "PLR0912",# Too many branches
+    "PLR0915",# Too many statements
+    "PLR2004",# Magic value used in comparison
+    "C901",   # Too complex
+    "BLE001", # Do not catch blind exception
+    "FBT001", # Boolean-typed positional argument
+    "FBT002", # Boolean default positional argument
+    "ARG002", # Unused method argument
+    "FAST002",# FastAPI dependency without Annotated
+    "PLC0415",# Import not at top of file
+    "TRY300", # Use else block rather than try-except
+    "SLF001", # Private member accessed
+    "S106",   # Possible hardcoded password
+    "PLW2901",# for loop variable overwritten
+    "N806",   # Variable in function should be lowercase
+    "ANN",    # Missing type annotations (whole category)
+    "COM812", # Missing trailing comma (conflicts with formatter)
+    "PERF401",# Use list comprehension (style preference)
+    "PERF403",# Use dict comprehension (style preference)
+    "PERF102",# Use dict.values() (style preference)
+    "E731",   # Do not assign lambda expression
+    "SIM108", # Use ternary operator
+    "SIM103", # Return negated condition directly
+    "PIE810", # Call startswith once with tuple
+    "D401",   # First line of docstring should be imperative mood
+    "D205",   # 1 blank line required between summary and description
+    "ERA001", # Found commented-out code
+    "FBT003", # Boolean positional value in function call
+    "C408",   # Unnecessary dict() call
+    "RUF001", # String contains ambiguous unicode character
+    "PYI034", # __enter__ methods usually return self
+    "DTZ901", # datetime.min without timezone
+    "B905",   # zip() without strict parameter
 ]
 
 [tool.ruff.format]

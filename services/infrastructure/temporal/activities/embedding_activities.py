@@ -49,7 +49,9 @@ def create_generate_page_embedding_activity(
             page_id = input_data["page_id"]
             skip_sparse = input_data.get("skip_sparse", False)
 
-        logger.info("generate_page_embedding_activity_start", page_id=page_id, skip_sparse=skip_sparse)
+        logger.info(
+            "generate_page_embedding_activity_start", page_id=page_id, skip_sparse=skip_sparse,
+        )
 
         try:
             page_uuid = UUID(page_id)

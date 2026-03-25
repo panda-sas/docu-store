@@ -79,7 +79,7 @@ class VectorStore(Protocol):
         """
         ...
 
-    async def upsert_page_chunk_embeddings(  # noqa: PLR0913
+    async def upsert_page_chunk_embeddings(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -106,7 +106,7 @@ class VectorStore(Protocol):
         """
         ...
 
-    async def search_similar_pages(  # noqa: PLR0913
+    async def search_similar_pages(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
@@ -137,7 +137,7 @@ class VectorStore(Protocol):
         """
         ...
 
-    async def search_pages_grouped(  # noqa: PLR0913
+    async def search_pages_grouped(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
@@ -157,7 +157,7 @@ class VectorStore(Protocol):
         """
         ...
 
-    async def search_hybrid_grouped(  # noqa: PLR0913
+    async def search_hybrid_grouped(
         self,
         dense_query: TextEmbedding,
         sparse_query: SparseEmbedding,

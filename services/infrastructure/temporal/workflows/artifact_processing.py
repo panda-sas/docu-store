@@ -21,7 +21,7 @@ Logging is done in activities instead, not in workflows.
 from __future__ import annotations
 
 from datetime import timedelta
-from uuid import UUID  # noqa: TC003  # Needed at runtime for Temporal workflow decorator
+from uuid import UUID  # Needed at runtime for Temporal workflow decorator
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy

@@ -27,7 +27,7 @@ export function ConversationSidebar({
 
   const handleNew = async () => {
     resetChat();
-    const conv = await createConversation.mutateAsync();
+    const conv = await createConversation.mutateAsync(undefined);
     router.push(`/${workspace}/chat/${conv.conversation_id}`);
   };
 

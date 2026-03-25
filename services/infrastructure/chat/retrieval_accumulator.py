@@ -33,6 +33,7 @@ class RetrievalAccumulator:
 
         Returns:
             Number of *new* results added (not duplicates).
+
         """
         added = 0
         for r in results:
@@ -70,6 +71,7 @@ class RetrievalAccumulator:
 
         Returns:
             Number of new results seeded.
+
         """
         results: list[RetrievalResult] = []
         for c in citations:

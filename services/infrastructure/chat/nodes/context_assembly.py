@@ -7,16 +7,12 @@ groups by artifact, enforces context budget.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING
 
 import structlog
 
 from application.dtos.chat_dtos import SourceCitationDTO
 from infrastructure.chat.models import ContextMetadata, RetrievalResult
 from infrastructure.config import settings
-
-if TYPE_CHECKING:
-    pass
 
 log = structlog.get_logger(__name__)
 
@@ -38,17 +34,22 @@ class ContextAssemblyNode:
 
         Returns:
             (citations, formatted_sources_text, context_metadata)
+
         """
         _debug = settings.chat_debug
         budget = settings.chat_context_budget_chars
 
         if not results:
-            return [], "No relevant sources found.", ContextMetadata(
-                total_sources=0,
-                high_relevance_count=0,
-                avg_relevance_score=0.0,
-                unique_artifacts=0,
-                has_summaries=False,
+            return (
+                [],
+                "No relevant sources found.",
+                ContextMetadata(
+                    total_sources=0,
+                    high_relevance_count=0,
+                    avg_relevance_score=0.0,
+                    unique_artifacts=0,
+                    has_summaries=False,
+                ),
             )
 
         # Cross-source dedup: when chunk + summary from same page, keep chunk
@@ -60,9 +61,7 @@ class ContextAssemblyNode:
         # Apply budget — drop low first, then truncate medium
         selected, chars_used = self._apply_budget(high, medium, low, budget)
 
-        carried_forward_count = sum(
-            1 for r in results if r.query_source == "carried_forward"
-        )
+        carried_forward_count = sum(1 for r in results if r.query_source == "carried_forward")
         bioactivity_count = sum(
             1 for r in results if r.query_source.startswith("tool_bioactivity:")
         )
@@ -217,7 +216,7 @@ class ContextAssemblyNode:
             artifact_title = first.artifact_title or "Unknown Document"
             author_str = ", ".join(first.authors) if first.authors else ""
             date_str = first.presentation_date or ""
-            header_parts = [f"=== Document: \"{artifact_title}\""]
+            header_parts = [f'=== Document: "{artifact_title}"']
             if author_str:
                 header_parts.append(f"({author_str}")
                 if date_str:
@@ -234,13 +233,19 @@ class ContextAssemblyNode:
                 # Determine text to include based on tier
                 score = self._score(r)
                 has_rerank = r.rerank_score is not None
-                is_high = (has_rerank and score > _HIGH_RERANK) or (not has_rerank and score > _HIGH_SIM)
-                is_low = not ((has_rerank and score > _MED_RERANK) or (not has_rerank and score > _MED_SIM))
+                is_high = (has_rerank and score > _HIGH_RERANK) or (
+                    not has_rerank and score > _HIGH_SIM
+                )
+                is_low = not (
+                    (has_rerank and score > _MED_RERANK) or (not has_rerank and score > _MED_SIM)
+                )
 
                 if is_high:
                     display_text = r.expanded_text
                 elif is_low:
-                    display_text = r.expanded_text[:200] + ("..." if len(r.expanded_text) > 200 else "")
+                    display_text = r.expanded_text[:200] + (
+                        "..." if len(r.expanded_text) > 200 else ""
+                    )
                 else:
                     display_text = r.matched_text[:1000]
 

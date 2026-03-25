@@ -57,7 +57,7 @@ async def get_allowed_artifact_ids(auth: RequestAuth) -> list[UUID] | None:
     """
     try:
         ids, has_full_access = await auth.accessible("artifact", "view")
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("permission_accessible_failed", exc_info=True)
         return None
     else:

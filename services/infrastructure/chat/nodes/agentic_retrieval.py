@@ -60,6 +60,7 @@ class AgenticRetrievalNode:
         Yields:
             ("event", AgentEvent) — step events for SSE streaming
             ("results", list[RetrievalResult]) — final accumulated results (last yield)
+
         """
         _debug = settings.chat_debug
         max_iterations = settings.chat_agent_max_iterations
@@ -80,7 +81,8 @@ class AgenticRetrievalNode:
             )
 
         # Detect explicit citation references like [2] in the question
-        import re  # noqa: PLC0415
+        import re
+
         explicit_refs = {int(m) for m in re.findall(r"\[(\d{1,2})\]", question)}
         if explicit_refs and previous_citations:
             log.info(
@@ -123,7 +125,10 @@ class AgenticRetrievalNode:
             seed_args_filtered["tags"] = tags
 
         filtered_results, filtered_summary = await self._tools.execute(
-            "search_documents", seed_args_filtered, workspace_id, allowed_artifact_ids,
+            "search_documents",
+            seed_args_filtered,
+            workspace_id,
+            allowed_artifact_ids,
         )
         accumulator.add_results(filtered_results, plan.reformulated_query)
 
@@ -143,10 +148,14 @@ class AgenticRetrievalNode:
             else:
                 unfiltered_args = {"query": plan.reformulated_query, "limit": 10}
                 unfiltered_results, unfiltered_summary = await self._tools.execute(
-                    "search_documents", unfiltered_args, workspace_id, allowed_artifact_ids,
+                    "search_documents",
+                    unfiltered_args,
+                    workspace_id,
+                    allowed_artifact_ids,
                 )
                 new_from_unfiltered = accumulator.add_results(
-                    unfiltered_results, f"{plan.reformulated_query}_unfiltered",
+                    unfiltered_results,
+                    f"{plan.reformulated_query}_unfiltered",
                 )
                 if new_from_unfiltered > 0:
                     seed_summary += (
@@ -156,12 +165,9 @@ class AgenticRetrievalNode:
 
         # ── 1b. Deterministic bioactivity pre-fetch for compound NER ──
         bioactivity_count = 0
-        compound_entities = [
-            f for f in plan.ner_entity_filters if f.entity_type == "compound_name"
-        ]
+        compound_entities = [f for f in plan.ner_entity_filters if f.entity_type == "compound_name"]
         target_entities = [
-            f for f in plan.ner_entity_filters
-            if f.entity_type in ("target", "gene_name")
+            f for f in plan.ner_entity_filters if f.entity_type in ("target", "gene_name")
         ]
         if compound_entities and "search_structured_bioactivity" in self._tools._tools:
             for compound in compound_entities:
@@ -175,7 +181,8 @@ class AgenticRetrievalNode:
                     allowed_artifact_ids,
                 )
                 new_bio = accumulator.add_results(
-                    bio_results, f"bioactivity:{compound.entity_text}",
+                    bio_results,
+                    f"bioactivity:{compound.entity_text}",
                 )
                 bioactivity_count += new_bio
                 if bio_summary:
@@ -200,7 +207,11 @@ class AgenticRetrievalNode:
                         status="completed",
                         output=(
                             f"Bioactivity pre-fetch: {compound.entity_text}"
-                            + (f" × {bio_args.get('target_name')}" if bio_args.get("target_name") else "")
+                            + (
+                                f" × {bio_args.get('target_name')}"
+                                if bio_args.get("target_name")
+                                else ""
+                            )
                             + f" → {len(bio_results)} results ({new_bio} new)"
                             + (f": {bio_summary[:200]}" if bio_summary and new_bio > 0 else "")
                         ),
@@ -243,9 +254,7 @@ class AgenticRetrievalNode:
         if plan.sub_queries:
             plan_summary += f" Sub-queries: {', '.join(plan.sub_queries)}"
 
-        entities = ", ".join(
-            f"{f.entity_text} ({f.entity_type})" for f in plan.ner_entity_filters
-        )
+        entities = ", ".join(f"{f.entity_text} ({f.entity_type})" for f in plan.ner_entity_filters)
         if plan.author_mentions:
             entities += (", " if entities else "") + ", ".join(plan.author_mentions)
 
@@ -398,7 +407,8 @@ class AgenticRetrievalNode:
                             tool_args = {**tool_args, "tags": tags}
                     elif tc.tool_name == "search_structured_bioactivity":
                         compound_tags = [
-                            f.entity_text for f in plan.ner_entity_filters
+                            f.entity_text
+                            for f in plan.ner_entity_filters
                             if f.entity_type == "compound_name"
                         ]
                         if compound_tags and "compound_name" not in tool_args:
@@ -414,9 +424,14 @@ class AgenticRetrievalNode:
 
                 # Execute the tool
                 tool_results, tool_summary = await self._tools.execute(
-                    tc.tool_name, tool_args, workspace_id, allowed_artifact_ids,
+                    tc.tool_name,
+                    tool_args,
+                    workspace_id,
+                    allowed_artifact_ids,
                 )
-                new_count = accumulator.add_results(tool_results, str(tc.tool_args.get("query", "")))
+                new_count = accumulator.add_results(
+                    tool_results, str(tc.tool_args.get("query", "")),
+                )
 
                 # Attach model reasoning to the first tool call event only
                 tc_thinking = iteration_thought if not thought_emitted else None
@@ -433,7 +448,9 @@ class AgenticRetrievalNode:
                             f"→ {len(tool_results)} results ({new_count} new)"
                         ),
                         thinking_content=tc_thinking,
-                        thinking_label=f"Search Iteration {iterations + 1}" if tc_thinking else None,
+                        thinking_label=f"Search Iteration {iterations + 1}"
+                        if tc_thinking
+                        else None,
                     ),
                 )
 
@@ -450,34 +467,44 @@ class AgenticRetrievalNode:
 
                 # Append tool call + result to messages for next iteration
                 if self._tool_llm.supports_native_tools:
-                    messages.append({
-                        "role": "assistant",
-                        "content": "",
-                        "tool_calls": [{
-                            "id": tc.tool_call_id or f"call_{iterations}_{tc.tool_name}",
-                            "name": tc.tool_name,
-                            "args": tc.tool_args,
-                        }],
-                    })
-                    messages.append({
-                        "role": "tool",
-                        "content": tool_summary,
-                        "tool_call_id": tc.tool_call_id or f"call_{iterations}_{tc.tool_name}",
-                    })
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": tc.tool_call_id or f"call_{iterations}_{tc.tool_name}",
+                                    "name": tc.tool_name,
+                                    "args": tc.tool_args,
+                                },
+                            ],
+                        },
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "content": tool_summary,
+                            "tool_call_id": tc.tool_call_id or f"call_{iterations}_{tc.tool_name}",
+                        },
+                    )
                 else:
                     # ReAct style: assistant thought, then observation
-                    messages.append({
-                        "role": "assistant",
-                        "content": (
-                            f"Thought: Searching for more information.\n"
-                            f"Action: {tc.tool_name}\n"
-                            f"Action Input: {tc.tool_args}"
-                        ),
-                    })
-                    messages.append({
-                        "role": "tool",
-                        "content": tool_summary,
-                    })
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": (
+                                f"Thought: Searching for more information.\n"
+                                f"Action: {tc.tool_name}\n"
+                                f"Action Input: {tc.tool_args}"
+                            ),
+                        },
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "content": tool_summary,
+                        },
+                    )
 
             iterations += 1
 

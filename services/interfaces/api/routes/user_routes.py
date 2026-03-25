@@ -10,9 +10,9 @@ from lagom import Container
 from sentinel_auth import RequestAuth
 
 from application.dtos.user_dtos import (
+    RecentDocumentEntry,
     RecordDocumentOpenRequest,
     RecordSearchActivityRequest,
-    RecentDocumentEntry,
     SearchHistoryEntry,
     UpdatePreferencesRequest,
     UserPreferencesDTO,

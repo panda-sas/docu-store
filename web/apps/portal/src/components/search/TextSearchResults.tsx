@@ -53,7 +53,7 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
         </span>
       </div>
 
-      {devMode && data.rerank_info && console.log("[rerank]", data.rerank_info)}
+      {devMode && data.rerank_info && void console.log("[rerank]", data.rerank_info)}
 
       <div className="space-y-3">
         {data.results.map((r, index) => {

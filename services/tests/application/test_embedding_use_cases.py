@@ -235,6 +235,8 @@ class TestSearchSimilarPagesUseCase:
             tag_mentions=[],
             summary_candidate=None,
             title_mention=None,
+            author_mentions=[],
+            presentation_date=None,
         )
 
         vector_store = MockVectorStore(

@@ -40,6 +40,7 @@ class AnswerFormattingNode:
 
         Yields:
             String token deltas of the reformatted answer.
+
         """
         _debug = settings.chat_debug
 

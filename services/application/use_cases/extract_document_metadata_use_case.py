@@ -80,7 +80,7 @@ class ExtractDocumentMetadataUseCase:
     Authors + Date: GLiNER2 structured extraction → LLM fallback
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         page_repository: PageRepository,
         artifact_repository: ArtifactRepository,
@@ -100,7 +100,7 @@ class ExtractDocumentMetadataUseCase:
         self.blob_store = blob_store
         self.external_event_publisher = external_event_publisher
 
-    async def execute(self, artifact_id: UUID, page_id: UUID) -> Result[dict, AppError]:  # noqa: C901, PLR0912, PLR0915
+    async def execute(self, artifact_id: UUID, page_id: UUID) -> Result[dict, AppError]:
         try:
             artifact = self.artifact_repository.get_by_id(artifact_id)
             now = datetime.now(UTC)
@@ -194,7 +194,7 @@ class ExtractDocumentMetadataUseCase:
                 self.artifact_repository.save(artifact)
 
                 if self.external_event_publisher:
-                    from application.mappers.artifact_mappers import ArtifactMapper  # noqa: PLC0415
+                    from application.mappers.artifact_mappers import ArtifactMapper
 
                     artifact_response = ArtifactMapper.to_artifact_response(artifact)
                     await self.external_event_publisher.notify_artifact_updated(
@@ -223,7 +223,7 @@ class ExtractDocumentMetadataUseCase:
             )
 
         except Exception as e:
-            from domain.exceptions import AggregateNotFoundError, ConcurrencyError  # noqa: PLC0415
+            from domain.exceptions import AggregateNotFoundError, ConcurrencyError
 
             if isinstance(e, AggregateNotFoundError):
                 return Failure(AppError("not_found", str(e)))
@@ -249,7 +249,7 @@ class ExtractDocumentMetadataUseCase:
         """Load a page, returning None if not found."""
         try:
             return self.page_repository.get_by_id(page_id)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("extract_doc_metadata.page_load_failed", page_id=str(page_id))
             return None
 
@@ -335,7 +335,7 @@ class ExtractDocumentMetadataUseCase:
     @classmethod
     def _try_filename_date(cls, raw: _RawMetadata, filename: str) -> None:
         """Try to extract a date from the filename as a last resort."""
-        from pathlib import PurePath  # noqa: PLC0415
+        from pathlib import PurePath
 
         stem = PurePath(filename).stem
         parsed = cls._parse_date(stem)
@@ -415,10 +415,10 @@ class ExtractDocumentMetadataUseCase:
     @staticmethod
     def _parse_date(date_str: str) -> datetime | None:
         """Parse a date string, handling compact YYYYMMDD and natural language formats."""
-        import re  # noqa: PLC0415
+        import re
 
         try:
-            import dateparser  # noqa: PLC0415
+            import dateparser
 
             # Try YYYY-MM-DD / YYYY_MM_DD / YYYY.MM.DD first (explicit separators = high intent)
             match = re.search(r"(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})", date_str)

@@ -302,7 +302,9 @@ class MongoReadModelMaterializer(MongoReadModelTracking):
             )
 
         # 3. Recompute artifact_count on affected docs
-        recount_filter: dict = {"artifact_ids": artifact_id} if tags else {"workspace_id": workspace_id}
+        recount_filter: dict = (
+            {"artifact_ids": artifact_id} if tags else {"workspace_id": workspace_id}
+        )
         self.tag_dictionary.update_many(
             recount_filter,
             [{"$set": {"artifact_count": {"$size": {"$ifNull": ["$artifact_ids", []]}}}}],

@@ -61,7 +61,7 @@ class LLMClientPort(Protocol):
         """
         ...
         # Make this an async generator in the protocol
-        yield ""  # noqa: RET503
+        yield ""
 
     async def complete_with_image(
         self,

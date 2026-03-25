@@ -88,7 +88,7 @@ class ExtractPageEntitiesUseCase:
             self.page_repository.save(page)
 
             if self.external_event_publisher:
-                from application.mappers.page_mappers import PageMapper  # noqa: PLC0415
+                from application.mappers.page_mappers import PageMapper
 
                 page_response = PageMapper.to_page_response(page)
                 await self.external_event_publisher.notify_page_updated(
@@ -112,7 +112,7 @@ class ExtractPageEntitiesUseCase:
             )
 
         except Exception as e:
-            from domain.exceptions import AggregateNotFoundError, ConcurrencyError  # noqa: PLC0415
+            from domain.exceptions import AggregateNotFoundError, ConcurrencyError
 
             if isinstance(e, AggregateNotFoundError):
                 return Failure(AppError("not_found", str(e)))

@@ -44,7 +44,7 @@ def build_follow_up_context(
     User messages get full text; assistant messages get truncated text + citation
     summary + query_context summary.
     """
-    from infrastructure.config import settings  # noqa: PLC0415
+    from infrastructure.config import settings
 
     if not history:
         return ""
@@ -120,10 +120,12 @@ def build_follow_up_context(
     result = "\n".join(lines)
 
     if settings.chat_debug:
-        import structlog  # noqa: PLC0415
+        import structlog
+
         _log = structlog.get_logger("infrastructure.chat.utils")
         grounded_count = sum(
-            1 for m in history
+            1
+            for m in history
             if m.role == "assistant" and m.query_context and m.query_context.grounded
         )
         _log.info(
@@ -143,7 +145,6 @@ def strip_markdown_fences(text: str) -> str:
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
+        cleaned = cleaned.removesuffix("```")
         cleaned = cleaned.strip()
     return cleaned

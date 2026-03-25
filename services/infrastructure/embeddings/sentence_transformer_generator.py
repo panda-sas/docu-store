@@ -62,7 +62,7 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
 
     def _resolve_device(self, device: str) -> str:
         """Resolve and validate the device."""
-        import torch  # noqa: PLC0415  # heavy import — deferred until first instantiation
+        import torch  # heavy import — deferred until first instantiation
 
         if device == "cuda" and not torch.cuda.is_available():
             logger.warning("cuda_not_available_falling_back_to_cpu")
@@ -79,7 +79,7 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
         with self._lock:
             if self._model is not None:
                 return
-            from sentence_transformers import (  # noqa: PLC0415
+            from sentence_transformers import (
                 SentenceTransformer,
             )  # heavy import — deferred until first use
 
@@ -99,7 +99,7 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
     async def generate_text_embedding(
         self,
         text: str,
-        model_name: str | None = None,  # noqa: ARG002
+        model_name: str | None = None,
     ) -> TextEmbedding:
         """Generate an embedding vector for the given text.
 
@@ -145,7 +145,7 @@ class SentenceTransformerGenerator(EmbeddingGenerator):
     async def generate_batch_embeddings(
         self,
         texts: list[str],
-        model_name: str | None = None,  # noqa: ARG002
+        model_name: str | None = None,
     ) -> list[TextEmbedding]:
         """Generate embeddings for multiple texts in a single batch.
 

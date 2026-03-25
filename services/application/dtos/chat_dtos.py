@@ -8,8 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # --- Agent Events (streaming) ---
+
 
 class AgentEvent(BaseModel):
     """Discriminated union for SSE streaming events from the chat agent."""
@@ -52,6 +52,7 @@ class AgentEvent(BaseModel):
 
 # --- Source Citations ---
 
+
 class SourceCitationDTO(BaseModel):
     """A grounding citation linking a claim to a source passage."""
 
@@ -69,6 +70,7 @@ class SourceCitationDTO(BaseModel):
 
 # --- Content Blocks ---
 
+
 class ContentBlockDTO(BaseModel):
     """A typed content block in an assistant message."""
 
@@ -82,6 +84,7 @@ class ContentBlockDTO(BaseModel):
 
 
 # --- Thinking Blocks ---
+
 
 class QueryContextDTO(BaseModel):
     """Captured query context from the planning stage — persisted on assistant messages."""
@@ -102,6 +105,7 @@ class ThinkingBlockDTO(BaseModel):
 
 
 # --- Agent Trace ---
+
 
 class AgentStepDTO(BaseModel):
     """A single step in the agent execution trace."""
@@ -128,6 +132,7 @@ class AgentTraceDTO(BaseModel):
 
 # --- Token Usage ---
 
+
 class TokenUsageDTO(BaseModel):
     prompt: int = 0
     completion: int = 0
@@ -135,6 +140,7 @@ class TokenUsageDTO(BaseModel):
 
 
 # --- Chat Messages ---
+
 
 class ChatMessageDTO(BaseModel):
     """A single message in a conversation."""
@@ -152,6 +158,7 @@ class ChatMessageDTO(BaseModel):
 
 
 # --- Conversations ---
+
 
 class ConversationDTO(BaseModel):
     """A chat conversation."""
@@ -174,6 +181,7 @@ class ConversationDetailDTO(ConversationDTO):
 
 
 # --- Feedback ---
+
 
 class ChatFeedbackDTO(BaseModel):
     """User feedback on a chat message."""

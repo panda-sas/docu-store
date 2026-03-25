@@ -19,25 +19,43 @@ class AnalyticsReadModel(Protocol):
     """Read-only queries for analytics aggregation dashboards."""
 
     async def get_token_usage(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> TokenUsageStatsResponse: ...
 
     async def get_chat_latency(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> ChatLatencyStatsResponse: ...
 
     async def get_search_quality(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> SearchQualityStatsResponse: ...
 
     async def get_grounding_stats(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> GroundingStatsResponse: ...
 
     async def get_knowledge_gaps(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> KnowledgeGapsResponse: ...
 
     async def get_citation_frequency(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> CitationFrequencyResponse: ...

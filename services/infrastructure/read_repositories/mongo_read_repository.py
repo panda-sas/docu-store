@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from motor.motor_asyncio import AsyncIOMotorClient
+
 from application.dtos.artifact_dtos import ArtifactResponse
 from application.dtos.browse_dtos import (
     ArtifactBrowseItemDTO,
@@ -36,7 +37,9 @@ ENTITY_TYPE_DISPLAY_NAMES: dict[str, str] = {
 }
 
 
-class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, TagBrowseReadModel, TagDictionaryReadModel):
+class MongoReadRepository(
+    PageReadModel, ArtifactReadModel, DashboardReadModel, TagBrowseReadModel, TagDictionaryReadModel,
+):
     def __init__(self, client: AsyncIOMotorClient, settings: Settings) -> None:
         self.client = client
         self.db = self.client[settings.mongo_db]
@@ -82,10 +85,12 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
 
     async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
         """Count pages belonging to an artifact that have a non-empty summary."""
-        return await self.pages.count_documents({
-            "artifact_id": str(artifact_id),
-            "summary_candidate.summary": {"$exists": True, "$ne": ""},
-        })
+        return await self.pages.count_documents(
+            {
+                "artifact_id": str(artifact_id),
+                "summary_candidate.summary": {"$exists": True, "$ne": ""},
+            },
+        )
 
     async def get_pages_by_artifact_ids(
         self,
@@ -276,32 +281,38 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         if dict_match:
             pipeline.append({"$match": dict_match})
 
-        pipeline.append({
-            "$group": {
-                "_id": "$entity_type",
-                "all_artifact_ids": {"$push": "$artifact_ids"},
-                "distinct_count": {"$sum": 1},
+        pipeline.append(
+            {
+                "$group": {
+                    "_id": "$entity_type",
+                    "all_artifact_ids": {"$push": "$artifact_ids"},
+                    "distinct_count": {"$sum": 1},
+                },
             },
-        })
+        )
         # Flatten and count unique artifact ids
-        pipeline.append({
-            "$addFields": {
-                "flat_ids": {
-                    "$reduce": {
-                        "input": "$all_artifact_ids",
-                        "initialValue": [],
-                        "in": {"$setUnion": ["$$value", "$$this"]},
+        pipeline.append(
+            {
+                "$addFields": {
+                    "flat_ids": {
+                        "$reduce": {
+                            "input": "$all_artifact_ids",
+                            "initialValue": [],
+                            "in": {"$setUnion": ["$$value", "$$this"]},
+                        },
                     },
                 },
             },
-        })
-        pipeline.append({
-            "$project": {
-                "entity_type": "$_id",
-                "artifact_count": {"$size": "$flat_ids"},
-                "distinct_count": 1,
+        )
+        pipeline.append(
+            {
+                "$project": {
+                    "entity_type": "$_id",
+                    "artifact_count": {"$size": "$flat_ids"},
+                    "distinct_count": 1,
+                },
             },
-        })
+        )
 
         raw_stats = await self.tag_dictionary.aggregate(pipeline).to_list(100)
 
@@ -321,7 +332,8 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
                 categories[sticky] = TagCategoryDTO(
                     entity_type=sticky,
                     display_name=ENTITY_TYPE_DISPLAY_NAMES.get(
-                        sticky, sticky.replace("_", " ").title(),
+                        sticky,
+                        sticky.replace("_", " ").title(),
                     ),
                     artifact_count=0,
                     distinct_count=0,
@@ -379,7 +391,11 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         )
 
     async def _get_tag_folders(
-        self, base_match: dict, entity_type: str, skip: int, limit: int,
+        self,
+        base_match: dict,
+        entity_type: str,
+        skip: int,
+        limit: int,
     ) -> list[TagFolderDTO]:
         match_stage: dict = {**base_match, "tag_mentions.entity_type": entity_type}
         pipeline: list[dict] = [
@@ -415,7 +431,10 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         ]
 
     async def _get_author_folders(
-        self, base_match: dict, skip: int, limit: int,
+        self,
+        base_match: dict,
+        skip: int,
+        limit: int,
     ) -> list[TagFolderDTO]:
         match_stage: dict = {**base_match, "author_mentions.0": {"$exists": True}}
         pipeline: list[dict] = [
@@ -450,7 +469,11 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         ]
 
     async def _get_date_folders(
-        self, base_match: dict, parent: str | None, skip: int, limit: int,
+        self,
+        base_match: dict,
+        parent: str | None,
+        skip: int,
+        limit: int,
     ) -> list[TagFolderDTO]:
         match_stage: dict = {**base_match, "presentation_date.date": {"$ne": None}}
 
@@ -586,7 +609,10 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         )
 
     async def _get_folder_artifacts_simple(
-        self, query: dict, skip: int, limit: int,
+        self,
+        query: dict,
+        skip: int,
+        limit: int,
     ) -> list[ArtifactBrowseItemDTO]:
         """Fetch folder artifacts without tag provenance (authors, dates)."""
         projection = {
@@ -701,7 +727,7 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         allowed_artifact_ids: list[UUID] | None = None,
     ) -> list[dict[str, str]]:
         """Suggest tags matching a prefix query (case-insensitive) from tag dictionary."""
-        import re  # noqa: PLC0415
+        import re
 
         escaped = re.escape(query)
         match: dict = {"tag_normalized": {"$regex": escaped, "$options": "i"}}
@@ -709,8 +735,7 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
             match["workspace_id"] = str(workspace_id)
 
         cursor = (
-            self.tag_dictionary
-            .find(match, {"tag": 1, "entity_type": 1, "_id": 0})
+            self.tag_dictionary.find(match, {"tag": 1, "entity_type": 1, "_id": 0})
             .sort("artifact_count", -1)
             .limit(limit)
         )
@@ -771,8 +796,9 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
             match["entity_type"] = entity_type
 
         cursor = (
-            self.tag_dictionary
-            .find(match, {"tag": 1, "entity_type": 1, "artifact_count": 1, "_id": 0})
+            self.tag_dictionary.find(
+                match, {"tag": 1, "entity_type": 1, "artifact_count": 1, "_id": 0},
+            )
             .sort("artifact_count", -1)
             .limit(limit)
         )
@@ -791,13 +817,15 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         if match:
             pipeline.append({"$match": match})
 
-        pipeline.append({
-            "$group": {
-                "_id": "$entity_type",
-                "total_artifact_count": {"$sum": "$artifact_count"},
-                "distinct_count": {"$sum": 1},
+        pipeline.append(
+            {
+                "$group": {
+                    "_id": "$entity_type",
+                    "total_artifact_count": {"$sum": "$artifact_count"},
+                    "distinct_count": {"$sum": 1},
+                },
             },
-        })
+        )
 
         return await self.tag_dictionary.aggregate(pipeline).to_list(100)
 
@@ -808,7 +836,7 @@ class MongoReadRepository(PageReadModel, ArtifactReadModel, DashboardReadModel, 
         workspace_id: UUID | None = None,
     ) -> list[str]:
         """Return artifact IDs that have this tag in the tag dictionary."""
-        import re as _re  # noqa: PLC0415
+        import re as _re
 
         escaped = _re.escape(tag)
         query: dict = {"tag_normalized": {"$regex": f"^{escaped}$", "$options": "i"}}

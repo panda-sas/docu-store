@@ -55,7 +55,9 @@ class MongoChatRepository:
     ) -> ConversationDTO:
         doc = _conversation_to_doc(conversation)
         await self._conversations.insert_one(doc)
-        log.debug("chat.repo.conversation_created", conversation_id=str(conversation.conversation_id))
+        log.debug(
+            "chat.repo.conversation_created", conversation_id=str(conversation.conversation_id),
+        )
         return conversation
 
     async def get_conversation(
@@ -84,12 +86,7 @@ class MongoChatRepository:
             "owner_id": str(owner_id),
             "is_archived": is_archived,
         }
-        cursor = (
-            self._conversations.find(query)
-            .sort("updated_at", -1)
-            .skip(skip)
-            .limit(limit)
-        )
+        cursor = self._conversations.find(query).sort("updated_at", -1).skip(skip).limit(limit)
         return [_doc_to_conversation(doc) async for doc in cursor]
 
     async def delete_conversation(
@@ -245,10 +242,12 @@ class MongoChatRepository:
         conversation_id: UUID,
         message_id: UUID,
     ) -> ChatFeedbackDTO | None:
-        doc = await self._feedback.find_one({
-            "conversation_id": str(conversation_id),
-            "message_id": str(message_id),
-        })
+        doc = await self._feedback.find_one(
+            {
+                "conversation_id": str(conversation_id),
+                "message_id": str(message_id),
+            },
+        )
         if doc is None:
             return None
         return ChatFeedbackDTO(
@@ -294,6 +293,7 @@ class MongoChatRepository:
 
 
 # --- Document <-> DTO Converters ---
+
 
 def _conversation_to_doc(conv: ConversationDTO) -> dict:
     return {
@@ -345,9 +345,7 @@ def _message_to_doc(msg: ChatMessageDTO) -> dict:
 
 
 def _doc_to_message(doc: dict) -> ChatMessageDTO:
-    sources = [
-        SourceCitationDTO(**s) for s in doc.get("sources", [])
-    ]
+    sources = [SourceCitationDTO(**s) for s in doc.get("sources", [])]
     structured_content = None
     if doc.get("structured_content"):
         structured_content = [ContentBlockDTO(**b) for b in doc["structured_content"]]

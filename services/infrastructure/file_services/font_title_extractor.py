@@ -66,7 +66,7 @@ class FontTitleExtractor:
     @staticmethod
     def _extract_font_spans(pdf_path: Path, page_index: int) -> list[_FontSpan]:
         """Extract text spans with font metadata from a PDF page using PyMuPDF."""
-        import fitz  # noqa: PLC0415
+        import fitz
 
         doc = fitz.open(str(pdf_path))
         try:
@@ -124,7 +124,7 @@ class FontTitleExtractor:
 
         # Compute confidence from font-size gap
         distinct_sizes = sorted({round(s.font_size, 1) for s in spans}, reverse=True)
-        if len(distinct_sizes) >= 2:  # noqa: PLR2004
+        if len(distinct_sizes) >= 2:
             gap = distinct_sizes[0] - distinct_sizes[1]
             if gap >= _HIGH_CONFIDENCE_GAP:
                 confidence = 0.95

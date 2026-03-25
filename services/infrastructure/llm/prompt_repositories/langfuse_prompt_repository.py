@@ -28,9 +28,9 @@ class LangfusePromptRepository:
         self._secret_key = secret_key
         self._client = None  # lazy-initialised
 
-    def _get_client(self):  # noqa: ANN202
+    def _get_client(self):
         if self._client is None:
-            from langfuse import Langfuse  # noqa: PLC0415
+            from langfuse import Langfuse
 
             self._client = Langfuse(
                 host=self._host,

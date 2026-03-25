@@ -18,7 +18,7 @@ class Artifact(Aggregate):
     INITIAL_VERSION = 0
 
     @classmethod
-    def create(  # noqa: PLR0913
+    def create(
         cls,
         source_uri: str | None,
         source_filename: str | None,
@@ -55,7 +55,7 @@ class Artifact(Aggregate):
         owner_id: UUID | None = None
 
     @event(Created)  # Links this handler to the Created event class above
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         source_uri: str | None,
         source_filename: str | None,

@@ -6,8 +6,8 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
-from returns.result import Success
 from lagom import Container
+from returns.result import Success
 from sentinel_auth import RequestAuth
 
 from application.dtos.embedding_dtos import SearchRequest, SearchResponse
@@ -102,7 +102,7 @@ async def generate_embedding_for_page(
     page_id: UUID,
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
-    force_regenerate: bool = False,  # noqa: FBT001, FBT002
+    force_regenerate: bool = False,
 ) -> dict[str, str]:
     """Manually trigger embedding generation for a specific page.
 
@@ -292,9 +292,8 @@ async def hierarchical_search(
     latency_ms = round((time.monotonic() - t0) * 1000, 2)
     if isinstance(result, Success):
         unwrapped = result.unwrap()
-        result_count = (
-            (len(unwrapped.summary_hits) if unwrapped.summary_hits else 0)
-            + (len(unwrapped.chunk_hits) if unwrapped.chunk_hits else 0)
+        result_count = (len(unwrapped.summary_hits) if unwrapped.summary_hits else 0) + (
+            len(unwrapped.chunk_hits) if unwrapped.chunk_hits else 0
         )
     else:
         unwrapped = result

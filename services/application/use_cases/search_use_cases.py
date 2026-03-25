@@ -18,16 +18,15 @@ from application.dtos.search_dtos import (
     SummarySearchResponse,
     SummarySearchResultDTO,
 )
-
 from application.ports.reranker import RerankDocument
 
 if TYPE_CHECKING:
     from uuid import UUID
 
     from application.ports.embedding_generator import EmbeddingGenerator
-    from application.ports.reranker import Reranker
     from application.ports.repositories.artifact_read_models import ArtifactReadModel
     from application.ports.repositories.page_read_models import PageReadModel
+    from application.ports.reranker import Reranker
     from application.ports.sparse_embedding_generator import SparseEmbeddingGenerator
     from application.ports.summary_vector_store import SummarySearchResult, SummaryVectorStore
     from application.ports.vector_store import VectorStore
@@ -43,7 +42,7 @@ logger = structlog.get_logger()
 class _ArtifactInfo:
     """Resolved artifact metadata for enriching search results."""
 
-    __slots__ = ("title", "authors", "presentation_date")
+    __slots__ = ("authors", "presentation_date", "title")
 
     def __init__(
         self,
@@ -76,9 +75,15 @@ async def _resolve_artifact_info(
     artifact = await artifact_read_model.get_artifact_by_id(artifact_id)
     if artifact:
         return _ArtifactInfo(
-            title=artifact.title_mention.title if artifact.title_mention else (fallback_title or artifact.source_filename),
-            authors=[am.name for am in artifact.author_mentions] if artifact.author_mentions else [],
-            presentation_date=_date_to_str(artifact.presentation_date.date) if artifact.presentation_date else None,
+            title=artifact.title_mention.title
+            if artifact.title_mention
+            else (fallback_title or artifact.source_filename),
+            authors=[am.name for am in artifact.author_mentions]
+            if artifact.author_mentions
+            else [],
+            presentation_date=_date_to_str(artifact.presentation_date.date)
+            if artifact.presentation_date
+            else None,
         )
     return _ArtifactInfo()
 

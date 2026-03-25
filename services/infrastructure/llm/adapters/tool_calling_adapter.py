@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 
@@ -16,9 +16,6 @@ from application.ports.tool_calling_llm import (
     ToolCallResult,
     ToolDefinition,
 )
-
-if TYPE_CHECKING:
-    pass
 
 log = structlog.get_logger(__name__)
 
@@ -102,7 +99,7 @@ class NativeToolCallingAdapter:
         api_key: str | None = None,
         base_url: str = "http://localhost:11434",
         temperature: float = 0.3,
-        langfuse_handler: Any | None = None,  # noqa: ANN401
+        langfuse_handler: Any | None = None,
     ) -> None:
         self._provider = provider
         self._model_name = model_name
@@ -112,10 +109,10 @@ class NativeToolCallingAdapter:
         self._langfuse_handler = langfuse_handler
         self._llm: Any | None = None
 
-    def _get_llm(self) -> Any:  # noqa: ANN401
+    def _get_llm(self) -> Any:
         if self._llm is None:
             if self._provider == "openai":
-                from langchain_openai import ChatOpenAI  # noqa: PLC0415
+                from langchain_openai import ChatOpenAI
 
                 self._llm = ChatOpenAI(
                     model=self._model_name,
@@ -123,7 +120,7 @@ class NativeToolCallingAdapter:
                     temperature=self._temperature,
                 )
             else:
-                from langchain_ollama import ChatOllama  # noqa: PLC0415
+                from langchain_ollama import ChatOllama
 
                 self._llm = ChatOllama(
                     model=self._model_name,
@@ -143,13 +140,12 @@ class NativeToolCallingAdapter:
         system_prompt: str | None = None,
         temperature: float | None = None,
     ) -> ToolCallResult:
-        from langchain_core.messages import (  # noqa: PLC0415
+        from langchain_core.messages import (
             AIMessage,
             HumanMessage,
             SystemMessage,
             ToolMessage,
         )
-        from langchain_core.tools import StructuredTool  # noqa: PLC0415
 
         llm = self._get_llm()
         if temperature is not None:
@@ -158,14 +154,16 @@ class NativeToolCallingAdapter:
         # Convert ToolDefinitions to LangChain tool schemas
         lc_tools = []
         for td in tools:
-            lc_tools.append({
-                "type": "function",
-                "function": {
-                    "name": td.name,
-                    "description": td.description,
-                    "parameters": td.parameters,
+            lc_tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": td.name,
+                        "description": td.description,
+                        "parameters": td.parameters,
+                    },
                 },
-            })
+            )
 
         llm_with_tools = llm.bind_tools(lc_tools)
 
@@ -182,17 +180,21 @@ class NativeToolCallingAdapter:
                 lc_messages.append(HumanMessage(content=msg["content"]))
             elif role == "assistant":
                 if msg.get("tool_calls"):
-                    lc_messages.append(AIMessage(
-                        content=msg.get("content", ""),
-                        tool_calls=msg["tool_calls"],
-                    ))
+                    lc_messages.append(
+                        AIMessage(
+                            content=msg.get("content", ""),
+                            tool_calls=msg["tool_calls"],
+                        ),
+                    )
                 else:
                     lc_messages.append(AIMessage(content=msg["content"]))
             elif role == "tool":
-                lc_messages.append(ToolMessage(
-                    content=msg["content"],
-                    tool_call_id=msg.get("tool_call_id", ""),
-                ))
+                lc_messages.append(
+                    ToolMessage(
+                        content=msg["content"],
+                        tool_call_id=msg.get("tool_call_id", ""),
+                    ),
+                )
 
         config = {"callbacks": [self._langfuse_handler]} if self._langfuse_handler else {}
         response: AIMessage = await llm_with_tools.ainvoke(lc_messages, config=config)
@@ -225,7 +227,7 @@ class ReactToolCallingAdapter:
         api_key: str | None = None,
         base_url: str = "http://localhost:11434",
         temperature: float = 0.3,
-        langfuse_handler: Any | None = None,  # noqa: ANN401
+        langfuse_handler: Any | None = None,
     ) -> None:
         self._provider = provider
         self._model_name = model_name
@@ -235,10 +237,10 @@ class ReactToolCallingAdapter:
         self._langfuse_handler = langfuse_handler
         self._llm: Any | None = None
 
-    def _get_llm(self) -> Any:  # noqa: ANN401
+    def _get_llm(self) -> Any:
         if self._llm is None:
             if self._provider == "openai":
-                from langchain_openai import ChatOpenAI  # noqa: PLC0415
+                from langchain_openai import ChatOpenAI
 
                 self._llm = ChatOpenAI(
                     model=self._model_name,
@@ -246,7 +248,7 @@ class ReactToolCallingAdapter:
                     temperature=self._temperature,
                 )
             else:
-                from langchain_ollama import ChatOllama  # noqa: PLC0415
+                from langchain_ollama import ChatOllama
 
                 self._llm = ChatOllama(
                     model=self._model_name,
@@ -266,7 +268,7 @@ class ReactToolCallingAdapter:
         system_prompt: str | None = None,
         temperature: float | None = None,
     ) -> ToolCallResult:
-        from langchain_core.messages import (  # noqa: PLC0415
+        from langchain_core.messages import (
             AIMessage,
             HumanMessage,
             SystemMessage,
@@ -295,9 +297,11 @@ class ReactToolCallingAdapter:
                 lc_messages.append(AIMessage(content=msg["content"]))
             elif role == "tool":
                 # For ReAct, tool results are injected as user messages
-                lc_messages.append(HumanMessage(
-                    content=f"Observation: {msg['content']}",
-                ))
+                lc_messages.append(
+                    HumanMessage(
+                        content=f"Observation: {msg['content']}",
+                    ),
+                )
 
         config = {"callbacks": [self._langfuse_handler]} if self._langfuse_handler else {}
         response = await llm.ainvoke(lc_messages, config=config)

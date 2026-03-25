@@ -552,8 +552,8 @@ export function HierarchicalSearchResults({
         </span>
       </div>
 
-      {devMode && data.chunk_rerank_info && console.log("[rerank:hierarchical]", data.chunk_rerank_info)}
-      {devMode && console.log("[scoring]", { mode: SCORING_CONFIG.mode, k: SCORING_CONFIG.k, chunkWeight: SCORING_CONFIG.chunkWeight, summaryWeight: SCORING_CONFIG.summaryWeight })}
+      {devMode && data.chunk_rerank_info && void console.log("[rerank:hierarchical]", data.chunk_rerank_info)}
+      {devMode && void console.log("[scoring]", { mode: SCORING_CONFIG.mode, k: SCORING_CONFIG.k, chunkWeight: SCORING_CONFIG.chunkWeight, summaryWeight: SCORING_CONFIG.summaryWeight })}
 
       <div className="space-y-4">
         {groups.map((g, i) => (

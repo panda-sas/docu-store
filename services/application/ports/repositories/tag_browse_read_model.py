@@ -52,4 +52,3 @@ class TagBrowseReadModel(ABC):
         allowed_artifact_ids: list[UUID] | None = None,
     ) -> list[dict[str, str]]:
         """Suggest tags matching a prefix query for autocomplete."""
-        pass

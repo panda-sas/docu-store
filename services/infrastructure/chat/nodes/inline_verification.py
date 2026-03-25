@@ -65,7 +65,9 @@ class InlineVerificationNode:
 
         # Step 2: Decide if LLM verification is needed
         needs_llm = self._needs_llm_verification(
-            coverage["ratio"], plan.query_type, context_meta,
+            coverage["ratio"],
+            plan.query_type,
+            context_meta,
         )
 
         if not needs_llm:
@@ -100,7 +102,7 @@ class InlineVerificationNode:
     def _compute_citation_coverage(self, answer: str) -> dict:
         """Parse answer, classify sentences, compute coverage ratio."""
         # Split into sentences (rough but effective)
-        sentences = re.split(r'(?<=[.!?])\s+', answer.strip())
+        sentences = re.split(r"(?<=[.!?])\s+", answer.strip())
         sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
 
         factual_sentences = 0

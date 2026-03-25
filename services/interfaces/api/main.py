@@ -34,23 +34,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # Initialize Qdrant collections on startup
         try:
-            from infrastructure.di.container import create_container  # noqa: PLC0415
+            from infrastructure.di.container import create_container
 
             container = create_container()
 
-            from application.ports.vector_store import VectorStore  # noqa: PLC0415
+            from application.ports.vector_store import VectorStore
 
             vector_store = container[VectorStore]
             await vector_store.ensure_collection_exists()
             logger.info("qdrant_page_collection_initialized")
 
-            from application.ports.compound_vector_store import CompoundVectorStore  # noqa: PLC0415
+            from application.ports.compound_vector_store import CompoundVectorStore
 
             compound_vector_store = container[CompoundVectorStore]
             await compound_vector_store.ensure_compound_collection_exists()
             logger.info("qdrant_compound_collection_initialized")
 
-            from application.ports.summary_vector_store import SummaryVectorStore  # noqa: PLC0415
+            from application.ports.summary_vector_store import SummaryVectorStore
 
             summary_vector_store = container[SummaryVectorStore]
             await summary_vector_store.ensure_collection_exists()
@@ -66,23 +66,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("mongodb_browse_indexes_initialized")
 
             # Ensure user preferences & activity indexes
-            from application.ports.repositories.user_preferences_store import UserPreferencesStore  # noqa: PLC0415
+            from application.ports.repositories.user_preferences_store import (
+                UserPreferencesStore,
+            )
 
             user_store = container[UserPreferencesStore]
             await user_store.ensure_indexes()
             logger.info("mongodb_user_indexes_initialized")
 
             # Ensure chat indexes
-            from application.ports.chat_repository import ChatRepository  # noqa: PLC0415
+            from application.ports.chat_repository import ChatRepository
 
             chat_repo = container[ChatRepository]
             await chat_repo.ensure_indexes()
             logger.info("mongodb_chat_indexes_initialized")
 
+            # Ensure workflow status cache indexes
+            from application.ports.workflow_status_cache import WorkflowStatusCache
+
+            workflow_cache = container[WorkflowStatusCache]
+            await workflow_cache.ensure_indexes()
+            logger.info("mongodb_workflow_cache_indexes_initialized")
+
             # Warm up embedding models so first search request is fast
-            from application.ports.embedding_generator import EmbeddingGenerator  # noqa: PLC0415
-            from application.ports.reranker import Reranker  # noqa: PLC0415
-            from infrastructure.embeddings.chemberta_generator import (  # noqa: PLC0415
+            from application.ports.embedding_generator import EmbeddingGenerator
+            from application.ports.reranker import Reranker
+            from infrastructure.embeddings.chemberta_generator import (
                 ChemBertaEmbeddingGenerator,
             )
 
@@ -98,7 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if reranker:
                 reranker._ensure_model_loaded()
                 logger.info("reranker_model_warmed_up")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("qdrant_initialization_failed", error=str(e))
             # Don't fail startup - embedding features will just be unavailable
 
@@ -121,7 +130,7 @@ def create_app() -> FastAPI:
     )
 
     # Request timing middleware — wraps every request with duration headers + logging
-    from interfaces.api.middleware.timing_middleware import TimingMiddleware  # noqa: PLC0415
+    from interfaces.api.middleware.timing_middleware import TimingMiddleware
 
     app.add_middleware(TimingMiddleware)
 
@@ -165,8 +174,8 @@ def create_app() -> FastAPI:
 def _mount_plugin_routes(app: FastAPI) -> None:
     """Discover enabled plugins and mount their API routers."""
     try:
-        from infrastructure.plugins.context import DefaultPluginContext  # noqa: PLC0415
-        from infrastructure.plugins.loader import discover_plugins  # noqa: PLC0415
+        from infrastructure.plugins.context import DefaultPluginContext
+        from infrastructure.plugins.loader import discover_plugins
 
         enabled = settings.enabled_plugins_list
         if not enabled:
@@ -207,7 +216,7 @@ def _mount_plugin_routes(app: FastAPI) -> None:
             """List all enabled plugins and their manifests."""
             return [m.model_dump() for m in manifests]
 
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("plugin_routes_mount_failed", exc_info=True)
 
 

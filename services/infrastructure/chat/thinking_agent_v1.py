@@ -133,7 +133,9 @@ class ThinkingAgent:
                 )
 
                 retrieval_results = await self._retrieval.run(
-                    plan, workspace_id, allowed_artifact_ids,
+                    plan,
+                    workspace_id,
+                    allowed_artifact_ids,
                 )
 
                 retrieval_ms = int((time.monotonic() - t2) * 1000)
@@ -203,7 +205,11 @@ class ThinkingAgent:
 
                 draft_answer = ""
                 async for token in self._synthesis.run(
-                    message, plan, sources_text, context_meta, conversation_history,
+                    message,
+                    plan,
+                    sources_text,
+                    context_meta,
+                    conversation_history,
                 ):
                     draft_answer += token
                     total_tokens += 1
@@ -241,7 +247,10 @@ class ThinkingAgent:
                 )
 
                 grounding, verification_llm_output = await self._verification.run(
-                    draft_answer, sources_text, plan, context_meta,
+                    draft_answer,
+                    sources_text,
+                    plan,
+                    context_meta,
                 )
 
                 verification_ms = int((time.monotonic() - t5) * 1000)

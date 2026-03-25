@@ -7,7 +7,7 @@ from domain.value_objects.text_embedding import TextEmbedding
 class CompoundSearchResult:
     """Result from a compound vector similarity search."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -42,7 +42,7 @@ class CompoundVectorStore(Protocol):
         """
         ...
 
-    async def upsert_compound_embeddings(  # noqa: PLR0913
+    async def upsert_compound_embeddings(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -75,7 +75,7 @@ class CompoundVectorStore(Protocol):
         """
         ...
 
-    async def search_similar_compounds(  # noqa: PLR0913
+    async def search_similar_compounds(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,

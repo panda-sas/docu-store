@@ -38,7 +38,7 @@ class GeneratePageEmbeddingUseCase:
     5. Updates the domain aggregate with embedding metadata
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         page_repository: PageRepository,
         embedding_generator: EmbeddingGenerator,
@@ -449,7 +449,8 @@ class SearchSimilarPagesUseCase:
                         if artifact.author_mentions
                         else [],
                         presentation_date=artifact.presentation_date.date.isoformat()
-                        if artifact.presentation_date and hasattr(artifact.presentation_date.date, "isoformat")
+                        if artifact.presentation_date
+                        and hasattr(artifact.presentation_date.date, "isoformat")
                         else str(artifact.presentation_date.date)
                         if artifact.presentation_date
                         else None,

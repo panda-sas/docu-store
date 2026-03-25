@@ -6,7 +6,11 @@ from lagom import Container
 from sentinel_auth import RequestAuth
 
 from application.dtos.page_dtos import AddCompoundMentionsRequest, CreatePageRequest, PageResponse
-from application.dtos.workflow_dtos import SummaryDetailResponse, WorkflowStartedResponse, WorkflowStatusMapResponse
+from application.dtos.workflow_dtos import (
+    SummaryDetailResponse,
+    WorkflowStartedResponse,
+    WorkflowStatusMapResponse,
+)
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
 from application.use_cases.page_use_cases import (
     AddCompoundMentionsUseCase,

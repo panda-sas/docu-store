@@ -335,7 +335,6 @@ class ChatAgent:
             token_counter.__exit__(None, None, None)
 
 
-
 def _build_cited_sources_text(
     used_citations: list,
     full_sources_text: str,

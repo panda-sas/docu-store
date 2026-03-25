@@ -130,8 +130,13 @@ class IntelligentRetrievalNode:
         """Run a single HierarchicalSearch with optional filters + fallback."""
         # Try with filters first
         results = await self._execute_search(
-            query_text, query_source, workspace_id, allowed_artifact_ids,
-            limit, entity_types_filter, tags,
+            query_text,
+            query_source,
+            workspace_id,
+            allowed_artifact_ids,
+            limit,
+            entity_types_filter,
+            tags,
         )
 
         # Fallback: if filtered search returns < 3 results, re-run without filters
@@ -142,8 +147,13 @@ class IntelligentRetrievalNode:
                 filtered_count=len(results),
             )
             unfiltered = await self._execute_search(
-                query_text, query_source, workspace_id, allowed_artifact_ids,
-                limit, None, None,
+                query_text,
+                query_source,
+                workspace_id,
+                allowed_artifact_ids,
+                limit,
+                None,
+                None,
             )
             # Merge: keep filtered results (they're higher precision), add unfiltered
             seen = {self._dedup_key(r) for r in results}
@@ -197,7 +207,8 @@ class IntelligentRetrievalNode:
         # Process chunk hits with context expansion
         for hit in response.chunk_hits:
             expanded_text, matched_text = await self._expand_chunk_context(
-                hit.page_id, hit.text_preview,
+                hit.page_id,
+                hit.text_preview,
             )
             authors, pdate = artifact_meta.get(str(hit.artifact_id), ([], None))
 

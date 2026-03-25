@@ -106,7 +106,8 @@ class QdrantStore(VectorStore):
                 if e.status_code == 409:
                     # Race condition: another process created it between check and create
                     logger.info(
-                        "collection_created_by_another_process", collection=self.collection_name,
+                        "collection_created_by_another_process",
+                        collection=self.collection_name,
                     )
                     return
                 raise
@@ -208,7 +209,7 @@ class QdrantStore(VectorStore):
             )
             raise
 
-    async def upsert_page_chunk_embeddings(  # noqa: PLR0913
+    async def upsert_page_chunk_embeddings(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -336,7 +337,7 @@ class QdrantStore(VectorStore):
 
             logger.info("embedding_deleted", page_id=str(page_id))
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "failed_to_delete_embedding",
                 page_id=str(page_id),
@@ -408,7 +409,7 @@ class QdrantStore(VectorStore):
             )
         return conditions
 
-    def _build_filter(  # noqa: PLR0913
+    def _build_filter(
         self,
         artifact_id_filter: UUID | None = None,
         allowed_artifact_ids: list[UUID] | None = None,
@@ -443,7 +444,7 @@ class QdrantStore(VectorStore):
         must_conditions.extend(self._build_tag_conditions(tags, entity_types, tag_match_mode))
         return models.Filter(must=must_conditions) if must_conditions else None
 
-    async def search_similar_pages(  # noqa: PLR0913
+    async def search_similar_pages(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
@@ -499,7 +500,7 @@ class QdrantStore(VectorStore):
             )
             return results
 
-    async def search_pages_grouped(  # noqa: PLR0913
+    async def search_pages_grouped(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
@@ -583,7 +584,7 @@ class QdrantStore(VectorStore):
             for p in points
         ]
 
-    async def search_hybrid(  # noqa: PLR0913
+    async def search_hybrid(
         self,
         dense_query: TextEmbedding,
         sparse_query: SparseEmbedding,
@@ -646,7 +647,7 @@ class QdrantStore(VectorStore):
             )
             return results
 
-    async def search_hybrid_grouped(  # noqa: PLR0913
+    async def search_hybrid_grouped(
         self,
         dense_query: TextEmbedding,
         sparse_query: SparseEmbedding,
@@ -772,7 +773,7 @@ class QdrantStore(VectorStore):
                 ),
             )
             logger.info("page_payload_updated", page_id=str(page_id), fields=list(payload.keys()))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("failed_to_set_page_payload", page_id=str(page_id), error=str(e))
 
     async def set_artifact_payload(
@@ -797,9 +798,15 @@ class QdrantStore(VectorStore):
                     ),
                 ),
             )
-            logger.info("artifact_payload_updated", artifact_id=str(artifact_id), fields=list(payload.keys()))
-        except Exception as e:  # noqa: BLE001
-            logger.warning("failed_to_set_artifact_payload", artifact_id=str(artifact_id), error=str(e))
+            logger.info(
+                "artifact_payload_updated",
+                artifact_id=str(artifact_id),
+                fields=list(payload.keys()),
+            )
+        except Exception as e:
+            logger.warning(
+                "failed_to_set_artifact_payload", artifact_id=str(artifact_id), error=str(e),
+            )
 
     async def close(self) -> None:
         """Close the Qdrant client connection."""

@@ -37,8 +37,8 @@ class StructfloNERExtractor(NERExtractorPort):
     """
 
     def __init__(self, model_id: str, model_url: str, max_char_buffer: int = 5000) -> None:
-        from structflo.ner import TB, NERExtractor  # noqa: PLC0415
-        from structflo.ner.fast import FastNERExtractor  # noqa: PLC0415
+        from structflo.ner import TB, NERExtractor
+        from structflo.ner.fast import FastNERExtractor
 
         self._llm_extractor = NERExtractor(
             model_id=model_id,

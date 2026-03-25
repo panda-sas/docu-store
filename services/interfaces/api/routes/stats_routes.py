@@ -1,7 +1,7 @@
 """Pipeline stats routes for admin monitoring."""
 
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
 import structlog
@@ -75,7 +75,7 @@ async def get_workflow_stats(
                 min_duration_seconds=round(durations[0], 3),
                 max_duration_seconds=round(durations[-1], 3),
                 p95_duration_seconds=round(durations[p95_idx], 3),
-            )
+            ),
         )
 
     # --- Running workflows: count by type ---
@@ -98,7 +98,7 @@ async def get_workflow_stats(
             desc = await handle.describe()
             if hasattr(desc, "failure") and desc.failure:
                 failure_message = str(desc.failure)
-        except Exception:  # noqa: BLE001
+        except Exception:
             failure_message = None
 
         all_failures.append(
@@ -108,7 +108,7 @@ async def get_workflow_stats(
                 started_at=wf.start_time,
                 closed_at=wf.close_time,
                 failure_message=failure_message,
-            )
+            ),
         )
 
     # Sort by start time descending, take last 10
@@ -146,7 +146,7 @@ async def get_pipeline_stats(
 
     logger.info("pipeline_stats_requested")
 
-    from motor.motor_asyncio import AsyncIOMotorClient as _MongoClient  # noqa: PLC0415
+    from motor.motor_asyncio import AsyncIOMotorClient as _MongoClient
 
     mongo_client = container[_MongoClient]
     db = mongo_client[settings.mongo_db]
@@ -165,12 +165,12 @@ async def get_pipeline_stats(
                                 "$and": [
                                     {"$ne": ["$text_mention", None]},
                                     {"$ne": ["$text_mention", ""]},
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
                 "with_summary": {
                     "$sum": {
@@ -184,35 +184,31 @@ async def get_pipeline_stats(
                                                 "$ifNull": [
                                                     "$summary_candidate.summary",
                                                     "",
-                                                ]
+                                                ],
                                             },
                                             "",
-                                        ]
+                                        ],
                                     },
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
                 "with_compounds": {
                     "$sum": {
                         "$cond": [
                             {
                                 "$gt": [
-                                    {
-                                        "$size": {
-                                            "$ifNull": ["$compound_mentions", []]
-                                        }
-                                    },
+                                    {"$size": {"$ifNull": ["$compound_mentions", []]}},
                                     0,
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
                 "with_tags": {
                     "$sum": {
@@ -221,15 +217,15 @@ async def get_pipeline_stats(
                                 "$gt": [
                                     {"$size": {"$ifNull": ["$tag_mentions", []]}},
                                     0,
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
-            }
-        }
+            },
+        },
     ]
 
     cursor = pages.aggregate(pipeline)
@@ -316,7 +312,7 @@ async def get_vector_stats(
                 "model_name": getattr(reranker, "model_name", "unknown"),
                 "device": getattr(reranker, "device", "unknown"),
             }
-    except Exception:  # noqa: BLE001
+    except Exception:
         reranker_info = None
 
     logger.info("vector_stats_collected", collections=len(collections))
@@ -374,7 +370,9 @@ async def get_search_quality_stats(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
     analytics = container[AnalyticsReadModel]
-    return await analytics.get_search_quality(_period_to_days(period), workspace_id=auth.workspace_id)
+    return await analytics.get_search_quality(
+        _period_to_days(period), workspace_id=auth.workspace_id,
+    )
 
 
 @router.get("/grounding", status_code=status.HTTP_200_OK)
@@ -388,7 +386,9 @@ async def get_grounding_stats(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
     analytics = container[AnalyticsReadModel]
-    return await analytics.get_grounding_stats(_period_to_days(period), workspace_id=auth.workspace_id)
+    return await analytics.get_grounding_stats(
+        _period_to_days(period), workspace_id=auth.workspace_id,
+    )
 
 
 @router.get("/knowledge-gaps", status_code=status.HTTP_200_OK)
@@ -402,7 +402,9 @@ async def get_knowledge_gaps(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
     analytics = container[AnalyticsReadModel]
-    return await analytics.get_knowledge_gaps(_period_to_days(period), workspace_id=auth.workspace_id)
+    return await analytics.get_knowledge_gaps(
+        _period_to_days(period), workspace_id=auth.workspace_id,
+    )
 
 
 @router.get("/citation-frequency", status_code=status.HTTP_200_OK)
@@ -416,4 +418,6 @@ async def get_citation_frequency(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
     analytics = container[AnalyticsReadModel]
-    return await analytics.get_citation_frequency(_period_to_days(period), workspace_id=auth.workspace_id)
+    return await analytics.get_citation_frequency(
+        _period_to_days(period), workspace_id=auth.workspace_id,
+    )

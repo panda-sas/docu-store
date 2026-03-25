@@ -31,6 +31,7 @@ from application.ports.text_chunker import TextChunker
 from application.ports.title_extractor import TitleExtractorPort
 from application.ports.vector_store import VectorStore
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
+from application.ports.workflow_status_cache import WorkflowStatusCache
 from application.sagas.artifact_upload_saga import ArtifactUploadSaga
 from application.use_cases.aggregate_artifact_tags_use_case import AggregateArtifactTagsUseCase
 from application.use_cases.artifact_use_cases import (
@@ -47,6 +48,14 @@ from application.use_cases.artifact_use_cases import (
     UpdateTagMentionsUseCase as UpdateArtifactTagMentionsUseCase,
 )
 from application.use_cases.blob_use_cases import UploadBlobUseCase
+from application.use_cases.chat_use_cases import (
+    CreateConversationUseCase,
+    DeleteConversationUseCase,
+    GetConversationUseCase,
+    ListConversationsUseCase,
+    RecordFeedbackUseCase,
+    SendMessageUseCase,
+)
 from application.use_cases.compound_use_cases import ExtractCompoundMentionsUseCase
 from application.use_cases.embedding_use_cases import (
     GeneratePageEmbeddingUseCase,
@@ -63,14 +72,6 @@ from application.use_cases.page_use_cases import (
 )
 from application.use_cases.page_use_cases import (
     UpdateSummaryCandidateUseCase as UpdatePageSummaryCandidateUseCase,
-)
-from application.use_cases.chat_use_cases import (
-    CreateConversationUseCase,
-    DeleteConversationUseCase,
-    GetConversationUseCase,
-    ListConversationsUseCase,
-    RecordFeedbackUseCase,
-    SendMessageUseCase,
 )
 from application.use_cases.search_use_cases import HierarchicalSearchUseCase, SearchSummariesUseCase
 from application.use_cases.smiles_embedding_use_cases import EmbedCompoundSmilesUseCase
@@ -159,8 +160,10 @@ from infrastructure.read_repositories.mongo_read_model_materializer import (
     MongoReadModelMaterializer,
 )
 from infrastructure.read_repositories.mongo_read_repository import MongoReadRepository
+from infrastructure.read_repositories.mongo_workflow_status_cache import MongoWorkflowStatusCache
 from infrastructure.rerankers.cross_encoder_reranker import CrossEncoderReranker
 from infrastructure.serialization.pydantic_transcoder import PydanticTranscoding
+from infrastructure.temporal.caching_orchestrator import CachingWorkflowOrchestrator
 from infrastructure.temporal.orchestrator import TemporalWorkflowOrchestrator
 from infrastructure.text_chunkers.langchain_chunker import LangChainTextChunker
 from infrastructure.vector_stores.compound_qdrant_store import CompoundQdrantStore
@@ -193,7 +196,7 @@ class DocuStoreApplication(Application):
         transcoder.register(PydanticTranscoding(EmbeddingMetadata))
 
 
-def create_container() -> Container:  # noqa: PLR0915
+def create_container() -> Container:
     container = Container()
 
     # Initialize our custom Application subclass
@@ -285,8 +288,10 @@ def create_container() -> Container:  # noqa: PLR0915
     container[UserPreferencesStore] = user_store_factory
     container[UserActivityStore] = user_store_factory
 
-    from application.ports.analytics_read_model import AnalyticsReadModel  # noqa: PLC0415
-    from infrastructure.read_repositories.mongo_analytics_store import MongoAnalyticsStore  # noqa: PLC0415
+    from application.ports.analytics_read_model import AnalyticsReadModel
+    from infrastructure.read_repositories.mongo_analytics_store import (
+        MongoAnalyticsStore,
+    )
 
     container[AnalyticsReadModel] = lambda c: MongoAnalyticsStore(
         client=c[AsyncIOMotorClient],
@@ -294,8 +299,17 @@ def create_container() -> Container:  # noqa: PLR0915
         artifacts_collection_name=settings.mongo_artifacts_collection,
     )
 
-    # Register Pipeline Orchestrator (Temporal)
-    container[WorkflowOrchestrator] = lambda _: TemporalWorkflowOrchestrator()
+    # Register Workflow Status Cache (MongoDB)
+    container[WorkflowStatusCache] = lambda c: MongoWorkflowStatusCache(
+        client=c[AsyncIOMotorClient],
+        db_name=settings.mongo_db,
+    )
+
+    # Register Pipeline Orchestrator (Temporal + caching decorator)
+    container[WorkflowOrchestrator] = lambda c: CachingWorkflowOrchestrator(
+        inner=TemporalWorkflowOrchestrator(),
+        cache=c[WorkflowStatusCache],
+    )
 
     # Permission Registrar (Sentinel entity-level permissions)
     container[PermissionRegistrar] = lambda _: SentinelPermissionRegistrar(sentinel.permissions)
@@ -601,10 +615,10 @@ def create_container() -> Container:  # noqa: PLR0915
     )
 
     # Batch re-embed use cases
-    from application.use_cases.batch_reembed_use_cases import (  # noqa: PLC0415
+    from application.use_cases.batch_reembed_use_cases import (
         BatchReEmbedArtifactPagesUseCase,
     )
-    from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
+    from application.workflow_use_cases.trigger_batch_reembed_use_case import (
         TriggerBatchReEmbedUseCase,
     )
 
@@ -671,23 +685,27 @@ def create_container() -> Container:  # noqa: PLR0915
     )
 
     # --- Chat (Agentic RAG) ---
-    from application.ports.chat_agent import ChatAgentPort  # noqa: PLC0415
-    from application.services.chat_agent_router import ChatAgentRouter  # noqa: PLC0415
-    from application.ports.chat_repository import ChatRepository  # noqa: PLC0415
-    from infrastructure.chat.agent import ChatAgent  # noqa: PLC0415
-    from infrastructure.chat.mongo_chat_repository import MongoChatRepository  # noqa: PLC0415
-    from infrastructure.chat.nodes.answer_formatting import AnswerFormattingNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.answer_synthesis import AnswerSynthesisNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.grounding_verification import GroundingVerificationNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.question_analysis import QuestionAnalysisNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.retrieval import RetrievalNode  # noqa: PLC0415
-    from infrastructure.chat.thinking_agent import ThinkingAgent  # noqa: PLC0415
-    from infrastructure.chat.nodes.query_planning import QueryPlanningNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.agentic_retrieval import AgenticRetrievalNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.context_assembly import ContextAssemblyNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.adaptive_synthesis import AdaptiveSynthesisNode  # noqa: PLC0415
-    from infrastructure.chat.nodes.inline_verification import InlineVerificationNode  # noqa: PLC0415
-    from infrastructure.chat.tools.retrieval_tools import ToolRegistry  # noqa: PLC0415
+    from application.ports.chat_agent import ChatAgentPort
+    from application.ports.chat_repository import ChatRepository
+    from application.services.chat_agent_router import ChatAgentRouter
+    from infrastructure.chat.agent import ChatAgent
+    from infrastructure.chat.mongo_chat_repository import MongoChatRepository
+    from infrastructure.chat.nodes.adaptive_synthesis import AdaptiveSynthesisNode
+    from infrastructure.chat.nodes.agentic_retrieval import AgenticRetrievalNode
+    from infrastructure.chat.nodes.answer_formatting import AnswerFormattingNode
+    from infrastructure.chat.nodes.answer_synthesis import AnswerSynthesisNode
+    from infrastructure.chat.nodes.context_assembly import ContextAssemblyNode
+    from infrastructure.chat.nodes.grounding_verification import (
+        GroundingVerificationNode,
+    )
+    from infrastructure.chat.nodes.inline_verification import (
+        InlineVerificationNode,
+    )
+    from infrastructure.chat.nodes.query_planning import QueryPlanningNode
+    from infrastructure.chat.nodes.question_analysis import QuestionAnalysisNode
+    from infrastructure.chat.nodes.retrieval import RetrievalNode
+    from infrastructure.chat.thinking_agent import ThinkingAgent
+    from infrastructure.chat.tools.retrieval_tools import ToolRegistry
 
     # Chat LLM client (separate from batch LLM, falls back to same settings)
     chat_llm_client = create_chat_llm_client(settings)
@@ -746,6 +764,7 @@ def create_container() -> Container:  # noqa: PLR0915
         summary_search=c[SearchSummariesUseCase],
         page_read_model=c[PageReadModel],
         tag_dictionary=c[TagDictionaryReadModel],
+        artifact_read_model=c[ArtifactReadModel],
     )
     container[AgenticRetrievalNode] = lambda c: AgenticRetrievalNode(
         tool_llm=tool_calling_llm,

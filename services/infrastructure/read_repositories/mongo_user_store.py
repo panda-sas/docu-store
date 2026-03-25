@@ -40,10 +40,12 @@ class MongoUserStore(UserPreferencesStore, UserActivityStore):
         workspace_id: UUID,
         user_id: UUID,
     ) -> UserPreferencesDTO:
-        doc = await self.user_preferences.find_one({
-            "workspace_id": str(workspace_id),
-            "user_id": str(user_id),
-        })
+        doc = await self.user_preferences.find_one(
+            {
+                "workspace_id": str(workspace_id),
+                "user_id": str(user_id),
+            },
+        )
         if not doc:
             return UserPreferencesDTO()
         return UserPreferencesDTO(
@@ -80,24 +82,38 @@ class MongoUserStore(UserPreferencesStore, UserActivityStore):
         )
 
     async def ensure_indexes(self) -> None:
-        await self.user_preferences.create_indexes([
-            IndexModel(
-                [("workspace_id", ASCENDING), ("user_id", ASCENDING)],
-                unique=True,
-            ),
-        ])
-        await self.user_activity.create_indexes([
-            IndexModel(
-                [("workspace_id", ASCENDING), ("user_id", ASCENDING), ("type", ASCENDING), ("created_at", DESCENDING)],
-            ),
-            IndexModel(
-                [("workspace_id", ASCENDING), ("user_id", ASCENDING), ("type", ASCENDING), ("artifact_id", ASCENDING)],
-            ),
-            IndexModel(
-                [("created_at", ASCENDING)],
-                expireAfterSeconds=90 * 24 * 60 * 60,  # 90 days TTL
-            ),
-        ])
+        await self.user_preferences.create_indexes(
+            [
+                IndexModel(
+                    [("workspace_id", ASCENDING), ("user_id", ASCENDING)],
+                    unique=True,
+                ),
+            ],
+        )
+        await self.user_activity.create_indexes(
+            [
+                IndexModel(
+                    [
+                        ("workspace_id", ASCENDING),
+                        ("user_id", ASCENDING),
+                        ("type", ASCENDING),
+                        ("created_at", DESCENDING),
+                    ],
+                ),
+                IndexModel(
+                    [
+                        ("workspace_id", ASCENDING),
+                        ("user_id", ASCENDING),
+                        ("type", ASCENDING),
+                        ("artifact_id", ASCENDING),
+                    ],
+                ),
+                IndexModel(
+                    [("created_at", ASCENDING)],
+                    expireAfterSeconds=90 * 24 * 60 * 60,  # 90 days TTL
+                ),
+            ],
+        )
 
     # ── UserActivityStore ────────────────────────────────────────────────────
 
@@ -125,15 +141,17 @@ class MongoUserStore(UserPreferencesStore, UserActivityStore):
             )
             return
 
-        await self.user_activity.insert_one({
-            "workspace_id": str(workspace_id),
-            "user_id": str(user_id),
-            "type": "search",
-            "query_text": query_text,
-            "search_mode": search_mode,
-            "result_count": result_count,
-            "created_at": datetime.now(UTC),
-        })
+        await self.user_activity.insert_one(
+            {
+                "workspace_id": str(workspace_id),
+                "user_id": str(user_id),
+                "type": "search",
+                "query_text": query_text,
+                "search_mode": search_mode,
+                "result_count": result_count,
+                "created_at": datetime.now(UTC),
+            },
+        )
 
     async def record_document_open(
         self,
@@ -171,24 +189,29 @@ class MongoUserStore(UserPreferencesStore, UserActivityStore):
         limit: int = 20,
     ) -> list[SearchHistoryEntry]:
         cursor = (
-            self.user_activity
-            .find({
-                "workspace_id": str(workspace_id),
-                "user_id": str(user_id),
-                "type": "search",
-            })
+            self.user_activity.find(
+                {
+                    "workspace_id": str(workspace_id),
+                    "user_id": str(user_id),
+                    "type": "search",
+                },
+            )
             .sort("created_at", DESCENDING)
             .limit(limit)
         )
         results = []
         async for doc in cursor:
             created = doc["created_at"]
-            results.append(SearchHistoryEntry(
-                query_text=doc["query_text"],
-                search_mode=doc.get("search_mode", "hierarchical"),
-                result_count=doc.get("result_count"),
-                created_at=created.isoformat() if hasattr(created, "isoformat") else str(created),
-            ))
+            results.append(
+                SearchHistoryEntry(
+                    query_text=doc["query_text"],
+                    search_mode=doc.get("search_mode", "hierarchical"),
+                    result_count=doc.get("result_count"),
+                    created_at=created.isoformat()
+                    if hasattr(created, "isoformat")
+                    else str(created),
+                ),
+            )
         return results
 
     async def delete_search_entry(
@@ -197,23 +220,27 @@ class MongoUserStore(UserPreferencesStore, UserActivityStore):
         user_id: UUID,
         query_text: str,
     ) -> None:
-        await self.user_activity.delete_one({
-            "workspace_id": str(workspace_id),
-            "user_id": str(user_id),
-            "type": "search",
-            "query_text": query_text,
-        })
+        await self.user_activity.delete_one(
+            {
+                "workspace_id": str(workspace_id),
+                "user_id": str(user_id),
+                "type": "search",
+                "query_text": query_text,
+            },
+        )
 
     async def clear_search_history(
         self,
         workspace_id: UUID,
         user_id: UUID,
     ) -> None:
-        await self.user_activity.delete_many({
-            "workspace_id": str(workspace_id),
-            "user_id": str(user_id),
-            "type": "search",
-        })
+        await self.user_activity.delete_many(
+            {
+                "workspace_id": str(workspace_id),
+                "user_id": str(user_id),
+                "type": "search",
+            },
+        )
 
     async def get_recent_documents(
         self,
@@ -222,21 +249,26 @@ class MongoUserStore(UserPreferencesStore, UserActivityStore):
         limit: int = 20,
     ) -> list[RecentDocumentEntry]:
         cursor = (
-            self.user_activity
-            .find({
-                "workspace_id": str(workspace_id),
-                "user_id": str(user_id),
-                "type": "document_open",
-            })
+            self.user_activity.find(
+                {
+                    "workspace_id": str(workspace_id),
+                    "user_id": str(user_id),
+                    "type": "document_open",
+                },
+            )
             .sort("created_at", DESCENDING)
             .limit(limit)
         )
         results = []
         async for doc in cursor:
             created = doc["created_at"]
-            results.append(RecentDocumentEntry(
-                artifact_id=doc["artifact_id"],
-                artifact_title=doc.get("artifact_title"),
-                created_at=created.isoformat() if hasattr(created, "isoformat") else str(created),
-            ))
+            results.append(
+                RecentDocumentEntry(
+                    artifact_id=doc["artifact_id"],
+                    artifact_title=doc.get("artifact_title"),
+                    created_at=created.isoformat()
+                    if hasattr(created, "isoformat")
+                    else str(created),
+                ),
+            )
         return results

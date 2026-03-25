@@ -46,7 +46,7 @@ class CrossEncoderReranker(Reranker):
         with self._lock:
             if self._model is not None:
                 return
-            from sentence_transformers import CrossEncoder  # noqa: PLC0415
+            from sentence_transformers import CrossEncoder
 
             self._model = CrossEncoder(self.model_name, device=self.device)
             logger.info("cross_encoder_model_loaded", model_name=self.model_name)

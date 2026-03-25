@@ -49,6 +49,7 @@ class RetrievalNode:
 
         Returns:
             Tuple of (citations list, formatted sources text for prompt).
+
         """
         strategy = analysis.search_strategy
         query = analysis.reformulated_query

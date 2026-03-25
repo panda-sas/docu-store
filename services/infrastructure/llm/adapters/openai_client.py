@@ -24,7 +24,7 @@ class OpenAILLMClient:
         model_name: str = "gpt-4o-mini",
         api_key: str | None = None,
         temperature: float = 0.1,
-        langfuse_handler: Any | None = None,  # noqa: ANN401
+        langfuse_handler: Any | None = None,
     ) -> None:
         self._model_name = model_name
         self._api_key = api_key
@@ -34,7 +34,7 @@ class OpenAILLMClient:
 
     def _get_llm(self) -> ChatOpenAI:
         if self._llm is None:
-            from langchain_openai import ChatOpenAI  # noqa: PLC0415
+            from langchain_openai import ChatOpenAI
 
             self._llm = ChatOpenAI(
                 model=self._model_name,
@@ -51,7 +51,7 @@ class OpenAILLMClient:
         system_prompt: str | None = None,
         temperature: float | None = None,
     ) -> str:
-        from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         llm = self._get_llm()
         if temperature is not None:
@@ -77,7 +77,7 @@ class OpenAILLMClient:
         temperature: float | None = None,
         images_b64: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
-        from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         llm = self._get_llm()
         if temperature is not None:
@@ -90,10 +90,12 @@ class OpenAILLMClient:
         if images_b64:
             content: list[dict] = [{"type": "text", "text": prompt}]
             for img in images_b64:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{img}"},
-                })
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{img}"},
+                    },
+                )
             messages.append(HumanMessage(content=content))
         else:
             messages.append(HumanMessage(content=prompt))
@@ -117,7 +119,7 @@ class OpenAILLMClient:
         *,
         system_prompt: str | None = None,
     ) -> str:
-        from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         llm = self._get_llm()
 

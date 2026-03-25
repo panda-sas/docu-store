@@ -13,14 +13,22 @@ const STATUS_CONFIG: Record<
   NOT_FOUND: { severity: "secondary", icon: "pi pi-minus-circle" },
 };
 
-export function WorkflowStatusBadge({ status }: { status: string }) {
+export function WorkflowStatusBadge({ status, fromCache }: { status: string; fromCache?: boolean }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.NOT_FOUND;
 
   return (
-    <Tag
-      value={status}
-      severity={config.severity}
-      icon={config.icon}
-    />
+    <span className="inline-flex items-center gap-1">
+      <Tag
+        value={status}
+        severity={config.severity}
+        icon={config.icon}
+      />
+      {fromCache && (
+        <i
+          className="pi pi-history text-xs text-text-muted"
+          title="Cached — workflow history expired in Temporal"
+        />
+      )}
+    </span>
   );
 }

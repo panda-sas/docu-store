@@ -113,8 +113,8 @@ class Page(Aggregate):
     def _apply_compound_mentions_updated(
         self,
         compound_mentions: list[CompoundMention],
-        artifact_id: UUID,  # noqa: ARG002
-        workspace_id: UUID | None = None,  # noqa: ARG002
+        artifact_id: UUID,
+        workspace_id: UUID | None = None,
     ) -> None:
         # Update internal state, replace existing compound_mentions
         self.compound_mentions = compound_mentions
@@ -142,8 +142,8 @@ class Page(Aggregate):
     def _apply_tag_mentions_updated(
         self,
         tag_mentions: list[TagMention],
-        artifact_id: UUID,  # noqa: ARG002
-        workspace_id: UUID | None = None,  # noqa: ARG002
+        artifact_id: UUID,
+        workspace_id: UUID | None = None,
     ) -> None:
         self.tag_mentions = tag_mentions
 
@@ -170,8 +170,8 @@ class Page(Aggregate):
     def _apply_text_mention_updated(
         self,
         text_mention: TextMention | None,
-        artifact_id: UUID,  # noqa: ARG002
-        workspace_id: UUID | None = None,  # noqa: ARG002
+        artifact_id: UUID,
+        workspace_id: UUID | None = None,
     ) -> None:
         self.text_mention = text_mention
 
@@ -201,8 +201,8 @@ class Page(Aggregate):
     def _apply_summary_candidate_updated(
         self,
         summary_candidate: SummaryCandidate | None,
-        artifact_id: UUID,  # noqa: ARG002
-        workspace_id: UUID | None = None,  # noqa: ARG002
+        artifact_id: UUID,
+        workspace_id: UUID | None = None,
     ) -> None:
         self.summary_candidate = summary_candidate
 
@@ -236,8 +236,8 @@ class Page(Aggregate):
     def _apply_text_embedding_generated(
         self,
         embedding_metadata: EmbeddingMetadata,
-        artifact_id: UUID,  # noqa: ARG002
-        workspace_id: UUID | None = None,  # noqa: ARG002
+        artifact_id: UUID,
+        workspace_id: UUID | None = None,
     ) -> None:
         self.text_embedding_metadata = embedding_metadata
 
@@ -267,8 +267,8 @@ class Page(Aggregate):
     def _apply_smiles_embedding_generated(
         self,
         embedding_metadata: EmbeddingMetadata,
-        artifact_id: UUID,  # noqa: ARG002
-        workspace_id: UUID | None = None,  # noqa: ARG002
+        artifact_id: UUID,
+        workspace_id: UUID | None = None,
     ) -> None:
         self.smiles_embedding_metadata = embedding_metadata
 
@@ -295,8 +295,8 @@ class Page(Aggregate):
     def _apply_deleted(
         self,
         deleted_at: datetime,
-        artifact_id: UUID,  # noqa: ARG002
-        workspace_id: UUID | None = None,  # noqa: ARG002
+        artifact_id: UUID,
+        workspace_id: UUID | None = None,
     ) -> None:
         self.deleted_at = deleted_at
         self.is_deleted = True

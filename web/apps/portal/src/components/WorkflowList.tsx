@@ -11,6 +11,7 @@ interface WorkflowEntry {
   name: string;
   workflow_id: string;
   status: string;
+  from_cache?: boolean;
 }
 
 /**
@@ -21,7 +22,12 @@ export function parseWorkflows(
 ): WorkflowEntry[] | undefined {
   const map = (data as WorkflowMap | undefined)?.workflows;
   if (!map) return undefined;
-  return Object.entries(map).map(([name, info]) => ({ name, ...info }));
+  return Object.entries(map).map(([name, info]) => ({
+    name,
+    workflow_id: info.workflow_id,
+    status: info.status,
+    from_cache: info.from_cache,
+  }));
 }
 
 interface WorkflowListProps {
@@ -96,7 +102,7 @@ export function WorkflowList({
               <span className="text-xs font-medium text-text-primary">
                 {w.name.replace(/_/g, " ")}
               </span>
-              <WorkflowStatusBadge status={w.status} />
+              <WorkflowStatusBadge status={w.status} fromCache={w.from_cache} />
               {rerunButton(w)}
             </div>
           ))}
@@ -116,7 +122,7 @@ export function WorkflowList({
                 {w.name.replace(/_/g, " ")}
               </span>
               <div className="flex items-center gap-2">
-                <WorkflowStatusBadge status={w.status} />
+                <WorkflowStatusBadge status={w.status} fromCache={w.from_cache} />
                 {rerunButton(w)}
               </div>
             </div>

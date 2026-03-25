@@ -61,8 +61,7 @@ class ContextBuilder:
             return
 
         conversation_text = "\n".join(
-            f"{'User' if m.role == 'user' else 'Assistant'}: {m.content[:300]}"
-            for m in older
+            f"{'User' if m.role == 'user' else 'Assistant'}: {m.content[:300]}" for m in older
         )
 
         prompt = await self._prompts.render_prompt(

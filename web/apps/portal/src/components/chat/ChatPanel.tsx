@@ -137,7 +137,7 @@ export function ChatPanel({
     if (!conversationId) {
       // Queue the message, create conversation, then navigate — message auto-sends on mount
       setQueuedMessage(message);
-      const conv = await createConversation.mutateAsync();
+      const conv = await createConversation.mutateAsync(undefined);
       router.push(`/${workspace}/chat/${conv.conversation_id}`);
       return;
     }

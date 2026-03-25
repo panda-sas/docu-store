@@ -52,7 +52,7 @@ class AggregateArtifactTagsUseCase:
                     page = self.page_repository.get_by_id(page_id)
                     pages_data.append((page.id, page.index, list(page.tag_mentions)))
                     pages_loaded += 1
-                except Exception:  # noqa: BLE001
+                except Exception:
                     # Skip pages that can't be loaded — partial aggregation is fine
                     logger.warning(
                         "aggregate_artifact_tags.page_load_failed",
@@ -66,7 +66,7 @@ class AggregateArtifactTagsUseCase:
             self.artifact_repository.save(artifact)
 
             if self.external_event_publisher:
-                from application.mappers.artifact_mappers import ArtifactMapper  # noqa: PLC0415
+                from application.mappers.artifact_mappers import ArtifactMapper
 
                 artifact_response = ArtifactMapper.to_artifact_response(artifact)
                 await self.external_event_publisher.notify_artifact_updated(
@@ -90,7 +90,7 @@ class AggregateArtifactTagsUseCase:
             )
 
         except Exception as e:
-            from domain.exceptions import AggregateNotFoundError, ConcurrencyError  # noqa: PLC0415
+            from domain.exceptions import AggregateNotFoundError, ConcurrencyError
 
             if isinstance(e, AggregateNotFoundError):
                 return Failure(AppError("not_found", str(e)))

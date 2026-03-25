@@ -10,7 +10,7 @@ import structlog
 from infrastructure.config import settings
 
 if TYPE_CHECKING:
-    from application.dtos.chat_dtos import ChatMessageDTO, SourceCitationDTO
+    from application.dtos.chat_dtos import ChatMessageDTO
     from application.ports.llm_client import LLMClientPort
     from application.ports.prompt_repository import PromptRepositoryPort
     from infrastructure.chat.models import QuestionAnalysis

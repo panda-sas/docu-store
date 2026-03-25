@@ -18,7 +18,11 @@ from application.dtos.permission_dtos import (
     UpdateVisibilityRequest,
     VisibilityResponse,
 )
-from application.dtos.workflow_dtos import SummaryDetailResponse, WorkflowStartedResponse, WorkflowStatusMapResponse
+from application.dtos.workflow_dtos import (
+    SummaryDetailResponse,
+    WorkflowStartedResponse,
+    WorkflowStatusMapResponse,
+)
 from application.ports.blob_store import BlobStore
 from application.ports.repositories.artifact_read_models import ArtifactReadModel
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
@@ -108,7 +112,7 @@ async def create_artifact(
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 @handle_use_case_errors
-async def upload_blob(  # noqa: PLR0913
+async def upload_blob(
     container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
     file: Annotated[UploadFile, File()],

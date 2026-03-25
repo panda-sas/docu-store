@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 import structlog
 
 from infrastructure.chat.models import (
-    NEREntityFilter,
     QUERY_FILTER_ENTITY_TYPES,
+    NEREntityFilter,
     QueryPlan,
 )
 from infrastructure.chat.utils import build_follow_up_context, strip_markdown_fences
@@ -71,7 +71,10 @@ class QueryPlanningNode:
         llm_task = self._run_llm_planning(question, conversation_context)
 
         ner_filters, author_mentions, llm_result = await asyncio.gather(
-            ner_task, author_task, llm_task, return_exceptions=True,
+            ner_task,
+            author_task,
+            llm_task,
+            return_exceptions=True,
         )
 
         # Handle individual failures gracefully
@@ -135,7 +138,9 @@ class QueryPlanningNode:
     async def _run_author_detection(self, question: str) -> list[str]:
         """Extract author/person names via GLiNER2."""
         fields = await self._structured_extractor.extract(
-            question, _AUTHOR_SCHEMA, threshold=0.4,
+            question,
+            _AUTHOR_SCHEMA,
+            threshold=0.4,
         )
         authors = [f.value for f in fields if f.name == "author_name" and f.value.strip()]
         log.info("chat.planning.authors_done", count=len(authors), authors=authors)
@@ -150,8 +155,16 @@ class QueryPlanningNode:
 
         Returns (plan, raw_llm_output).
         """
-        enable_sub = "ENABLED — decompose if multi-faceted" if settings.chat_enable_sub_queries else "DISABLED — leave empty"
-        enable_hyde = "ENABLED — generate for exploratory queries" if settings.chat_enable_hyde else "DISABLED — set to null"
+        enable_sub = (
+            "ENABLED — decompose if multi-faceted"
+            if settings.chat_enable_sub_queries
+            else "DISABLED — leave empty"
+        )
+        enable_hyde = (
+            "ENABLED — generate for exploratory queries"
+            if settings.chat_enable_hyde
+            else "DISABLED — set to null"
+        )
 
         prompt = await self._prompts.render_prompt(
             "chat_query_planning",
@@ -179,7 +192,6 @@ class QueryPlanningNode:
 
         return QueryPlan(**data), raw
 
-
     def _merge_ner_context(
         self,
         plan: QueryPlan,
@@ -198,10 +210,9 @@ class QueryPlanningNode:
         accumulated_authors: list[str] = []
 
         grounded_msgs = [
-            m for m in conversation_history
-            if m.role == "assistant"
-            and m.query_context is not None
-            and m.query_context.grounded
+            m
+            for m in conversation_history
+            if m.role == "assistant" and m.query_context is not None and m.query_context.grounded
         ]
 
         for msg in grounded_msgs[-3:]:
@@ -293,8 +304,10 @@ class QueryPlanningNode:
             merged_ner=[f.entity_text for f in merged_entities],
             original_authors=plan.author_mentions,
             merged_authors=merged_authors,
-            strategy="follow_up_inherit" if is_follow_up and not has_new_ner
-            else "union" if is_follow_up or has_overlap
+            strategy="follow_up_inherit"
+            if is_follow_up and not has_new_ner
+            else "union"
+            if is_follow_up or has_overlap
             else "new_only",
         )
 

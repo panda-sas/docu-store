@@ -58,8 +58,7 @@ class GroundingVerificationNode:
             cleaned = raw.strip()
             if cleaned.startswith("```"):
                 cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
+                cleaned = cleaned.removesuffix("```")
                 cleaned = cleaned.strip()
 
             data = json.loads(cleaned)

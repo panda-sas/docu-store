@@ -72,7 +72,7 @@ def _create_kafka_consumer(
 ) -> tuple[object | None, type | None]:
     """Create and subscribe a Kafka consumer. Returns (consumer, KafkaError) or (None, None)."""
     try:
-        from confluent_kafka import Consumer, KafkaError  # noqa: PLC0415
+        from confluent_kafka import Consumer, KafkaError
     except ImportError:
         logger.exception("plugin_consumer.confluent_kafka_not_installed")
         return None, None
@@ -104,7 +104,7 @@ async def _consume_loop(
             continue
 
         if msg.error():
-            if msg.error().code() == kafka_error_cls._PARTITION_EOF:  # noqa: SLF001
+            if msg.error().code() == kafka_error_cls._PARTITION_EOF:
                 continue
             logger.error("plugin_consumer.kafka_error", error=msg.error())
             continue
@@ -165,14 +165,14 @@ async def _run_async() -> None:
     Starts the Kafka consumer loop and plugin Temporal workers side-by-side
     so that event routing and workflow execution both run in this process.
     """
-    from motor.motor_asyncio import AsyncIOMotorClient  # noqa: PLC0415
-    from temporalio.client import Client as TemporalClient  # noqa: PLC0415
-    from temporalio.worker import UnsandboxedWorkflowRunner  # noqa: PLC0415
-    from temporalio.worker import Worker as TemporalWorker  # noqa: PLC0415
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from temporalio.client import Client as TemporalClient
+    from temporalio.worker import UnsandboxedWorkflowRunner
+    from temporalio.worker import Worker as TemporalWorker
 
-    from infrastructure.config import settings  # noqa: PLC0415
-    from infrastructure.plugins.context import DefaultPluginContext  # noqa: PLC0415
-    from infrastructure.plugins.loader import discover_plugins  # noqa: PLC0415
+    from infrastructure.config import settings
+    from infrastructure.plugins.context import DefaultPluginContext
+    from infrastructure.plugins.loader import discover_plugins
 
     enabled = settings.enabled_plugins_list
     registry = discover_plugins(enabled, settings.plugin_dir)
@@ -244,7 +244,7 @@ async def _run_async() -> None:
 
 def run_sync() -> None:
     """Entry point for running the plugin consumer as a standalone process."""
-    from infrastructure.logging import setup_logging  # noqa: PLC0415
+    from infrastructure.logging import setup_logging
 
     setup_logging()
     asyncio.run(_run_async())

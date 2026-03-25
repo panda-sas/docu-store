@@ -74,7 +74,11 @@ class QuestionAnalysisNode:
             return analysis
 
         except (json.JSONDecodeError, Exception) as exc:
-            log.warning("chat.analysis.fallback", error=str(exc), raw_preview=raw[:500] if "raw" in dir() else "(no response)")
+            log.warning(
+                "chat.analysis.fallback",
+                error=str(exc),
+                raw_preview=raw[:500] if "raw" in dir() else "(no response)",
+            )
             return QuestionAnalysis(
                 query_type="factual",
                 reformulated_query=question,

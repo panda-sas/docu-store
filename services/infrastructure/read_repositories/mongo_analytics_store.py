@@ -11,7 +11,6 @@ from application.dtos.stats_dtos import (
     ChatLatencyStatsResponse,
     CitationFrequencyResponse,
     CitedArtifactEntry,
-    UncitedArtifactEntry,
     GroundingBucket,
     GroundingStatsResponse,
     KnowledgeGapEntry,
@@ -21,24 +20,30 @@ from application.dtos.stats_dtos import (
     StepLatencyStats,
     TokenUsageBucket,
     TokenUsageStatsResponse,
+    UncitedArtifactEntry,
 )
 
 
 class MongoAnalyticsStore:
     """Aggregation queries over chat_messages and user_activity collections."""
 
-    def __init__(self, client: AsyncIOMotorClient, db_name: str, artifacts_collection_name: str) -> None:
+    def __init__(
+        self, client: AsyncIOMotorClient, db_name: str, artifacts_collection_name: str,
+    ) -> None:
         self._db = client[db_name]
         self._artifacts_collection_name = artifacts_collection_name
 
     async def _conversation_ids_for_workspace(self, workspace_id: UUID) -> list[str]:
         """Pre-fetch conversation IDs belonging to a workspace."""
         return await self._db["conversations"].distinct(
-            "conversation_id", {"workspace_id": str(workspace_id)},
+            "conversation_id",
+            {"workspace_id": str(workspace_id)},
         )
 
     def _workspace_match_for_messages(
-        self, base_match: dict, conv_ids: list[str] | None,
+        self,
+        base_match: dict,
+        conv_ids: list[str] | None,
     ) -> dict:
         """Merge a conversation_id filter into an existing $match dict."""
         if conv_ids is not None:
@@ -46,14 +51,20 @@ class MongoAnalyticsStore:
         return base_match
 
     async def get_token_usage(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> TokenUsageStatsResponse:
         since = datetime.now(UTC) - timedelta(days=period_days)
 
-        conv_ids = await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        conv_ids = (
+            await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        )
 
         match = self._workspace_match_for_messages(
-            {"role": "assistant", "created_at": {"$gte": since}}, conv_ids,
+            {"role": "assistant", "created_at": {"$gte": since}},
+            conv_ids,
         )
 
         pipeline = [
@@ -68,7 +79,7 @@ class MongoAnalyticsStore:
                     "prompt_tokens": {"$sum": {"$ifNull": ["$token_usage.prompt", 0]}},
                     "completion_tokens": {"$sum": {"$ifNull": ["$token_usage.completion", 0]}},
                     "message_count": {"$sum": 1},
-                }
+                },
             },
             {"$sort": {"_id.date": 1}},
         ]
@@ -98,11 +109,16 @@ class MongoAnalyticsStore:
         )
 
     async def get_chat_latency(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> ChatLatencyStatsResponse:
         since = datetime.now(UTC) - timedelta(days=period_days)
 
-        conv_ids = await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        conv_ids = (
+            await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        )
 
         match = self._workspace_match_for_messages(
             {"role": "assistant", "created_at": {"$gte": since}, "agent_trace": {"$ne": None}},
@@ -117,35 +133,47 @@ class MongoAnalyticsStore:
                     "step_name": "$agent_trace.steps.step",
                     "duration_ms": {
                         "$cond": {
-                            "if": {"$and": [
-                                {"$ne": ["$agent_trace.steps.started_at", None]},
-                                {"$ne": ["$agent_trace.steps.completed_at", None]},
-                            ]},
+                            "if": {
+                                "$and": [
+                                    {"$ne": ["$agent_trace.steps.started_at", None]},
+                                    {"$ne": ["$agent_trace.steps.completed_at", None]},
+                                ],
+                            },
                             "then": {
                                 "$subtract": [
-                                    {"$toLong": {"$dateFromString": {
-                                        "dateString": "$agent_trace.steps.completed_at",
-                                        "onError": None,
-                                    }}},
-                                    {"$toLong": {"$dateFromString": {
-                                        "dateString": "$agent_trace.steps.started_at",
-                                        "onError": None,
-                                    }}},
-                                ]
+                                    {
+                                        "$toLong": {
+                                            "$dateFromString": {
+                                                "dateString": "$agent_trace.steps.completed_at",
+                                                "onError": None,
+                                            },
+                                        },
+                                    },
+                                    {
+                                        "$toLong": {
+                                            "$dateFromString": {
+                                                "dateString": "$agent_trace.steps.started_at",
+                                                "onError": None,
+                                            },
+                                        },
+                                    },
+                                ],
                             },
                             "else": None,
-                        }
+                        },
                     },
-                }
+                },
             },
             {"$match": {"duration_ms": {"$ne": None, "$gt": 0}}},
-            {"$group": {
-                "_id": "$step_name",
-                "durations": {"$push": "$duration_ms"},
-                "count": {"$sum": 1},
-                "avg_ms": {"$avg": "$duration_ms"},
-                "max_ms": {"$max": "$duration_ms"},
-            }},
+            {
+                "$group": {
+                    "_id": "$step_name",
+                    "durations": {"$push": "$duration_ms"},
+                    "count": {"$sum": 1},
+                    "avg_ms": {"$avg": "$duration_ms"},
+                    "max_ms": {"$max": "$duration_ms"},
+                },
+            },
             {"$sort": {"count": -1}},
         ]
 
@@ -159,14 +187,16 @@ class MongoAnalyticsStore:
             count = len(durations)
             p50 = durations[count // 2] if count else 0
             p95 = durations[int(count * 0.95)] if count else 0
-            steps.append(StepLatencyStats(
-                step_name=r["_id"] or "unknown",
-                count=count,
-                avg_ms=round(r["avg_ms"], 1),
-                p50_ms=round(p50, 1),
-                p95_ms=round(p95, 1),
-                max_ms=round(r["max_ms"], 1),
-            ))
+            steps.append(
+                StepLatencyStats(
+                    step_name=r["_id"] or "unknown",
+                    count=count,
+                    avg_ms=round(r["avg_ms"], 1),
+                    p50_ms=round(p50, 1),
+                    p95_ms=round(p95, 1),
+                    max_ms=round(r["max_ms"], 1),
+                ),
+            )
             all_durations.extend(durations)
 
         all_durations.sort()
@@ -179,7 +209,10 @@ class MongoAnalyticsStore:
         )
 
     async def get_search_quality(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> SearchQualityStatsResponse:
         since = datetime.now(UTC) - timedelta(days=period_days)
 
@@ -195,10 +228,10 @@ class MongoAnalyticsStore:
                     "_id": "$search_mode",
                     "total_searches": {"$sum": 1},
                     "zero_result_count": {
-                        "$sum": {"$cond": [{"$eq": [{"$ifNull": ["$result_count", 1]}, 0]}, 1, 0]}
+                        "$sum": {"$cond": [{"$eq": [{"$ifNull": ["$result_count", 1]}, 0]}, 1, 0]},
                     },
                     "total_results": {"$sum": {"$ifNull": ["$result_count", 0]}},
-                }
+                },
             },
         ]
 
@@ -213,13 +246,15 @@ class MongoAnalyticsStore:
             zero = r["zero_result_count"]
             grand_total += total
             grand_zero += zero
-            modes.append(SearchQualityStats(
-                search_mode=r["_id"] or "unknown",
-                total_searches=total,
-                zero_result_count=zero,
-                zero_result_rate=round(zero / total, 3) if total else 0,
-                avg_result_count=round(r["total_results"] / total, 1) if total else 0,
-            ))
+            modes.append(
+                SearchQualityStats(
+                    search_mode=r["_id"] or "unknown",
+                    total_searches=total,
+                    zero_result_count=zero,
+                    zero_result_rate=round(zero / total, 3) if total else 0,
+                    avg_result_count=round(r["total_results"] / total, 1) if total else 0,
+                ),
+            )
 
         return SearchQualityStatsResponse(
             modes=modes,
@@ -228,11 +263,16 @@ class MongoAnalyticsStore:
         )
 
     async def get_grounding_stats(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> GroundingStatsResponse:
         since = datetime.now(UTC) - timedelta(days=period_days)
 
-        conv_ids = await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        conv_ids = (
+            await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        )
 
         base_match: dict = {
             "role": "assistant",
@@ -248,13 +288,17 @@ class MongoAnalyticsStore:
                     "_id": {"$ifNull": ["$query_context.query_type", "unknown"]},
                     "total": {"$sum": 1},
                     "grounded": {
-                        "$sum": {"$cond": [{"$eq": ["$agent_trace.grounding_is_grounded", True]}, 1, 0]}
+                        "$sum": {
+                            "$cond": [{"$eq": ["$agent_trace.grounding_is_grounded", True]}, 1, 0],
+                        },
                     },
                     "not_grounded": {
-                        "$sum": {"$cond": [{"$ne": ["$agent_trace.grounding_is_grounded", True]}, 1, 0]}
+                        "$sum": {
+                            "$cond": [{"$ne": ["$agent_trace.grounding_is_grounded", True]}, 1, 0],
+                        },
                     },
                     "avg_confidence": {"$avg": "$agent_trace.grounding_confidence"},
-                }
+                },
             },
         ]
 
@@ -271,14 +315,16 @@ class MongoAnalyticsStore:
             grand_total += total
             grand_grounded += grounded
             total_confidence += r["avg_confidence"] * total
-            modes.append(GroundingBucket(
-                mode=r["_id"],
-                total_messages=total,
-                grounded_count=grounded,
-                not_grounded_count=r["not_grounded"],
-                grounded_rate=round(grounded / total, 3) if total else 0,
-                avg_confidence=round(r["avg_confidence"], 3),
-            ))
+            modes.append(
+                GroundingBucket(
+                    mode=r["_id"],
+                    total_messages=total,
+                    grounded_count=grounded,
+                    not_grounded_count=r["not_grounded"],
+                    grounded_rate=round(grounded / total, 3) if total else 0,
+                    avg_confidence=round(r["avg_confidence"], 3),
+                ),
+            )
 
         return GroundingStatsResponse(
             modes=modes,
@@ -287,11 +333,16 @@ class MongoAnalyticsStore:
         )
 
     async def get_knowledge_gaps(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> KnowledgeGapsResponse:
         since = datetime.now(UTC) - timedelta(days=period_days)
 
-        conv_ids = await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        conv_ids = (
+            await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        )
 
         base_match: dict = {
             "role": "assistant",
@@ -304,22 +355,28 @@ class MongoAnalyticsStore:
             # Assistant messages with NER entities detected in the query
             {"$match": match},
             # Flag "gap" messages: no sources or answer not grounded
-            {"$addFields": {
-                "_is_gap": {"$or": [
-                    {"$eq": [{"$size": {"$ifNull": ["$sources", []]}}, 0]},
-                    {"$eq": ["$agent_trace.grounding_is_grounded", False]},
-                ]},
-            }},
-            {"$unwind": "$query_context.ner_entities"},
-            {"$group": {
-                "_id": {
-                    "text": {"$toLower": "$query_context.ner_entities.entity_text"},
-                    "type": "$query_context.ner_entities.entity_type",
+            {
+                "$addFields": {
+                    "_is_gap": {
+                        "$or": [
+                            {"$eq": [{"$size": {"$ifNull": ["$sources", []]}}, 0]},
+                            {"$eq": ["$agent_trace.grounding_is_grounded", False]},
+                        ],
+                    },
                 },
-                "query_count": {"$sum": 1},
-                "gap_count": {"$sum": {"$cond": ["$_is_gap", 1, 0]}},
-                "display_text": {"$first": "$query_context.ner_entities.entity_text"},
-            }},
+            },
+            {"$unwind": "$query_context.ner_entities"},
+            {
+                "$group": {
+                    "_id": {
+                        "text": {"$toLower": "$query_context.ner_entities.entity_text"},
+                        "type": "$query_context.ner_entities.entity_type",
+                    },
+                    "query_count": {"$sum": 1},
+                    "gap_count": {"$sum": {"$cond": ["$_is_gap", 1, 0]}},
+                    "display_text": {"$first": "$query_context.ner_entities.entity_text"},
+                },
+            },
             {"$match": {"gap_count": {"$gt": 0}}},
             {"$sort": {"gap_count": -1, "query_count": -1}},
             {"$limit": 30},
@@ -356,11 +413,16 @@ class MongoAnalyticsStore:
         )
 
     async def get_citation_frequency(
-        self, period_days: int, *, workspace_id: UUID | None = None,
+        self,
+        period_days: int,
+        *,
+        workspace_id: UUID | None = None,
     ) -> CitationFrequencyResponse:
         since = datetime.now(UTC) - timedelta(days=period_days)
 
-        conv_ids = await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        conv_ids = (
+            await self._conversation_ids_for_workspace(workspace_id) if workspace_id else None
+        )
 
         match = self._workspace_match_for_messages(
             {"role": "assistant", "created_at": {"$gte": since}, "sources.0": {"$exists": True}},
@@ -370,20 +432,26 @@ class MongoAnalyticsStore:
         pipeline = [
             {"$match": match},
             {"$unwind": "$sources"},
-            {"$group": {
-                "_id": "$sources.artifact_id",
-                "artifact_title": {"$max": "$sources.artifact_title"},
-                "citation_count": {"$sum": 1},
-                "unique_conversations": {"$addToSet": "$conversation_id"},
-            }},
-            {"$addFields": {
-                "unique_conversation_count": {"$size": "$unique_conversations"},
-            }},
-            {"$project": {
-                "artifact_title": 1,
-                "citation_count": 1,
-                "unique_conversation_count": 1,
-            }},
+            {
+                "$group": {
+                    "_id": "$sources.artifact_id",
+                    "artifact_title": {"$max": "$sources.artifact_title"},
+                    "citation_count": {"$sum": 1},
+                    "unique_conversations": {"$addToSet": "$conversation_id"},
+                },
+            },
+            {
+                "$addFields": {
+                    "unique_conversation_count": {"$size": "$unique_conversations"},
+                },
+            },
+            {
+                "$project": {
+                    "artifact_title": 1,
+                    "citation_count": 1,
+                    "unique_conversation_count": 1,
+                },
+            },
             {"$sort": {"citation_count": -1}},
         ]
 
@@ -423,8 +491,7 @@ class MongoAnalyticsStore:
             UncitedArtifactEntry(
                 artifact_id=doc["artifact_id"],
                 artifact_title=(
-                    (doc.get("title_mention") or {}).get("title")
-                    or doc.get("source_filename")
+                    (doc.get("title_mention") or {}).get("title") or doc.get("source_filename")
                 ),
             )
             async for doc in never_cited_cursor

@@ -20,15 +20,13 @@ from __future__ import annotations
 from contextvars import ContextVar
 from types import TracebackType
 
-_active_counter: ContextVar[TokenCounter | None] = ContextVar(
-    "_active_counter", default=None
-)
+_active_counter: ContextVar[TokenCounter | None] = ContextVar("_active_counter", default=None)
 
 
 class TokenCounter:
     """Accumulates prompt/completion token counts across multiple LLM calls."""
 
-    __slots__ = ("prompt_tokens", "completion_tokens", "total_tokens", "_token")
+    __slots__ = ("_token", "completion_tokens", "prompt_tokens", "total_tokens")
 
     def __init__(self) -> None:
         self.prompt_tokens: int = 0

@@ -36,7 +36,7 @@ class CserPipelineService(CserService):
         with self._lock:
             if self._pipeline is not None:
                 return
-            from structflo.cser.pipeline import ChemPipeline  # noqa: PLC0415
+            from structflo.cser.pipeline import ChemPipeline
 
             logger.info("cser_pipeline_loading")
             self._pipeline = ChemPipeline()
@@ -48,7 +48,7 @@ class CserPipelineService(CserService):
         page_index: int,
     ) -> list[CserCompoundResult]:
         """Render a PDF page to an image and run ChemPipeline on it."""
-        import fitz  # noqa: PLC0415  # PyMuPDF — already a project dependency
+        import fitz  # PyMuPDF — already a project dependency
 
         self._ensure_pipeline_loaded()
 

@@ -40,7 +40,6 @@ from application.workflow_use_cases.trigger_compound_extraction_use_case import 
 from application.workflow_use_cases.trigger_doc_metadata_extraction_use_case import (
     TriggerDocMetadataExtractionUseCase,
 )
-from application.workflow_use_cases.trigger_embedding_use_case import TriggerEmbeddingUseCase
 from application.workflow_use_cases.trigger_ner_extraction_use_case import (
     TriggerNERExtractionUseCase,
 )
@@ -63,7 +62,7 @@ setup_logging()
 logger = structlog.get_logger()
 
 
-async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0912, PLR0915
+async def run(worker_name: str = "pipeline_worker") -> None:
     """Run the workflow orchestration worker.
 
     Subscribes to ArtifactCreated events from EventStoreDB and starts
@@ -84,7 +83,6 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
 
     log_artifact_sample_use_case = container[LogArtifactSampleUseCase]
     trigger_compound_extraction_use_case = container[TriggerCompoundExtractionUseCase]
-    trigger_embedding_use_case = container[TriggerEmbeddingUseCase]
     trigger_smiles_embedding_use_case = container[TriggerSmilesEmbeddingUseCase]
     trigger_page_summarization_use_case = container[TriggerPageSummarizationUseCase]
     trigger_artifact_summarization_use_case = container[TriggerArtifactSummarizationUseCase]
@@ -96,7 +94,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     sync_page_tags_use_case = container[SyncPageTagsToVectorStoreUseCase]
     sync_artifact_metadata_use_case = container[SyncArtifactMetadataToVectorStoreUseCase]
 
-    from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
+    from application.workflow_use_cases.trigger_batch_reembed_use_case import (
         TriggerBatchReEmbedUseCase,
     )
 
@@ -232,8 +230,10 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
 
                                 # Check if all pages are done → trigger artifact summarization
                                 # artifact_id is now on the event — no need to load the page aggregate
-                                summarization_result = await trigger_artifact_summarization_use_case.execute(
-                                    artifact_id=domain_event.artifact_id,
+                                summarization_result = (
+                                    await trigger_artifact_summarization_use_case.execute(
+                                        artifact_id=domain_event.artifact_id,
+                                    )
                                 )
 
                                 # Embed this page's summary into the summary_embeddings collection

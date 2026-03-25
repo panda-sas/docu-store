@@ -13,7 +13,6 @@ class TagDictionaryReadModel(ABC):
     ) -> list[dict[str, str]]:
         pass
 
-
     @abstractmethod
     async def get_popular_tags(
         self,
@@ -38,4 +37,3 @@ class TagDictionaryReadModel(ABC):
         workspace_id: UUID | None = None,
     ) -> list[str]:
         """Return artifact IDs that have this tag in the tag dictionary."""
-        pass

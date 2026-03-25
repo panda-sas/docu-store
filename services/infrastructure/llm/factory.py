@@ -7,12 +7,13 @@ import structlog
 if TYPE_CHECKING:
     from application.ports.llm_client import LLMClientPort
     from application.ports.prompt_repository import PromptRepositoryPort
+    from application.ports.tool_calling_llm import ToolCallingLLMPort
     from infrastructure.config import Settings
 
 log = structlog.get_logger(__name__)
 
 
-def _make_langfuse_callback_handler(settings: Settings) -> Any | None:  # noqa: ANN401
+def _make_langfuse_callback_handler(settings: Settings) -> Any | None:
     """Create a Langfuse LangChain CallbackHandler for LLM tracing (v3 SDK).
 
     Returns None (with a warning) if Langfuse credentials are missing or
@@ -21,8 +22,8 @@ def _make_langfuse_callback_handler(settings: Settings) -> Any | None:  # noqa: 
     if not settings.langfuse_public_key or not settings.langfuse_secret_key:
         return None
     try:
-        from langfuse import Langfuse  # noqa: PLC0415
-        from langfuse.langchain import CallbackHandler  # noqa: PLC0415
+        from langfuse import Langfuse
+        from langfuse.langchain import CallbackHandler
 
         # Initialise the global Langfuse singleton so CallbackHandler() can pick
         # up the credentials — pydantic-settings does not populate os.environ.
@@ -32,7 +33,7 @@ def _make_langfuse_callback_handler(settings: Settings) -> Any | None:  # noqa: 
             host=settings.langfuse_host,
         )
         handler = CallbackHandler()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("llm.factory.langfuse_tracing_unavailable", error=str(exc))
         return None
     else:
@@ -45,7 +46,7 @@ def create_llm_client(settings: Settings) -> LLMClientPort:
     provider = settings.llm_provider
 
     if provider == "ollama":
-        from infrastructure.llm.adapters.ollama_client import OllamaLLMClient  # noqa: PLC0415
+        from infrastructure.llm.adapters.ollama_client import OllamaLLMClient
 
         log.info("llm.factory", provider="ollama", model=settings.llm_model_name)
         return OllamaLLMClient(
@@ -56,7 +57,7 @@ def create_llm_client(settings: Settings) -> LLMClientPort:
         )
 
     if provider == "openai":
-        from infrastructure.llm.adapters.openai_client import OpenAILLMClient  # noqa: PLC0415
+        from infrastructure.llm.adapters.openai_client import OpenAILLMClient
 
         if not settings.llm_api_key and not settings.openai_api_key:
             msg = "LLM_API_KEY or OPENAI_API_KEY must be set when LLM_PROVIDER=openai"
@@ -75,8 +76,6 @@ def create_llm_client(settings: Settings) -> LLMClientPort:
 
 def create_chat_llm_client(settings: Settings) -> LLMClientPort:
     """Instantiate a separate LLM client for chat, with fallback to batch LLM settings."""
-    from infrastructure.config import Settings as SettingsType  # noqa: PLC0415
-
     # Build effective settings by falling back to batch LLM values
     effective_provider = settings.chat_llm_provider or settings.llm_provider
     effective_model = settings.chat_llm_model_name or settings.llm_model_name
@@ -92,7 +91,7 @@ def create_chat_llm_client(settings: Settings) -> LLMClientPort:
     )
 
     if effective_provider == "ollama":
-        from infrastructure.llm.adapters.ollama_client import OllamaLLMClient  # noqa: PLC0415
+        from infrastructure.llm.adapters.ollama_client import OllamaLLMClient
 
         return OllamaLLMClient(
             model_name=effective_model,
@@ -102,7 +101,7 @@ def create_chat_llm_client(settings: Settings) -> LLMClientPort:
         )
 
     if effective_provider == "openai":
-        from infrastructure.llm.adapters.openai_client import OpenAILLMClient  # noqa: PLC0415
+        from infrastructure.llm.adapters.openai_client import OpenAILLMClient
 
         api_key = effective_api_key or settings.openai_api_key
         if not api_key:
@@ -127,8 +126,7 @@ def create_tool_calling_llm_client(settings: Settings) -> ToolCallingLLMPort:
     - "native": always use bind_tools()
     - "react": always use ReAct text parsing
     """
-    from application.ports.tool_calling_llm import ToolCallingLLMPort  # noqa: PLC0415
-    from infrastructure.llm.adapters.tool_calling_adapter import (  # noqa: PLC0415
+    from infrastructure.llm.adapters.tool_calling_adapter import (
         NativeToolCallingAdapter,
         ReactToolCallingAdapter,
     )
@@ -140,10 +138,7 @@ def create_tool_calling_llm_client(settings: Settings) -> ToolCallingLLMPort:
     effective_temperature = settings.chat_llm_temperature
     mode = settings.chat_agent_tool_calling_mode
 
-    use_native = (
-        mode == "native"
-        or (mode == "auto" and effective_provider == "openai")
-    )
+    use_native = mode == "native" or (mode == "auto" and effective_provider == "openai")
 
     log.info(
         "llm.factory.tool_calling",
@@ -180,7 +175,7 @@ def create_prompt_repository(settings: Settings) -> PromptRepositoryPort:
     repo_type = settings.prompt_repository_type
 
     if repo_type == "yaml":
-        from infrastructure.llm.prompt_repositories.yaml_prompt_repository import (  # noqa: PLC0415
+        from infrastructure.llm.prompt_repositories.yaml_prompt_repository import (
             YamlPromptRepository,
         )
 
@@ -195,7 +190,7 @@ def create_prompt_repository(settings: Settings) -> PromptRepositoryPort:
                 "Set PROMPT_REPOSITORY_TYPE=yaml to use local YAML fallback."
             )
             raise ValueError(msg)
-        from infrastructure.llm.prompt_repositories.langfuse_prompt_repository import (  # noqa: PLC0415
+        from infrastructure.llm.prompt_repositories.langfuse_prompt_repository import (
             LangfusePromptRepository,
         )
 

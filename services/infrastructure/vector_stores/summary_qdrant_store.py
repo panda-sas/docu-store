@@ -107,7 +107,7 @@ class SummaryQdrantStore(SummaryVectorStore):
             )
             raise
 
-    async def upsert_page_summary_embedding(  # noqa: PLR0913
+    async def upsert_page_summary_embedding(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -158,7 +158,7 @@ class SummaryQdrantStore(SummaryVectorStore):
             )
             raise
 
-    async def upsert_artifact_summary_embedding(  # noqa: PLR0913
+    async def upsert_artifact_summary_embedding(
         self,
         artifact_id: UUID,
         embedding: TextEmbedding,
@@ -215,7 +215,7 @@ class SummaryQdrantStore(SummaryVectorStore):
                 points_selector=models.PointIdsList(points=[_page_point_id(page_id)]),
             )
             logger.info("page_summary_embedding_deleted", page_id=str(page_id))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "failed_to_delete_page_summary_embedding",
                 page_id=str(page_id),
@@ -230,7 +230,7 @@ class SummaryQdrantStore(SummaryVectorStore):
                 points_selector=models.PointIdsList(points=[_artifact_point_id(artifact_id)]),
             )
             logger.info("artifact_summary_embedding_deleted", artifact_id=str(artifact_id))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "failed_to_delete_artifact_summary_embedding",
                 artifact_id=str(artifact_id),
@@ -294,7 +294,7 @@ class SummaryQdrantStore(SummaryVectorStore):
             )
         return conditions
 
-    async def search_summaries(  # noqa: PLR0913
+    async def search_summaries(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
@@ -422,7 +422,7 @@ class SummaryQdrantStore(SummaryVectorStore):
                 entity_id=str(entity_id),
                 fields=list(payload.keys()),
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "failed_to_set_summary_payload",
                 entity_type=entity_type,
@@ -452,9 +452,17 @@ class SummaryQdrantStore(SummaryVectorStore):
                     ),
                 ),
             )
-            logger.info("artifact_pages_summary_payload_updated", artifact_id=str(artifact_id), fields=list(payload.keys()))
-        except Exception as e:  # noqa: BLE001
-            logger.warning("failed_to_set_artifact_pages_summary_payload", artifact_id=str(artifact_id), error=str(e))
+            logger.info(
+                "artifact_pages_summary_payload_updated",
+                artifact_id=str(artifact_id),
+                fields=list(payload.keys()),
+            )
+        except Exception as e:
+            logger.warning(
+                "failed_to_set_artifact_pages_summary_payload",
+                artifact_id=str(artifact_id),
+                error=str(e),
+            )
 
     async def close(self) -> None:
         if self._client:

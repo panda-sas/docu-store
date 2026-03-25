@@ -53,6 +53,7 @@ class ToolCallingLLMPort(Protocol):
 
         Returns:
             ToolCallResult with either content or tool_calls populated.
+
         """
         ...
 

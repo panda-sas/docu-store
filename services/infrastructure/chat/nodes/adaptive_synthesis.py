@@ -71,7 +71,8 @@ class AdaptiveSynthesisNode:
                 attempted=system_key,
             )
             system_prompt = await self._prompts.render_prompt(
-                "chat_system", workspace_context="",
+                "chat_system",
+                workspace_context="",
             )
 
         # Build context hints from metadata
@@ -84,7 +85,10 @@ class AdaptiveSynthesisNode:
 
         # Think-then-answer planning step (small non-streaming call)
         answer_plan = await self._plan_answer(
-            question, plan, sources_text, context_hints,
+            question,
+            plan,
+            sources_text,
+            context_hints,
         )
 
         if _debug:
@@ -97,14 +101,17 @@ class AdaptiveSynthesisNode:
             )
 
         # Emit the answer plan as thinking content for the agent trace
-        yield ("event", AgentEvent(
-            type="step_completed",
-            step="synthesis",
-            status="started",
-            output="Answer plan generated",
-            thinking_content=answer_plan,
-            thinking_label="Answer Planning",
-        ))
+        yield (
+            "event",
+            AgentEvent(
+                type="step_completed",
+                step="synthesis",
+                status="started",
+                output="Answer plan generated",
+                thinking_content=answer_plan,
+                thinking_label="Answer Planning",
+            ),
+        )
 
         # Build synthesis prompt
         user_prompt = await self._prompts.render_prompt(
@@ -169,18 +176,26 @@ class AdaptiveSynthesisNode:
         if meta.unique_artifacts == 1:
             hints.append("All sources come from a single document.")
         elif meta.unique_artifacts > 5:
-            hints.append(f"Sources span {meta.unique_artifacts} different documents — synthesize across them.")
+            hints.append(
+                f"Sources span {meta.unique_artifacts} different documents — synthesize across them.",
+            )
 
         if meta.avg_relevance_score < 0.4:
-            hints.append("Sources may have limited relevance — be conservative and acknowledge gaps.")
+            hints.append(
+                "Sources may have limited relevance — be conservative and acknowledge gaps.",
+            )
 
         if meta.has_summaries:
-            hints.append("Some sources are document summaries. Use summaries for context, cite chunks for factual claims.")
+            hints.append(
+                "Some sources are document summaries. Use summaries for context, cite chunks for factual claims.",
+            )
 
         if meta.high_relevance_count == 0:
             hints.append("No highly relevant sources found. Be explicit about uncertainty.")
 
         if plan.sub_queries:
-            hints.append(f"The question was decomposed into {len(plan.sub_queries)} sub-queries. Address each aspect.")
+            hints.append(
+                f"The question was decomposed into {len(plan.sub_queries)} sub-queries. Address each aspect.",
+            )
 
         return " ".join(hints) if hints else "Standard context — proceed normally."

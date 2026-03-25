@@ -105,18 +105,23 @@ class GetConversationUseCase:
     ) -> Result[ConversationDetailDTO, AppError]:
         try:
             conversation = await self._repo.get_conversation(
-                conversation_id, workspace_id=workspace_id,
+                conversation_id,
+                workspace_id=workspace_id,
             )
             if conversation is None:
                 return Failure(AppError("not_found", "Conversation not found"))
 
             messages = await self._repo.get_messages(
-                conversation_id, skip=skip, limit=limit,
+                conversation_id,
+                skip=skip,
+                limit=limit,
             )
-            return Success(ConversationDetailDTO(
-                **conversation.model_dump(),
-                messages=messages,
-            ))
+            return Success(
+                ConversationDetailDTO(
+                    **conversation.model_dump(),
+                    messages=messages,
+                ),
+            )
         except Exception as e:
             log.exception("chat.conversation.get_failed", error=str(e))
             return Failure(AppError("internal_error", f"Failed to get conversation: {e!s}"))
@@ -135,7 +140,8 @@ class DeleteConversationUseCase:
     ) -> Result[bool, AppError]:
         try:
             deleted = await self._repo.delete_conversation(
-                conversation_id, workspace_id=workspace_id,
+                conversation_id,
+                workspace_id=workspace_id,
             )
             if not deleted:
                 return Failure(AppError("not_found", "Conversation not found"))
@@ -174,7 +180,8 @@ class SendMessageUseCase:
     ) -> AsyncGenerator[AgentEvent, None]:
         # Verify conversation exists
         conversation = await self._repo.get_conversation(
-            conversation_id, workspace_id=workspace_id,
+            conversation_id,
+            workspace_id=workspace_id,
         )
         if conversation is None:
             yield AgentEvent(type="error", error_message="Conversation not found")
@@ -197,7 +204,8 @@ class SendMessageUseCase:
             if len(message) > 100:
                 title += "..."
             await self._repo.update_conversation(
-                conversation_id, title=title,
+                conversation_id,
+                title=title,
             )
 
         # Get conversation history for context
@@ -263,11 +271,13 @@ class SendMessageUseCase:
                             s.thinking_content += "\n\n---\n\n" + event.thinking_content
                         else:
                             s.thinking_content = event.thinking_content
-                        thinking_blocks.append(ThinkingBlockDTO(
-                            label=event.thinking_label or f"{event.step} thought",
-                            step=event.step or "unknown",
-                            content=event.thinking_content,
-                        ))
+                        thinking_blocks.append(
+                            ThinkingBlockDTO(
+                                label=event.thinking_label or f"{event.step} thought",
+                                step=event.step or "unknown",
+                                content=event.thinking_content,
+                            ),
+                        )
             elif event.type == "query_context":
                 query_context = QueryContextDTO(
                     ner_entities=event.query_context_entities or [],
@@ -298,7 +308,8 @@ class SendMessageUseCase:
         # Update title with reformulated query from planning (more descriptive)
         if query_context and query_context.reformulated_query:
             await self._repo.update_conversation(
-                conversation_id, title=query_context.reformulated_query[:100],
+                conversation_id,
+                title=query_context.reformulated_query[:100],
             )
 
         # Save assistant response with full step trace + grounding result
