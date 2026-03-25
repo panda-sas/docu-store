@@ -13,6 +13,8 @@ class TextEmbedding(BaseModel):
     provides domain context.
     """
 
+    model_config = {"frozen": True}
+
     embedding_id: UUID
     """Unique identifier for this embedding."""
 

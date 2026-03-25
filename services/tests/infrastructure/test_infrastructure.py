@@ -26,6 +26,9 @@ class FakeMaterializer:
         self.upsert_page_calls: list[tuple[str, dict, object]] = []
         self.delete_artifact_calls: list[tuple[str, object]] = []
         self.delete_page_calls: list[tuple[str, object]] = []
+        self.add_to_array_calls: list[tuple[str, str, list, object]] = []
+        self.pull_from_array_calls: list[tuple[str, str, list, object]] = []
+        self.replace_tags_calls: list[tuple[str, list, object]] = []
 
     def upsert_artifact(self, artifact_id: str, fields: dict, tracking: object) -> None:
         self.upsert_artifact_calls.append((artifact_id, fields, tracking))
@@ -39,8 +42,24 @@ class FakeMaterializer:
     def delete_page(self, page_id: str, tracking: object) -> None:
         self.delete_page_calls.append((page_id, tracking))
 
+    def add_to_artifact_array(
+        self, artifact_id: str, field: str, values: list, tracking: object,
+    ) -> None:
+        self.add_to_array_calls.append((artifact_id, field, values, tracking))
+
+    def pull_from_artifact_array(
+        self, artifact_id: str, field: str, values: list, tracking: object,
+    ) -> None:
+        self.pull_from_array_calls.append((artifact_id, field, values, tracking))
+
     def replace_artifact_tags(self, artifact_id: str, tags: list, tracking: object) -> None:
-        pass
+        self.replace_tags_calls.append((artifact_id, tags, tracking))
+
+    def upsert_artifact_and_replace_tags(
+        self, artifact_id: str, fields: dict, tags: list, tracking: object,
+    ) -> None:
+        self.upsert_artifact_calls.append((artifact_id, fields, tracking))
+        self.replace_tags_calls.append((artifact_id, tags, tracking))
 
 
 def _tracking() -> object:
@@ -107,7 +126,7 @@ class TestEventProjector:
         assert fields["tag_mentions"] == []
         assert fields["title_mention"] is None
 
-    def test_artifact_projector_pages_added_and_removed(self) -> None:
+    def test_pages_added_uses_add_to_array(self) -> None:
         materializer = FakeMaterializer()
         projector = ArtifactProjector(materializer)
 
@@ -122,20 +141,43 @@ class TestEventProjector:
 
         page_ids = [uuid4(), uuid4()]
         artifact.add_pages(page_ids)
-        pages_added = list(artifact.collect_events())[0]
+        pages_added_event = list(artifact.collect_events())[0]
 
-        projector.pages_added(pages_added, _tracking())
+        projector.pages_added(pages_added_event, _tracking())
+
+        assert len(materializer.add_to_array_calls) == 1
+        aid, field, values, _ = materializer.add_to_array_calls[0]
+        assert aid == str(artifact.id)
+        assert field == "pages"
+        assert values == [str(page_ids[0]), str(page_ids[1])]
+
+    def test_pages_removed_uses_pull_from_array(self) -> None:
+        materializer = FakeMaterializer()
+        projector = ArtifactProjector(materializer)
+
+        artifact = Artifact.create(
+            source_uri="https://example.com/paper.pdf",
+            source_filename="paper.pdf",
+            artifact_type=ArtifactType.RESEARCH_ARTICLE,
+            mime_type=MimeType.PDF,
+            storage_location="/storage/paper.pdf",
+        )
+        list(artifact.collect_events())
+
+        page_ids = [uuid4(), uuid4()]
+        artifact.add_pages(page_ids)
+        list(artifact.collect_events())
 
         artifact.remove_pages([page_ids[0]])
-        pages_removed = list(artifact.collect_events())[0]
+        pages_removed_event = list(artifact.collect_events())[0]
 
-        projector.pages_removed(pages_removed, _tracking())
+        projector.pages_removed(pages_removed_event, _tracking())
 
-        assert materializer.upsert_artifact_calls[0][1]["pages"] == [
-            str(page_ids[0]),
-            str(page_ids[1]),
-        ]
-        assert materializer.upsert_artifact_calls[1][1]["pages"] == [str(page_ids[0])]
+        assert len(materializer.pull_from_array_calls) == 1
+        aid, field, values, _ = materializer.pull_from_array_calls[0]
+        assert aid == str(artifact.id)
+        assert field == "pages"
+        assert values == [str(page_ids[0])]
 
     def test_artifact_projector_mentions_and_delete(self) -> None:
         materializer = FakeMaterializer()
@@ -212,6 +254,29 @@ class TestEventProjector:
         assert materializer.upsert_page_calls[3][1]["text_mention"]["text"] == "Note"
         assert materializer.upsert_page_calls[4][1]["summary_candidate"]["summary"] == "Summary"
         assert materializer.delete_page_calls[0][0] == str(deleted_event.originator_id)
+
+    def test_artifact_deleted_cleans_tags_and_deletes(self) -> None:
+        materializer = FakeMaterializer()
+        projector = ArtifactProjector(materializer)
+
+        artifact = Artifact.create(
+            source_uri=None,
+            source_filename="paper.pdf",
+            artifact_type=ArtifactType.RESEARCH_ARTICLE,
+            mime_type=MimeType.PDF,
+            storage_location="/storage/paper.pdf",
+        )
+        list(artifact.collect_events())
+
+        artifact.delete()
+        deleted_event = list(artifact.collect_events())[0]
+        projector.artifact_deleted(deleted_event, _tracking())
+
+        # Should clean tags first, then delete
+        assert len(materializer.replace_tags_calls) == 1
+        assert materializer.replace_tags_calls[0][1] == []  # empty tags = cleanup
+        assert len(materializer.delete_artifact_calls) == 1
+        assert materializer.delete_artifact_calls[0][0] == str(artifact.id)
 
     def test_event_projector_routes_and_ignores_unknown_events(self) -> None:
         materializer = FakeMaterializer()

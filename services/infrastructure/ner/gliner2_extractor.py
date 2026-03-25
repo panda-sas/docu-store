@@ -42,7 +42,7 @@ class GLiNER2Extractor:
                 "gliner2_extractor.loading_model",
                 model_name=self._model_name,
             )
-            from gliner2 import GLiNER2  # noqa: PLC0415
+            from gliner2 import GLiNER2
 
             self._model = GLiNER2.from_pretrained(self._model_name)
             logger.info("gliner2_extractor.model_loaded")

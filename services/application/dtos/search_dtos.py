@@ -37,7 +37,7 @@ class SummarySearchRequest(BaseModel):
     )
     tag_match_mode: str = Field(
         default="any",
-        pattern="^(any|all)$",
+        pattern="^(any|all|page_any)$",
         description="'any' = match ANY tag, 'all' = must have ALL tags.",
     )
 
@@ -88,7 +88,7 @@ class HierarchicalSearchRequest(BaseModel):
     )
     tag_match_mode: str = Field(
         default="any",
-        pattern="^(any|all)$",
+        pattern="^(any|all|page_any)$",
         description="'any' = match ANY tag, 'all' = must have ALL tags.",
     )
 

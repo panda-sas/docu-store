@@ -52,7 +52,7 @@ def handle_use_case_errors[T_co](
     """
 
     @functools.wraps(func)
-    async def wrapper(*args: "Any", **kwargs: "Any") -> T_co:  # noqa: ANN401
+    async def wrapper(*args: "Any", **kwargs: "Any") -> T_co:
         try:
             result = await func(*args, **kwargs)
 

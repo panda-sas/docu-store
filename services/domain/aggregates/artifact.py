@@ -18,7 +18,7 @@ class Artifact(Aggregate):
     INITIAL_VERSION = 0
 
     @classmethod
-    def create(  # noqa: PLR0913
+    def create(
         cls,
         source_uri: str | None,
         source_filename: str | None,
@@ -55,7 +55,7 @@ class Artifact(Aggregate):
         owner_id: UUID | None = None
 
     @event(Created)  # Links this handler to the Created event class above
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         source_uri: str | None,
         source_filename: str | None,
@@ -96,6 +96,7 @@ class Artifact(Aggregate):
         self.author_mentions: list[AuthorMention] = []
         self.presentation_date: PresentationDate | None = None
         self.is_deleted: bool = False
+        self.deleted_at: datetime | None = None
 
     def __hash__(self) -> int:
         """Return hash of the aggregate based on its ID."""
@@ -195,6 +196,9 @@ class Artifact(Aggregate):
         if self.is_deleted:
             msg = "Cannot update summary candidate on a deleted artifact"
             raise ValueError(msg)
+        if self.summary_candidate is not None and self.summary_candidate.is_locked:
+            msg = "Cannot overwrite a locked summary candidate"
+            raise ValueError(msg)
         self.trigger_event(self.SummaryCandidateUpdated, summary_candidate=summary_candidate)
 
     @event(SummaryCandidateUpdated)
@@ -256,7 +260,9 @@ class Artifact(Aggregate):
         deleted_at: datetime
 
     def delete(self) -> None:
-        """Delete this artifact aggregate."""
+        """Delete this artifact aggregate (idempotent — no-op if already deleted)."""
+        if self.is_deleted:
+            return
         self.trigger_event(self.Deleted, deleted_at=datetime.now(UTC))
 
     @event(Deleted)

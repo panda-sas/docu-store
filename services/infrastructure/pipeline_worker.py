@@ -40,7 +40,6 @@ from application.workflow_use_cases.trigger_compound_extraction_use_case import 
 from application.workflow_use_cases.trigger_doc_metadata_extraction_use_case import (
     TriggerDocMetadataExtractionUseCase,
 )
-from application.workflow_use_cases.trigger_embedding_use_case import TriggerEmbeddingUseCase
 from application.workflow_use_cases.trigger_ner_extraction_use_case import (
     TriggerNERExtractionUseCase,
 )
@@ -53,7 +52,6 @@ from application.workflow_use_cases.trigger_page_summary_embedding_use_case impo
 from application.workflow_use_cases.trigger_smiles_embedding_use_case import (
     TriggerSmilesEmbeddingUseCase,
 )
-from application.ports.repositories.page_repository import PageRepository
 from domain.aggregates.artifact import Artifact
 from domain.aggregates.page import Page
 from infrastructure.di.container import create_container
@@ -64,7 +62,7 @@ setup_logging()
 logger = structlog.get_logger()
 
 
-async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0912, PLR0915
+async def run(worker_name: str = "pipeline_worker") -> None:
     """Run the workflow orchestration worker.
 
     Subscribes to ArtifactCreated events from EventStoreDB and starts
@@ -85,7 +83,6 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
 
     log_artifact_sample_use_case = container[LogArtifactSampleUseCase]
     trigger_compound_extraction_use_case = container[TriggerCompoundExtractionUseCase]
-    trigger_embedding_use_case = container[TriggerEmbeddingUseCase]
     trigger_smiles_embedding_use_case = container[TriggerSmilesEmbeddingUseCase]
     trigger_page_summarization_use_case = container[TriggerPageSummarizationUseCase]
     trigger_artifact_summarization_use_case = container[TriggerArtifactSummarizationUseCase]
@@ -97,7 +94,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
     sync_page_tags_use_case = container[SyncPageTagsToVectorStoreUseCase]
     sync_artifact_metadata_use_case = container[SyncArtifactMetadataToVectorStoreUseCase]
 
-    from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
+    from application.workflow_use_cases.trigger_batch_reembed_use_case import (
         TriggerBatchReEmbedUseCase,
     )
 
@@ -196,6 +193,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 logger.info(
                                     "pipeline_text_mention_updated",
                                     page_id=str(domain_event.originator_id),
+                                    artifact_id=str(domain_event.artifact_id),
                                     tracking_id=tracking.notification_id,
                                 )
 
@@ -213,6 +211,7 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 # Doc metadata extraction (title, authors, date) — only runs for page 0
                                 await trigger_doc_metadata_extraction_use_case.execute(
                                     page_id=domain_event.originator_id,
+                                    artifact_id=domain_event.artifact_id,
                                 )
 
                                 logger.info(
@@ -225,13 +224,16 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 logger.info(
                                     "pipeline_summary_candidate_updated",
                                     page_id=str(domain_event.originator_id),
+                                    artifact_id=str(domain_event.artifact_id),
                                     tracking_id=tracking.notification_id,
                                 )
 
                                 # Check if all pages are done → trigger artifact summarization
-                                # Returns non-None when all pages have summaries
-                                summarization_result = await trigger_artifact_summarization_use_case.execute(
-                                    page_id=domain_event.originator_id,
+                                # artifact_id is now on the event — no need to load the page aggregate
+                                summarization_result = (
+                                    await trigger_artifact_summarization_use_case.execute(
+                                        artifact_id=domain_event.artifact_id,
+                                    )
                                 )
 
                                 # Embed this page's summary into the summary_embeddings collection
@@ -243,11 +245,8 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 # pages with full contextual prefixes (title + tags + summary)
                                 # in a single workflow instead of 100 individual ones.
                                 if summarization_result is not None:
-                                    summary_page = container[PageRepository].get_by_id(
-                                        domain_event.originator_id,
-                                    )
                                     await trigger_batch_reembed_use_case.execute(
-                                        artifact_id=summary_page.artifact_id,
+                                        artifact_id=domain_event.artifact_id,
                                     )
 
                                 logger.info(
@@ -294,11 +293,12 @@ async def run(worker_name: str = "pipeline_worker") -> None:  # noqa: C901, PLR0
                                 logger.info(
                                     "pipeline_tag_mentions_updated",
                                     page_id=str(domain_event.originator_id),
+                                    artifact_id=str(domain_event.artifact_id),
                                     tracking_id=tracking.notification_id,
                                 )
 
                                 await trigger_artifact_tag_aggregation_use_case.execute(
-                                    page_id=domain_event.originator_id,
+                                    artifact_id=domain_event.artifact_id,
                                 )
 
                                 # Sync tags to Qdrant payloads (page_embeddings + summary_embeddings)

@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from application.ports.repositories.page_repository import PageRepository
     from application.ports.text_chunker import TextChunker
     from application.ports.vector_store import VectorStore
-    from domain.aggregates.artifact import Artifact
     from domain.aggregates.page import Page
 
 logger = structlog.get_logger()
@@ -95,9 +94,7 @@ class BatchReEmbedArtifactPagesUseCase:
         logger.info("batch_reembed_start", artifact_id=str(artifact_id))
 
         artifact = self.artifact_repository.get_by_id(artifact_id)
-        artifact_title = (
-            artifact.title_mention.title if artifact.title_mention else None
-        )
+        artifact_title = artifact.title_mention.title if artifact.title_mention else None
 
         if not artifact.pages:
             logger.info("batch_reembed_no_pages", artifact_id=str(artifact_id))
@@ -110,7 +107,9 @@ class BatchReEmbedArtifactPagesUseCase:
         for batch_start in range(0, len(artifact.pages), _PAGE_BATCH_SIZE):
             batch_page_ids = artifact.pages[batch_start : batch_start + _PAGE_BATCH_SIZE]
             pages_processed, chunks_processed = await self._process_page_batch(
-                batch_page_ids, artifact_title, artifact_id,
+                batch_page_ids,
+                artifact_title,
+                artifact_id,
             )
             total_pages += pages_processed
             total_chunks += chunks_processed

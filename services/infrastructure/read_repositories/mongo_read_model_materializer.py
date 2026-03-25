@@ -111,6 +111,62 @@ class MongoReadModelMaterializer(MongoReadModelTracking):
             tracking_id=tracking.notification_id,
         )
 
+    def add_to_artifact_array(
+        self,
+        artifact_id: str,
+        field: str,
+        values: list[Any],
+        tracking: Tracking,
+    ) -> None:
+        """Add values to an array field on an artifact (no duplicates)."""
+
+        def _add(session: object) -> None:
+            self.artifacts.update_one(
+                {"artifact_id": artifact_id},
+                {
+                    "$addToSet": {field: {"$each": values}},
+                    "$set": {"updated_at": datetime.now(UTC)},
+                },
+                session=session,
+            )
+
+        self._run_in_transaction(tracking, _add)
+        logger.info(
+            "read_model_artifact_array_add",
+            artifact_id=artifact_id,
+            field=field,
+            count=len(values),
+            tracking_id=tracking.notification_id,
+        )
+
+    def pull_from_artifact_array(
+        self,
+        artifact_id: str,
+        field: str,
+        values: list[Any],
+        tracking: Tracking,
+    ) -> None:
+        """Remove values from an array field on an artifact."""
+
+        def _pull(session: object) -> None:
+            self.artifacts.update_one(
+                {"artifact_id": artifact_id},
+                {
+                    "$pull": {field: {"$in": values}},
+                    "$set": {"updated_at": datetime.now(UTC)},
+                },
+                session=session,
+            )
+
+        self._run_in_transaction(tracking, _pull)
+        logger.info(
+            "read_model_artifact_array_pull",
+            artifact_id=artifact_id,
+            field=field,
+            count=len(values),
+            tracking_id=tracking.notification_id,
+        )
+
     def delete_page(
         self,
         page_id: str,
@@ -154,51 +210,7 @@ class MongoReadModelMaterializer(MongoReadModelTracking):
         """Replace all tag dictionary entries for an artifact."""
 
         def _handler(session: object) -> None:
-            # Look up workspace_id from artifact read model
-            artifact = self.artifacts.find_one(
-                {"artifact_id": artifact_id},
-                {"workspace_id": 1},
-                session=session,
-            )
-            workspace_id = artifact.get("workspace_id") if artifact else None
-
-            # 1. Pull this artifact from ALL existing tag entries
-            self.tag_dictionary.update_many(
-                {"artifact_ids": artifact_id},
-                {"$pull": {"artifact_ids": artifact_id}},
-                session=session,
-            )
-
-            # 2. Upsert each tag with $addToSet
-            now = datetime.now(UTC)
-            for tag_info in tags:
-                self.tag_dictionary.update_one(
-                    {
-                        "workspace_id": workspace_id,
-                        "entity_type": tag_info["entity_type"],
-                        "tag_normalized": tag_info["tag_normalized"],
-                    },
-                    {
-                        "$addToSet": {"artifact_ids": artifact_id},
-                        "$set": {"tag": tag_info["tag"], "last_seen": now},
-                        "$setOnInsert": {"workspace_id": workspace_id},
-                    },
-                    upsert=True,
-                    session=session,
-                )
-
-            # 3. Recompute artifact_count on affected docs
-            self.tag_dictionary.update_many(
-                {"artifact_ids": artifact_id} if tags else {"workspace_id": workspace_id},
-                [{"$set": {"artifact_count": {"$size": {"$ifNull": ["$artifact_ids", []]}}}}],
-                session=session,
-            )
-
-            # 4. Clean up empty entries
-            self.tag_dictionary.delete_many(
-                {"artifact_count": 0},
-                session=session,
-            )
+            self._replace_tags_in_session(artifact_id, tags, session)
 
         self._run_in_transaction(tracking, _handler)
         logger.info(
@@ -206,4 +218,101 @@ class MongoReadModelMaterializer(MongoReadModelTracking):
             artifact_id=artifact_id,
             tag_count=len(tags),
             tracking_id=tracking.notification_id,
+        )
+
+    def upsert_artifact_and_replace_tags(
+        self,
+        artifact_id: str,
+        fields: dict[str, Any],
+        tags: list[dict[str, str]],
+        tracking: Tracking,
+    ) -> None:
+        """Upsert artifact read model AND replace tag dictionary in one transaction."""
+        fields["artifact_id"] = artifact_id
+        fields["updated_at"] = datetime.now(UTC)
+
+        def _handler(session: object) -> None:
+            self.artifacts.update_one(
+                {"artifact_id": artifact_id},
+                {"$set": fields},
+                upsert=True,
+                session=session,
+            )
+            self._replace_tags_in_session(artifact_id, tags, session)
+
+        self._run_in_transaction(tracking, _handler)
+        logger.info(
+            "read_model_artifact_upserted_with_tags",
+            artifact_id=artifact_id,
+            tag_count=len(tags),
+            tracking_id=tracking.notification_id,
+        )
+
+    def _replace_tags_in_session(
+        self,
+        artifact_id: str,
+        tags: list[dict[str, str]],
+        session: object,
+    ) -> None:
+        """Core tag dictionary replacement logic, reusable within any session."""
+        # Look up workspace_id from artifact read model
+        artifact = self.artifacts.find_one(
+            {"artifact_id": artifact_id},
+            {"workspace_id": 1},
+            session=session,
+        )
+        workspace_id = artifact.get("workspace_id") if artifact else None
+
+        # 1. Pull this artifact from tag entries with matching entity_types
+        # (scoped so that e.g. author updates don't wipe tag_mentions)
+        entity_types_in_batch = list({t["entity_type"] for t in tags}) if tags else []
+        if entity_types_in_batch:
+            self.tag_dictionary.update_many(
+                {
+                    "artifact_ids": artifact_id,
+                    "entity_type": {"$in": entity_types_in_batch},
+                },
+                {"$pull": {"artifact_ids": artifact_id}},
+                session=session,
+            )
+        else:
+            # Empty tags = remove this artifact from ALL entries (cleanup)
+            self.tag_dictionary.update_many(
+                {"artifact_ids": artifact_id},
+                {"$pull": {"artifact_ids": artifact_id}},
+                session=session,
+            )
+
+        # 2. Upsert each tag with $addToSet
+        now = datetime.now(UTC)
+        for tag_info in tags:
+            self.tag_dictionary.update_one(
+                {
+                    "workspace_id": workspace_id,
+                    "entity_type": tag_info["entity_type"],
+                    "tag_normalized": tag_info["tag_normalized"],
+                },
+                {
+                    "$addToSet": {"artifact_ids": artifact_id},
+                    "$set": {"tag": tag_info["tag"], "last_seen": now},
+                    "$setOnInsert": {"workspace_id": workspace_id},
+                },
+                upsert=True,
+                session=session,
+            )
+
+        # 3. Recompute artifact_count on affected docs
+        recount_filter: dict = (
+            {"artifact_ids": artifact_id} if tags else {"workspace_id": workspace_id}
+        )
+        self.tag_dictionary.update_many(
+            recount_filter,
+            [{"$set": {"artifact_count": {"$size": {"$ifNull": ["$artifact_ids", []]}}}}],
+            session=session,
+        )
+
+        # 4. Clean up empty entries
+        self.tag_dictionary.delete_many(
+            {"artifact_count": 0},
+            session=session,
         )

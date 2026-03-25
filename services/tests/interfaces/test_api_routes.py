@@ -60,6 +60,9 @@ class FakePageReadModel(PageReadModel):
     async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
         return 0
 
+    async def get_pages_by_artifact_ids(self, artifact_ids: list[UUID], workspace_id: UUID | None = None) -> list[PageResponse]:
+        return [p for p in self._pages.values() if p.artifact_id in artifact_ids]
+
 
 class FakeUseCase:
     def __init__(self, result: object) -> None:

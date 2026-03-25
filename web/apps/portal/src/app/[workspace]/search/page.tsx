@@ -25,6 +25,7 @@ import {
 } from "@/hooks/use-activity";
 import { authFetch } from "@/lib/auth-fetch";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 type SearchMode = "text" | "summary" | "hierarchical";
 
@@ -171,7 +172,14 @@ export default function SearchPage() {
     router.replace(`/${workspace}/search?${params.toString()}`);
   };
 
+  const { trackEvent } = useAnalytics();
+
   const handleModeChange = (newMode: SearchMode) => {
+    trackEvent("search_tab_switched", {
+      from_tab: localMode,
+      to_tab: newMode,
+      had_results: (textSearch.data || summarySearch.data || hierarchicalSearch.data) ? 1 : 0,
+    });
     setLocalMode(newMode);
     updateUrlParams({ mode: newMode });
   };

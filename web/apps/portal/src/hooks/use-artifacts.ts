@@ -3,11 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@docu-store/api-client";
 import type { ArtifactResponse, WorkflowMap } from "@docu-store/types";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, workflowPollingInterval } from "@/lib/query-keys";
 import { getAuthzClient } from "@/lib/authz-client";
 import { API_URL } from "@/lib/constants";
 import { authFetch } from "@/lib/auth-fetch";
 import { ApiError, throwApiError } from "@/lib/api-error";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 export function useArtifacts(
   skip = 0,
@@ -28,6 +29,7 @@ export function useArtifacts(
 }
 
 export function useArtifact(id: string) {
+  const { trackEvent } = useAnalytics();
   return useQuery({
     queryKey: queryKeys.artifacts.detail(id),
     queryFn: async () => {
@@ -36,6 +38,7 @@ export function useArtifact(id: string) {
         { params: { path: { artifact_id: id } } },
       );
       if (error) throwApiError("Failed to fetch artifact", error, response.status);
+      trackEvent("document_viewed", { artifact_id: id });
       // The OpenAPI schema is missing author_mentions, presentation_date, compound_mentions
       // fields. The hand-typed ArtifactResponse includes them.
       return data as ArtifactResponse;
@@ -78,16 +81,7 @@ export function useArtifactWorkflows(id: string) {
       return result;
     },
     enabled: !!id,
-    // Poll every 3 s while any workflow is RUNNING; stop once all settle.
-    // The backend proxies to Temporal, so this drives real-time status updates.
-    refetchInterval: (query) => {
-      const workflows = (query.state.data as WorkflowMap | undefined)
-        ?.workflows;
-      const hasRunning = workflows
-        ? Object.values(workflows).some((w) => w.status === "RUNNING")
-        : false;
-      return hasRunning ? 3000 : false;
-    },
+    refetchInterval: workflowPollingInterval,
   });
 }
 
@@ -108,6 +102,7 @@ export function useArtifactSummary(id: string) {
 
 export function useUploadArtifact() {
   const queryClient = useQueryClient();
+  const { trackEvent } = useAnalytics();
 
   return useMutation({
     mutationFn: async ({
@@ -143,8 +138,21 @@ export function useUploadArtifact() {
 
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      const ext = variables.file.name.split(".").pop()?.toLowerCase() ?? "unknown";
+      trackEvent("document_uploaded", {
+        file_count: 1,
+        file_type: ext,
+        file_size_kb: Math.round(variables.file.size / 1024),
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.artifacts.all });
+    },
+    onError: (_error, variables) => {
+      const ext = variables.file.name.split(".").pop()?.toLowerCase() ?? "unknown";
+      trackEvent("upload_failed", {
+        file_type: ext,
+        file_size_kb: Math.round(variables.file.size / 1024),
+      });
     },
   });
 }

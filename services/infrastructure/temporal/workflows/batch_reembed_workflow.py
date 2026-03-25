@@ -35,8 +35,7 @@ class BatchReEmbedArtifactPagesWorkflow:
         )
 
         workflow.logger.info(
-            f"Batch re-embed workflow completed for artifact_id={artifact_id}, "
-            f"result={result}",
+            f"Batch re-embed workflow completed for artifact_id={artifact_id}, result={result}",
         )
 
         return result

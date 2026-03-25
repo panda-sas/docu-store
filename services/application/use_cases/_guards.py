@@ -89,7 +89,7 @@ def handle_domain_errors[T](
     """Catch domain exceptions and map them to ``Failure(AppError(...))``."""
 
     @functools.wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Result[T, AppError]:  # noqa: ANN401
+    async def wrapper(*args: Any, **kwargs: Any) -> Result[T, AppError]:
         try:
             return await func(*args, **kwargs)
         except _GuardError as e:

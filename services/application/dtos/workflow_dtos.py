@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -17,6 +17,7 @@ class TemporalWorkflowInfo(BaseModel):
     run_id: str | None = None
     started_at: datetime | None = None
     closed_at: datetime | None = None
+    from_cache: bool = False
 
 
 class WorkflowTriggerReason(StrEnum):

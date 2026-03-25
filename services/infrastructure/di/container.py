@@ -31,6 +31,7 @@ from application.ports.text_chunker import TextChunker
 from application.ports.title_extractor import TitleExtractorPort
 from application.ports.vector_store import VectorStore
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
+from application.ports.workflow_status_cache import WorkflowStatusCache
 from application.sagas.artifact_upload_saga import ArtifactUploadSaga
 from application.use_cases.aggregate_artifact_tags_use_case import AggregateArtifactTagsUseCase
 from application.use_cases.artifact_use_cases import (
@@ -47,6 +48,14 @@ from application.use_cases.artifact_use_cases import (
     UpdateTagMentionsUseCase as UpdateArtifactTagMentionsUseCase,
 )
 from application.use_cases.blob_use_cases import UploadBlobUseCase
+from application.use_cases.chat_use_cases import (
+    CreateConversationUseCase,
+    DeleteConversationUseCase,
+    GetConversationUseCase,
+    ListConversationsUseCase,
+    RecordFeedbackUseCase,
+    SendMessageUseCase,
+)
 from application.use_cases.compound_use_cases import ExtractCompoundMentionsUseCase
 from application.use_cases.embedding_use_cases import (
     GeneratePageEmbeddingUseCase,
@@ -138,7 +147,12 @@ from infrastructure.file_services.font_title_extractor import FontTitleExtractor
 from infrastructure.file_services.py_mu_pfd_service import PyMuPDFService
 from infrastructure.kafka.kafka_external_event_streamer import KafkaExternalEventPublisher
 from infrastructure.kafka.kafka_publisher import KafkaPublisher
-from infrastructure.llm.factory import create_llm_client, create_prompt_repository
+from infrastructure.llm.factory import (
+    create_chat_llm_client,
+    create_llm_client,
+    create_prompt_repository,
+    create_tool_calling_llm_client,
+)
 from infrastructure.ner.gliner2_extractor import GLiNER2Extractor
 from infrastructure.ner.structflo_ner_extractor import StructfloNERExtractor
 from infrastructure.permissions.sentinel_permission_registrar import SentinelPermissionRegistrar
@@ -146,8 +160,10 @@ from infrastructure.read_repositories.mongo_read_model_materializer import (
     MongoReadModelMaterializer,
 )
 from infrastructure.read_repositories.mongo_read_repository import MongoReadRepository
+from infrastructure.read_repositories.mongo_workflow_status_cache import MongoWorkflowStatusCache
 from infrastructure.rerankers.cross_encoder_reranker import CrossEncoderReranker
 from infrastructure.serialization.pydantic_transcoder import PydanticTranscoding
+from infrastructure.temporal.caching_orchestrator import CachingWorkflowOrchestrator
 from infrastructure.temporal.orchestrator import TemporalWorkflowOrchestrator
 from infrastructure.text_chunkers.langchain_chunker import LangChainTextChunker
 from infrastructure.vector_stores.compound_qdrant_store import CompoundQdrantStore
@@ -180,7 +196,7 @@ class DocuStoreApplication(Application):
         transcoder.register(PydanticTranscoding(EmbeddingMetadata))
 
 
-def create_container() -> Container:  # noqa: PLR0915
+def create_container() -> Container:
     container = Container()
 
     # Initialize our custom Application subclass
@@ -272,8 +288,28 @@ def create_container() -> Container:  # noqa: PLR0915
     container[UserPreferencesStore] = user_store_factory
     container[UserActivityStore] = user_store_factory
 
-    # Register Pipeline Orchestrator (Temporal)
-    container[WorkflowOrchestrator] = lambda _: TemporalWorkflowOrchestrator()
+    from application.ports.analytics_read_model import AnalyticsReadModel
+    from infrastructure.read_repositories.mongo_analytics_store import (
+        MongoAnalyticsStore,
+    )
+
+    container[AnalyticsReadModel] = lambda c: MongoAnalyticsStore(
+        client=c[AsyncIOMotorClient],
+        db_name=settings.mongo_db,
+        artifacts_collection_name=settings.mongo_artifacts_collection,
+    )
+
+    # Register Workflow Status Cache (MongoDB)
+    container[WorkflowStatusCache] = lambda c: MongoWorkflowStatusCache(
+        client=c[AsyncIOMotorClient],
+        db_name=settings.mongo_db,
+    )
+
+    # Register Pipeline Orchestrator (Temporal + caching decorator)
+    container[WorkflowOrchestrator] = lambda c: CachingWorkflowOrchestrator(
+        inner=TemporalWorkflowOrchestrator(),
+        cache=c[WorkflowStatusCache],
+    )
 
     # Permission Registrar (Sentinel entity-level permissions)
     container[PermissionRegistrar] = lambda _: SentinelPermissionRegistrar(sentinel.permissions)
@@ -504,7 +540,6 @@ def create_container() -> Container:  # noqa: PLR0915
     )
     container[TriggerArtifactTagAggregationUseCase] = (
         lambda c: TriggerArtifactTagAggregationUseCase(
-            page_repository=c[PageRepository],
             workflow_orchestrator=c[WorkflowOrchestrator],
         )
     )
@@ -575,16 +610,15 @@ def create_container() -> Container:  # noqa: PLR0915
     )
     container[TriggerArtifactSummarizationUseCase] = lambda c: TriggerArtifactSummarizationUseCase(
         artifact_repository=c[ArtifactRepository],
-        page_repository=c[PageRepository],
         page_read_model=c[PageReadModel],
         workflow_orchestrator=c[WorkflowOrchestrator],
     )
 
     # Batch re-embed use cases
-    from application.use_cases.batch_reembed_use_cases import (  # noqa: PLC0415
+    from application.use_cases.batch_reembed_use_cases import (
         BatchReEmbedArtifactPagesUseCase,
     )
-    from application.workflow_use_cases.trigger_batch_reembed_use_case import (  # noqa: PLC0415
+    from application.workflow_use_cases.trigger_batch_reembed_use_case import (
         TriggerBatchReEmbedUseCase,
     )
 
@@ -648,6 +682,158 @@ def create_container() -> Container:  # noqa: PLR0915
         artifact_read_model=c[ArtifactReadModel],
         reranker=c[Reranker],
         sparse_embedding_generator=c[SparseEmbeddingGenerator],
+    )
+
+    # --- Chat (Agentic RAG) ---
+    from application.ports.chat_agent import ChatAgentPort
+    from application.ports.chat_repository import ChatRepository
+    from application.services.chat_agent_router import ChatAgentRouter
+    from infrastructure.chat.agent import ChatAgent
+    from infrastructure.chat.mongo_chat_repository import MongoChatRepository
+    from infrastructure.chat.nodes.adaptive_synthesis import AdaptiveSynthesisNode
+    from infrastructure.chat.nodes.agentic_retrieval import AgenticRetrievalNode
+    from infrastructure.chat.nodes.answer_formatting import AnswerFormattingNode
+    from infrastructure.chat.nodes.answer_synthesis import AnswerSynthesisNode
+    from infrastructure.chat.nodes.context_assembly import ContextAssemblyNode
+    from infrastructure.chat.nodes.grounding_verification import (
+        GroundingVerificationNode,
+    )
+    from infrastructure.chat.nodes.inline_verification import (
+        InlineVerificationNode,
+    )
+    from infrastructure.chat.nodes.query_planning import QueryPlanningNode
+    from infrastructure.chat.nodes.question_analysis import QuestionAnalysisNode
+    from infrastructure.chat.nodes.retrieval import RetrievalNode
+    from infrastructure.chat.thinking_agent import ThinkingAgent
+    from infrastructure.chat.tools.retrieval_tools import ToolRegistry
+
+    # Chat LLM client (separate from batch LLM, falls back to same settings)
+    chat_llm_client = create_chat_llm_client(settings)
+
+    container[ChatRepository] = lambda c: MongoChatRepository(
+        client=c[AsyncIOMotorClient],
+        db_name=settings.mongo_db,
+    )
+
+    # --- Quick Mode nodes (existing pipeline) ---
+    container[QuestionAnalysisNode] = lambda c: QuestionAnalysisNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+    )
+    container[RetrievalNode] = lambda c: RetrievalNode(
+        hierarchical_search=c[HierarchicalSearchUseCase],
+        summary_search=c[SearchSummariesUseCase],
+        page_read_model=c[PageReadModel],
+        max_results=settings.chat_max_retrieval_results,
+    )
+    container[AnswerSynthesisNode] = lambda c: AnswerSynthesisNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+    )
+    container[GroundingVerificationNode] = lambda c: GroundingVerificationNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+    )
+
+    container[AnswerFormattingNode] = lambda c: AnswerFormattingNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+    )
+
+    quick_agent = lambda c: ChatAgent(
+        question_analysis=c[QuestionAnalysisNode],
+        retrieval=c[RetrievalNode],
+        answer_synthesis=c[AnswerSynthesisNode],
+        grounding_verification=c[GroundingVerificationNode],
+        answer_formatting=c[AnswerFormattingNode],
+        max_retries=settings.chat_max_retries,
+    )
+
+    # --- Thinking Mode nodes (v2 — agentic retrieval) ---
+    container[QueryPlanningNode] = lambda c: QueryPlanningNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+        ner_extractor=c[NERExtractorPort],
+        structured_extractor=c[StructuredExtractorPort],
+    )
+
+    # Tool-calling LLM + tool registry for agentic retrieval
+    tool_calling_llm = create_tool_calling_llm_client(settings)
+    container[ToolRegistry] = lambda c: ToolRegistry(
+        hierarchical_search=c[HierarchicalSearchUseCase],
+        summary_search=c[SearchSummariesUseCase],
+        page_read_model=c[PageReadModel],
+        tag_dictionary=c[TagDictionaryReadModel],
+        artifact_read_model=c[ArtifactReadModel],
+    )
+    container[AgenticRetrievalNode] = lambda c: AgenticRetrievalNode(
+        tool_llm=tool_calling_llm,
+        tool_registry=c[ToolRegistry],
+        prompt_repository=c[PromptRepositoryPort],
+    )
+
+    container[ContextAssemblyNode] = lambda _: ContextAssemblyNode()
+    container[AdaptiveSynthesisNode] = lambda c: AdaptiveSynthesisNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+    )
+    container[InlineVerificationNode] = lambda c: InlineVerificationNode(
+        llm_client=chat_llm_client,
+        prompt_repository=c[PromptRepositoryPort],
+    )
+
+    thinking_agent = lambda c: ThinkingAgent(
+        query_planning=c[QueryPlanningNode],
+        agentic_retrieval=c[AgenticRetrievalNode],
+        context_assembly=c[ContextAssemblyNode],
+        adaptive_synthesis=c[AdaptiveSynthesisNode],
+        inline_verification=c[InlineVerificationNode],
+        answer_formatting=c[AnswerFormattingNode],
+        tag_dictionary=c[TagDictionaryReadModel],
+        max_retries=settings.chat_max_retries,
+    )
+
+    # --- Deep Thinking Mode (thinking + page images) ---
+    deep_thinking_agent = lambda c: ThinkingAgent(
+        query_planning=c[QueryPlanningNode],
+        agentic_retrieval=c[AgenticRetrievalNode],
+        context_assembly=c[ContextAssemblyNode],
+        adaptive_synthesis=c[AdaptiveSynthesisNode],
+        inline_verification=c[InlineVerificationNode],
+        answer_formatting=c[AnswerFormattingNode],
+        tag_dictionary=c[TagDictionaryReadModel],
+        max_retries=settings.chat_max_retries,
+        blob_store=c[BlobStore],
+        include_images=True,
+    )
+
+    # --- Agent Router (dispatches to quick, thinking, or deep thinking) ---
+    container[ChatAgentPort] = lambda c: ChatAgentRouter(
+        quick_agent=quick_agent(c),
+        thinking_agent=thinking_agent(c),
+        deep_thinking_agent=deep_thinking_agent(c),
+        default_mode=settings.chat_default_mode,
+    )
+
+    # Chat Use Cases
+    container[CreateConversationUseCase] = lambda c: CreateConversationUseCase(
+        chat_repository=c[ChatRepository],
+    )
+    container[ListConversationsUseCase] = lambda c: ListConversationsUseCase(
+        chat_repository=c[ChatRepository],
+    )
+    container[GetConversationUseCase] = lambda c: GetConversationUseCase(
+        chat_repository=c[ChatRepository],
+    )
+    container[DeleteConversationUseCase] = lambda c: DeleteConversationUseCase(
+        chat_repository=c[ChatRepository],
+    )
+    container[SendMessageUseCase] = lambda c: SendMessageUseCase(
+        chat_repository=c[ChatRepository],
+        chat_agent=c[ChatAgentPort],
+    )
+    container[RecordFeedbackUseCase] = lambda c: RecordFeedbackUseCase(
+        chat_repository=c[ChatRepository],
     )
 
     return container

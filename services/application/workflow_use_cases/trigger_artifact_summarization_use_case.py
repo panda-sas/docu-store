@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
     from application.ports.repositories.artifact_repository import ArtifactRepository
     from application.ports.repositories.page_read_models import PageReadModel
-    from application.ports.repositories.page_repository import PageRepository
     from application.ports.workflow_orchestrator import WorkflowOrchestrator
 
 log = structlog.get_logger(__name__)
@@ -28,19 +27,14 @@ class TriggerArtifactSummarizationUseCase:
     def __init__(
         self,
         artifact_repository: ArtifactRepository,
-        page_repository: PageRepository,
         page_read_model: PageReadModel,
         workflow_orchestrator: WorkflowOrchestrator,
     ) -> None:
         self.artifact_repository = artifact_repository
-        self.page_repository = page_repository
         self.page_read_model = page_read_model
         self.workflow_orchestrator = workflow_orchestrator
 
-    async def execute(self, page_id: UUID) -> WorkflowStartedResponse | None:
-        page = self.page_repository.get_by_id(page_id)
-        artifact_id = page.artifact_id
-
+    async def execute(self, artifact_id: UUID) -> WorkflowStartedResponse | None:
         artifact = self.artifact_repository.get_by_id(artifact_id)
 
         total_pages = len(artifact.pages) if artifact.pages else 0

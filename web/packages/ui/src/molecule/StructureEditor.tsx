@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import type { Ketcher } from "ketcher-core";
-import type { EditorProps } from "ketcher-react";
 
 export interface StructureEditorProps {
   /** Current SMILES value — kept in sync bidirectionally */
@@ -27,7 +26,8 @@ export function StructureEditor({
   const changeHandler = useRef<(() => void) | null>(null);
 
   const [KetcherEditor, setKetcherEditor] =
-    useState<ComponentType<EditorProps> | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useState<ComponentType<any> | null>(null);
   const [ServiceProviderClass, setServiceProviderClass] = useState<
     (new () => unknown) | null
   >(null);

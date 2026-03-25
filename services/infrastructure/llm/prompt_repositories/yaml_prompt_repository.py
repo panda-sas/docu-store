@@ -27,7 +27,7 @@ class YamlPromptRepository:
     async def render_prompt(
         self,
         name: str,
-        version: str | None = None,  # noqa: ARG002
+        version: str | None = None,
         **variables: str,
     ) -> str:
         if name not in self._cache:

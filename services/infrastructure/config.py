@@ -95,6 +95,15 @@ class Settings(BaseSettings):
         validation_alias="TEMPORAL_MAX_CONCURRENT_ACTIVITIES",
         description="Max concurrent Temporal activities. Lower on dev to save memory.",
     )
+    temporal_llm_task_queue: str = Field(
+        default="llm_processing",
+        validation_alias="TEMPORAL_LLM_TASK_QUEUE",
+    )
+    temporal_max_concurrent_llm_activities: int = Field(
+        default=2,
+        validation_alias="TEMPORAL_MAX_CONCURRENT_LLM_ACTIVITIES",
+        description="Max concurrent LLM activities. Ollama: 1-2, Cloud API: 5-10.",
+    )
 
     # Qdrant (Vector Store)
     qdrant_url: str = Field(
@@ -235,6 +244,132 @@ class Settings(BaseSettings):
         description="Low temperature for deterministic summaries.",
     )
 
+    # Chat LLM (separate from batch LLM — allows different model/temperature for interactive chat)
+    chat_llm_provider: Literal["ollama", "openai", "gemini"] | None = Field(
+        default=None,
+        validation_alias="CHAT_LLM_PROVIDER",
+        description="LLM provider for chat. Falls back to llm_provider if not set.",
+    )
+    chat_llm_model_name: str | None = Field(
+        default=None,
+        validation_alias="CHAT_LLM_MODEL_NAME",
+        description="Model name for chat. Falls back to llm_model_name if not set.",
+    )
+    chat_llm_base_url: str | None = Field(
+        default=None,
+        validation_alias="CHAT_LLM_BASE_URL",
+        description="Base URL for chat LLM. Falls back to llm_base_url if not set.",
+    )
+    chat_llm_api_key: str | None = Field(
+        default=None,
+        validation_alias="CHAT_LLM_API_KEY",
+        description="API key for chat LLM. Falls back to llm_api_key if not set.",
+    )
+    chat_llm_temperature: float = Field(
+        default=0.3,
+        validation_alias="CHAT_LLM_TEMPERATURE",
+        description="Slightly higher temperature for more conversational chat responses.",
+    )
+
+    # Chat settings
+    chat_max_history_messages: int = Field(
+        default=10,
+        validation_alias="CHAT_MAX_HISTORY_MESSAGES",
+        description="Max recent message pairs to include in context window.",
+    )
+    chat_max_retrieval_results: int = Field(
+        default=10,
+        validation_alias="CHAT_MAX_RETRIEVAL_RESULTS",
+        description="Max sources to retrieve per query.",
+    )
+    chat_max_retries: int = Field(
+        default=1,
+        validation_alias="CHAT_MAX_RETRIES",
+        description="Max grounding verification retries.",
+    )
+    chat_debug: bool = Field(
+        default=False,
+        validation_alias="CHAT_DEBUG",
+        description="Enable verbose debug logging for the entire chat agent chain.",
+    )
+
+    # Thinking Mode settings
+    chat_default_mode: Literal["quick", "thinking", "deep_thinking"] = Field(
+        default="thinking",
+        validation_alias="CHAT_DEFAULT_MODE",
+        description="Default chat pipeline mode. 'quick' = 4-step, 'thinking' = 5-stage, 'deep_thinking' = thinking + page images.",
+    )
+    chat_enable_sub_queries: bool = Field(
+        default=True,
+        validation_alias="CHAT_ENABLE_SUB_QUERIES",
+        description="Allow Thinking Mode to decompose complex queries into sub-queries.",
+    )
+    chat_enable_hyde: bool = Field(
+        default=True,
+        validation_alias="CHAT_ENABLE_HYDE",
+        description="Allow Thinking Mode to generate hypothetical answers for embedding (exploratory only).",
+    )
+    chat_thinking_max_retrieval_results: int = Field(
+        default=15,
+        validation_alias="CHAT_THINKING_MAX_RETRIEVAL_RESULTS",
+        description="Max sources for Thinking Mode standard retrieval.",
+    )
+    chat_context_budget_chars: int = Field(
+        default=12000,
+        validation_alias="CHAT_CONTEXT_BUDGET_CHARS",
+        description="Max chars for assembled context in Thinking Mode (~3000 tokens).",
+    )
+    chat_verification_coverage_threshold: float = Field(
+        default=0.7,
+        validation_alias="CHAT_VERIFICATION_COVERAGE_THRESHOLD",
+        description="Citation coverage ratio below which LLM verification is triggered.",
+    )
+    chat_verification_relevance_threshold: float = Field(
+        default=0.4,
+        validation_alias="CHAT_VERIFICATION_RELEVANCE_THRESHOLD",
+        description="Avg relevance score below which LLM verification is triggered.",
+    )
+
+    # Factual mode optimisation: skip unfiltered seed when NER-filtered results suffice
+    chat_factual_skip_unfiltered: bool = Field(
+        default=True,
+        validation_alias="CHAT_FACTUAL_SKIP_UNFILTERED",
+        description="In factual mode with NER filters, skip the unfiltered seed search when filtered results are sufficient.",
+    )
+    # Deep Thinking Mode settings
+    chat_deep_thinking_max_images: int = Field(
+        default=5,
+        validation_alias="CHAT_DEEP_THINKING_MAX_IMAGES",
+        description="Max page images to include in Deep Thinking synthesis prompt.",
+    )
+
+    # Agentic retrieval settings (Thinking Mode v2)
+    chat_agent_max_iterations: int = Field(
+        default=5,
+        validation_alias="CHAT_AGENT_MAX_ITERATIONS",
+        description="Max tool-calling iterations in the agentic retrieval loop.",
+    )
+    chat_agent_iteration_timeout_s: float = Field(
+        default=30.0,
+        validation_alias="CHAT_AGENT_ITERATION_TIMEOUT_S",
+        description="Timeout per single iteration (LLM call + tool execution) in seconds.",
+    )
+    chat_agent_total_timeout_s: float = Field(
+        default=120.0,
+        validation_alias="CHAT_AGENT_TOTAL_TIMEOUT_S",
+        description="Total timeout for the entire agentic retrieval loop.",
+    )
+    chat_agent_tool_calling_mode: Literal["auto", "native", "react"] = Field(
+        default="auto",
+        validation_alias="CHAT_AGENT_TOOL_CALLING_MODE",
+        description="Tool calling mode: 'auto' picks based on provider, 'native' for OpenAI, 'react' for Ollama.",
+    )
+    chat_follow_up_context_budget: int = Field(
+        default=4000,
+        validation_alias="CHAT_FOLLOW_UP_CONTEXT_BUDGET",
+        description="Character budget for follow-up conversation context window.",
+    )
+
     # Sentinel (AuthZ mode)
     sentinel_url: str = Field(default="http://localhost:9003", validation_alias="SENTINEL_URL")
     sentinel_service_key: str = Field(default="", validation_alias="SENTINEL_SERVICE_KEY")
@@ -254,10 +389,12 @@ class Settings(BaseSettings):
 
     # Browse (tag-based document browser)
     browse_default_category_limit: int = Field(
-        default=5, validation_alias="BROWSE_DEFAULT_CATEGORY_LIMIT",
+        default=5,
+        validation_alias="BROWSE_DEFAULT_CATEGORY_LIMIT",
     )
     browse_sticky_categories: str = Field(
-        default="date,target", validation_alias="BROWSE_STICKY_CATEGORIES",
+        default="date,target",
+        validation_alias="BROWSE_STICKY_CATEGORIES",
     )
 
     @property
@@ -288,6 +425,16 @@ class Settings(BaseSettings):
         default=5,
         validation_alias="PLUGIN_MAX_CONCURRENT_ACTIVITIES",
         description="Max concurrent Temporal activities for all plugin workers.",
+    )
+
+    # Request Timing
+    enable_request_timing: bool = Field(
+        default=True,
+        validation_alias="ENABLE_REQUEST_TIMING",
+    )
+    slow_request_threshold_ms: int = Field(
+        default=1000,
+        validation_alias="SLOW_REQUEST_THRESHOLD_MS",
     )
 
     # Prompt management

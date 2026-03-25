@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
@@ -53,8 +52,8 @@ class ChemBertaEmbeddingGenerator(EmbeddingGenerator):
         if self._model is not None:
             return
 
-        import torch  # noqa: PLC0415
-        from transformers import AutoModel, AutoTokenizer  # noqa: PLC0415
+        import torch
+        from transformers import AutoModel, AutoTokenizer
 
         logger.info("loading_chemberta_model", model_name=self.model_name)
 
@@ -103,7 +102,7 @@ class ChemBertaEmbeddingGenerator(EmbeddingGenerator):
     async def generate_text_embedding(
         self,
         text: str,
-        model_name: str | None = None,  # noqa: ARG002
+        model_name: str | None = None,
     ) -> TextEmbedding:
         """Generate a ChemBERTa embedding for a single SMILES string."""
         if not text or not text.strip():
@@ -124,7 +123,7 @@ class ChemBertaEmbeddingGenerator(EmbeddingGenerator):
     async def generate_batch_embeddings(
         self,
         texts: list[str],
-        model_name: str | None = None,  # noqa: ARG002
+        model_name: str | None = None,
     ) -> list[TextEmbedding]:
         """Generate ChemBERTa embeddings for a batch of SMILES strings."""
         if not texts:

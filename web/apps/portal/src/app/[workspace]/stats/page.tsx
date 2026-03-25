@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
 import {
   BarChart3,
   Activity,
@@ -9,8 +11,15 @@ import {
   ShieldAlert,
   Cpu,
   Clock,
+  MessageSquare,
+  Search,
+  Shield,
+  Coins,
+  FileText,
+  CircleHelp,
 } from "lucide-react";
 import { Skeleton } from "primereact/skeleton";
+import { SelectButton } from "primereact/selectbutton";
 import {
   BarChart,
   Bar,
@@ -30,6 +39,12 @@ import {
   useWorkflowStats,
   usePipelineStats,
   useVectorStats,
+  useTokenUsageStats,
+  useChatLatencyStats,
+  useSearchQualityStats,
+  useGroundingStats,
+  useKnowledgeGaps,
+  useCitationFrequency,
 } from "@/hooks/use-stats";
 
 // ---------------------------------------------------------------------------
@@ -516,6 +531,506 @@ export default function StatsPage() {
           </Card>
         </div>
       )}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* Analytics & Quality Section                                        */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+
+      <AnalyticsSection />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Analytics & Quality Section
+// ---------------------------------------------------------------------------
+
+const PERIOD_OPTIONS = [
+  { label: "Day", value: "day" },
+  { label: "Week", value: "week" },
+  { label: "Month", value: "month" },
+];
+
+function AnalyticsSection() {
+  const { workspace } = useParams<{ workspace: string }>();
+  const [period, setPeriod] = useState("week");
+
+  const { data: tokenData } = useTokenUsageStats(period);
+  const { data: latencyData } = useChatLatencyStats(period);
+  const { data: searchData } = useSearchQualityStats(period);
+  const { data: groundingData } = useGroundingStats(period);
+  const { data: gapsData } = useKnowledgeGaps(period);
+  const { data: citationData } = useCitationFrequency(period);
+
+  // Token chart: aggregate by date (sum across modes)
+  const tokenChartData = useMemo(() => {
+    if (!tokenData) return [];
+    const byDate = new Map<string, { date: string; tokens: number; messages: number }>();
+    for (const b of tokenData.buckets) {
+      const existing = byDate.get(b.date) ?? { date: b.date, tokens: 0, messages: 0 };
+      existing.tokens += b.total_tokens;
+      existing.messages += b.message_count;
+      byDate.set(b.date, existing);
+    }
+    return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [tokenData]);
+
+  // Latency chart data
+  const latencyChartData = useMemo(
+    () =>
+      (latencyData?.steps ?? []).map((s) => ({
+        name: s.step_name.replace(/_/g, " "),
+        avg: Math.round(s.avg_ms),
+        p95: Math.round(s.p95_ms),
+      })),
+    [latencyData],
+  );
+
+  return (
+    <div className="mt-10">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-semibold text-text-primary">
+            Analytics & Quality
+          </h2>
+          <p className="text-sm text-text-muted">
+            Chat quality, search health, and LLM usage metrics
+          </p>
+        </div>
+        <SelectButton
+          value={period}
+          options={PERIOD_OPTIONS}
+          onChange={(e) => { if (e.value) setPeriod(e.value); }}
+        />
+      </div>
+
+      {/* ---- Top-level analytics stat cards ---- */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          icon={Coins}
+          label="Total Tokens"
+          value={tokenData ? fmtNumber(tokenData.total_tokens) : "--"}
+          accentColor="bg-amber-500/10"
+        />
+        <StatCard
+          icon={MessageSquare}
+          label="Chat Messages"
+          value={tokenData ? fmtNumber(tokenData.total_messages) : "--"}
+          accentColor="bg-blue-500/10"
+        />
+        <StatCard
+          icon={Search}
+          label="Total Searches"
+          value={searchData ? fmtNumber(searchData.total_searches) : "--"}
+          accentColor="bg-purple-500/10"
+        />
+        <StatCard
+          icon={Shield}
+          label="Grounded Rate"
+          value={
+            groundingData
+              ? `${(groundingData.overall_grounded_rate * 100).toFixed(0)}%`
+              : "--"
+          }
+          accentColor="bg-green-500/10"
+        />
+      </div>
+
+      {/* ---- Token Usage Chart + Search Quality ---- */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Token Usage over time (2/3) */}
+        <Card className="lg:col-span-2" padding={false}>
+          <div className="p-5">
+            <CardHeader title="Token Usage (daily)" />
+            {tokenChartData.length === 0 ? (
+              <p className="py-8 text-center text-sm text-text-muted">
+                No chat messages in this period.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={tokenChartData} margin={{ top: 0, right: 16, bottom: 0, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                    tickFormatter={(v: string) => v.slice(5)} // MM-DD
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "var(--color-surface-elevated)",
+                      border: "1px solid var(--color-border-default)",
+                      borderRadius: "0.5rem",
+                      fontSize: "0.75rem",
+                    }}
+                    formatter={(value, name) => [
+                      fmtNumber(Number(value)),
+                      name === "tokens" ? "Tokens" : "Messages",
+                    ]}
+                  />
+                  <Bar dataKey="tokens" fill="#f59e0b" radius={[4, 4, 0, 0]} name="tokens" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+
+        {/* Search Quality (1/3) */}
+        <Card>
+          <CardHeader title="Search Quality" />
+          {searchData && searchData.modes.length > 0 ? (
+            <div className="space-y-4">
+              {searchData.modes.map((m) => (
+                <div key={m.search_mode}>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-text-secondary capitalize">
+                      {m.search_mode}
+                    </span>
+                    <span className="text-xs font-mono text-text-muted">
+                      {m.total_searches} queries
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-surface-sunken">
+                        <div
+                          className="h-full rounded-full bg-red-400 transition-all"
+                          style={{ width: `${m.zero_result_rate * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-xs tabular-nums text-text-muted w-16 text-right">
+                      {(m.zero_result_rate * 100).toFixed(1)}% empty
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-text-muted mt-0.5">
+                    Avg {m.avg_result_count.toFixed(1)} results per query
+                  </p>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-border-subtle">
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">Overall zero-result rate</span>
+                  <span className="font-medium text-text-secondary">
+                    {(searchData.overall_zero_result_rate * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">
+              No search activity in this period.
+            </p>
+          )}
+        </Card>
+      </div>
+
+      {/* ---- Chat Latency + Grounding ---- */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Pipeline Step Latency */}
+        <Card padding={false}>
+          <div className="p-5">
+            <CardHeader title="Chat Pipeline Step Latency (ms)" />
+            {latencyChartData.length === 0 ? (
+              <p className="py-8 text-center text-sm text-text-muted">
+                No chat messages in this period.
+              </p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={Math.max(latencyChartData.length * 40, 160)}>
+                  <BarChart
+                    data={latencyChartData}
+                    layout="vertical"
+                    margin={{ top: 0, right: 24, bottom: 0, left: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${v}`}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={120}
+                      tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "var(--color-surface-elevated)",
+                        border: "1px solid var(--color-border-default)",
+                        borderRadius: "0.5rem",
+                        fontSize: "0.75rem",
+                      }}
+                      formatter={(value, name) => [
+                        `${fmtNumber(Number(value))} ms`,
+                        name === "avg" ? "Avg" : "P95",
+                      ]}
+                    />
+                    <Bar dataKey="avg" fill="#3b82f6" radius={[0, 4, 4, 0]} name="avg" />
+                    <Bar dataKey="p95" fill="#f59e0b" radius={[0, 4, 4, 0]} name="p95" />
+                  </BarChart>
+                </ResponsiveContainer>
+                {latencyData && (
+                  <div className="mt-3 flex gap-4 text-xs text-text-muted border-t border-border-subtle pt-3">
+                    <span>
+                      Overall avg:{" "}
+                      <span className="font-medium text-text-secondary">
+                        {fmtNumber(Math.round(latencyData.overall_avg_ms))} ms
+                      </span>
+                    </span>
+                    <span>
+                      Overall P95:{" "}
+                      <span className="font-medium text-text-secondary">
+                        {fmtNumber(Math.round(latencyData.overall_p95_ms))} ms
+                      </span>
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Card>
+
+        {/* Grounding Distribution */}
+        <Card>
+          <CardHeader title="Grounding Quality" />
+          {groundingData && groundingData.modes.length > 0 ? (
+            <div className="space-y-4">
+              {groundingData.modes.map((m) => (
+                <div key={m.mode} className="rounded-lg border border-border-subtle p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-text-primary capitalize">
+                      {m.mode || "unknown"}
+                    </span>
+                    <span className="text-xs font-mono text-text-muted">
+                      {m.total_messages} msgs
+                    </span>
+                  </div>
+                  {/* Stacked bar: grounded vs not */}
+                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-sunken">
+                    <div
+                      className="h-full bg-green-500 transition-all"
+                      style={{ width: `${m.grounded_rate * 100}%` }}
+                      title={`Grounded: ${m.grounded_count}`}
+                    />
+                    <div
+                      className="h-full bg-red-400 transition-all"
+                      style={{ width: `${(1 - m.grounded_rate) * 100}%` }}
+                      title={`Not grounded: ${m.not_grounded_count}`}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1.5 text-[11px] text-text-muted">
+                    <span>
+                      Grounded:{" "}
+                      <span className="text-green-500 font-medium">
+                        {(m.grounded_rate * 100).toFixed(0)}%
+                      </span>
+                    </span>
+                    <span>
+                      Avg confidence:{" "}
+                      <span className="text-text-secondary font-medium">
+                        {(m.avg_confidence * 100).toFixed(0)}%
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-border-subtle">
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">Overall grounded rate</span>
+                  <span className="font-medium text-green-500">
+                    {(groundingData.overall_grounded_rate * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs mt-1">
+                  <span className="text-text-muted">Overall avg confidence</span>
+                  <span className="font-medium text-text-secondary">
+                    {(groundingData.overall_avg_confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">
+              No grounding data in this period.
+            </p>
+          )}
+        </Card>
+      </div>
+
+      {/* ---- Knowledge Gaps + Citation Frequency ---- */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Knowledge Gaps */}
+        <Card>
+          <CardHeader title="Knowledge Gaps" />
+          <p className="text-xs text-text-muted -mt-2 mb-4">
+            Entities detected in chat queries where the corpus couldn&apos;t provide grounded answers
+          </p>
+          {gapsData && gapsData.gaps.length > 0 ? (
+            <div className="space-y-2.5">
+              {gapsData.gaps.map((g) => (
+                <div key={`${g.entity_text}-${g.entity_type}`} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <CircleHelp className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-text-primary truncate">
+                        {g.entity_text}
+                      </span>
+                      <span className="text-[10px] rounded-full bg-surface-sunken px-1.5 py-0.5 text-text-muted flex-shrink-0">
+                        {g.entity_type}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken">
+                      <div
+                        className="h-full rounded-full bg-amber-500 transition-all"
+                        style={{ width: `${g.gap_rate * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0 w-20">
+                    <span className="text-xs tabular-nums font-medium text-amber-500">
+                      {(g.gap_rate * 100).toFixed(0)}% gap
+                    </span>
+                    <p className="text-[10px] text-text-muted tabular-nums">
+                      {g.gap_count}/{g.query_count} queries
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-border-subtle flex justify-between text-xs text-text-muted">
+                <span>
+                  {gapsData.total_gap_entities} gap entities / {gapsData.total_unique_entities} total
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">
+              No knowledge gaps detected — all queried entities are well covered.
+            </p>
+          )}
+        </Card>
+
+        {/* Citation Frequency */}
+        <Card>
+          <CardHeader title="Citation Frequency" />
+          <p className="text-xs text-text-muted -mt-2 mb-4">
+            Which documents are cited most and least in chat answers
+          </p>
+          {citationData && citationData.most_cited.length > 0 ? (
+            <div className="space-y-4">
+              {/* Most cited */}
+              <div>
+                <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
+                  Most Cited
+                </h4>
+                <div className="space-y-1.5">
+                  {citationData.most_cited.map((a, i) => (
+                    <Link
+                      key={a.artifact_id}
+                      href={`/${workspace}/documents/${a.artifact_id}`}
+                      className="flex items-center gap-2 group/cite rounded-md -mx-1 px-1 py-0.5 hover:bg-surface-hover transition-colors"
+                    >
+                      <span className="text-[10px] font-mono text-text-muted w-4 text-right">{i + 1}</span>
+                      <FileText className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                      <span className="text-sm text-text-primary truncate flex-1 group-hover/cite:text-accent" title={a.artifact_title ?? a.artifact_id}>
+                        {a.artifact_title ?? a.artifact_id.slice(0, 12)}
+                      </span>
+                      <span className="text-xs tabular-nums font-medium text-text-secondary flex-shrink-0">
+                        {a.citation_count}
+                      </span>
+                      <span className="text-[10px] text-text-muted flex-shrink-0">
+                        ({a.unique_conversation_count} conv)
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              {/* Least cited */}
+              {citationData.least_cited.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
+                    Least Cited
+                  </h4>
+                  <div className="space-y-1.5">
+                    {citationData.least_cited.map((a) => (
+                      <Link
+                        key={a.artifact_id}
+                        href={`/${workspace}/documents/${a.artifact_id}`}
+                        className="flex items-center gap-2 group/cite rounded-md -mx-1 px-1 py-0.5 hover:bg-surface-hover transition-colors"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-text-muted flex-shrink-0 ml-5" />
+                        <span className="text-sm text-text-secondary truncate flex-1 group-hover/cite:text-accent" title={a.artifact_title ?? a.artifact_id}>
+                          {a.artifact_title ?? a.artifact_id.slice(0, 12)}
+                        </span>
+                        <span className="text-xs tabular-nums text-text-muted flex-shrink-0">
+                          {a.citation_count}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Never cited */}
+              {citationData.never_cited.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-amber-500 uppercase tracking-wider mb-2">
+                    Never Cited
+                  </h4>
+                  <div className="space-y-1.5">
+                    {citationData.never_cited.map((a) => (
+                      <Link
+                        key={a.artifact_id}
+                        href={`/${workspace}/documents/${a.artifact_id}`}
+                        className="flex items-center gap-2 group/cite rounded-md -mx-1 px-1 py-0.5 hover:bg-surface-hover transition-colors"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-amber-500/60 flex-shrink-0 ml-5" />
+                        <span className="text-sm text-text-muted truncate flex-1 group-hover/cite:text-accent" title={a.artifact_title ?? a.artifact_id}>
+                          {a.artifact_title ?? a.artifact_id.slice(0, 12)}
+                        </span>
+                      </Link>
+                    ))}
+                    {citationData.never_cited_count > citationData.never_cited.length && (
+                      <p className="text-[11px] text-text-muted ml-5">
+                        + {citationData.never_cited_count - citationData.never_cited.length} more
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Summary */}
+              <div className="pt-2 border-t border-border-subtle flex justify-between text-xs text-text-muted">
+                <span>
+                  {citationData.total_artifacts - citationData.never_cited_count} / {citationData.total_artifacts} documents cited
+                </span>
+                {citationData.never_cited_count > 0 && (
+                  <span className="text-amber-500">
+                    {citationData.never_cited_count} never cited
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">
+              No citation data in this period.
+            </p>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { type ReactNode } from "react";
-import { Skeleton } from "primereact/skeleton";
 
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { EntityTypeBadge } from "@/components/ui/EntityTypeBadge";
-import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
+import { AuthThumbnail } from "@/components/ui/TableThumbnail";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 interface SearchResultCardProps {
   title: string;
@@ -16,27 +18,12 @@ interface SearchResultCardProps {
   /** URL to a page thumbnail image (lazy-loaded with auth) */
   thumbnailSrc?: string;
   children?: ReactNode;
-}
-
-function AuthThumbnail({ src, href }: { src: string; href: string }) {
-  const { blobUrl, error } = useAuthBlobUrl(src);
-
-  if (error) return null;
-
-  return (
-    <Link href={href} className="relative hidden h-32 w-32 shrink-0 sm:block">
-      {!blobUrl && (
-        <Skeleton width="8rem" height="8rem" borderRadius="0.375rem" />
-      )}
-      {blobUrl && (
-        <img
-          src={blobUrl}
-          alt=""
-          className="h-32 w-32 rounded-md border border-border-subtle object-cover object-top"
-        />
-      )}
-    </Link>
-  );
+  /** Result rank (0-based) for click tracking */
+  rank?: number;
+  /** Search type for click tracking */
+  searchType?: string;
+  /** Artifact ID for click tracking */
+  artifactId?: string;
 }
 
 export function SearchResultCard({
@@ -48,13 +35,27 @@ export function SearchResultCard({
   secondaryLink,
   thumbnailSrc,
   children,
+  rank,
+  searchType,
+  artifactId,
 }: SearchResultCardProps) {
+  const { trackEvent } = useAnalytics();
+
+  const handleResultClick = () => {
+    trackEvent("search_result_clicked", {
+      ...(searchType ? { search_type: searchType } : {}),
+      ...(rank != null ? { result_rank: rank } : {}),
+      ...(artifactId ? { artifact_id: artifactId } : {}),
+      score: Math.round(score * 1000) / 1000,
+    });
+  };
+
   return (
     <div className="rounded-xl border border-border-default bg-surface-elevated p-4 transition-shadow hover:shadow-ds">
       <div className="flex items-start gap-4">
         {/* Thumbnail with auth */}
         {thumbnailSrc && (
-          <AuthThumbnail src={thumbnailSrc} href={href} />
+          <AuthThumbnail src={thumbnailSrc} href={href} className="hidden sm:block" />
         )}
 
         {/* Content */}
@@ -63,6 +64,7 @@ export function SearchResultCard({
             {entityType && <EntityTypeBadge type={entityType} />}
             <Link
               href={href}
+              onClick={handleResultClick}
               className="text-sm font-medium text-accent-text hover:underline"
             >
               {title}

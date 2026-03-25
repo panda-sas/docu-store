@@ -6,7 +6,11 @@ from lagom import Container
 from sentinel_auth import RequestAuth
 
 from application.dtos.page_dtos import AddCompoundMentionsRequest, CreatePageRequest, PageResponse
-from application.dtos.workflow_dtos import SummaryDetailResponse, WorkflowStartedResponse, WorkflowStatusMapResponse
+from application.dtos.workflow_dtos import (
+    SummaryDetailResponse,
+    WorkflowStartedResponse,
+    WorkflowStatusMapResponse,
+)
 from application.ports.workflow_orchestrator import WorkflowOrchestrator
 from application.use_cases.page_use_cases import (
     AddCompoundMentionsUseCase,
@@ -280,11 +284,12 @@ async def get_page_summary(
             detail="No summary available for this page yet",
         )
 
+    de = page.summary_candidate.date_extracted
     return SummaryDetailResponse(
         entity_id=str(page_id),
         summary=page.summary_candidate.summary,
         model_name=page.summary_candidate.model_name,
-        date_extracted=page.summary_candidate.date_extracted,
+        date_extracted=de.isoformat() if de else None,
         is_locked=page.summary_candidate.is_locked,
         hil_correction=page.summary_candidate.hil_correction,
     )

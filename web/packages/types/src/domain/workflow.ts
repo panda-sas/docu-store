@@ -21,6 +21,7 @@ export interface TemporalWorkflowInfo {
   run_id: string | null;
   started_at: string | null;
   closed_at: string | null;
+  from_cache?: boolean;
 }
 
 export type WorkflowTriggerReason =
@@ -50,5 +51,5 @@ export type WorkflowName =
 
 /** Shape of the workflow endpoint response (untyped in OpenAPI schema) */
 export interface WorkflowMap {
-  workflows?: Record<string, { workflow_id: string; status: string }>;
+  workflows?: Record<string, TemporalWorkflowInfo>;
 }

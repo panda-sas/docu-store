@@ -8,7 +8,7 @@
     "dev": "next dev --port 15000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@docu-store/api-client": "workspace:*",
@@ -25,7 +25,10 @@
     "primereact": "^10.9.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
+    "remark-gfm": "^4.0.1",
+    "web-vitals": "^4.2.4",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

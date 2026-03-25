@@ -40,7 +40,7 @@ log = structlog.get_logger(__name__)
 class ArtifactUploadSaga:
     """Orchestrates blob upload → artifact creation flow."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         upload_blob_use_case: UploadBlobUseCase,
         create_artifact_use_case: CreateArtifactUseCase,
@@ -122,7 +122,7 @@ class ArtifactUploadSaga:
                     owner_id=auth.user_id,
                     visibility=upload_req.visibility,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.warning(
                     "saga.permission_registration_failed",
                     artifact_id=str(artifact_id),
@@ -197,7 +197,7 @@ class ArtifactUploadSaga:
                 image_key = f"artifacts/{artifact_id}/pages/{index}.png"
                 try:
                     self.blob_store.put_stream(image_key, png_stream, mime_type="image/png")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     log.warning(
                         "saga.page_image_store_failed",
                         artifact_id=artifact_id,
@@ -211,7 +211,7 @@ class ArtifactUploadSaga:
                 thumb_key = f"artifacts/{artifact_id}/pages/{index}_thumb.jpg"
                 try:
                     self.blob_store.put_stream(thumb_key, thumb_stream, mime_type="image/jpeg")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     log.warning(
                         "saga.page_thumbnail_store_failed",
                         artifact_id=artifact_id,

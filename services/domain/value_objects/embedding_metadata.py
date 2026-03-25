@@ -1,7 +1,15 @@
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+class EmbeddingType(StrEnum):
+    """Supported embedding types."""
+
+    TEXT = "text"
+    SMILES = "smiles"
 
 
 class EmbeddingMetadata(BaseModel):
@@ -12,6 +20,8 @@ class EmbeddingMetadata(BaseModel):
     This separation follows the DDD principle of keeping
     aggregates focused on business logic, not storage concerns.
     """
+
+    model_config = {"frozen": True}
 
     embedding_id: UUID
     """Reference to the embedding stored in the vector store."""
@@ -25,8 +35,8 @@ class EmbeddingMetadata(BaseModel):
     generated_at: datetime
     """When this embedding was generated."""
 
-    embedding_type: str = Field(default="text")
-    """Type of embedding (text, chemical, etc.). Allows for future multi-modal embeddings."""
+    embedding_type: EmbeddingType = Field(default=EmbeddingType.TEXT)
+    """Type of embedding. Use EmbeddingType enum values."""
 
     def __eq__(self, other: object) -> bool:
         """Compare metadata by embedding ID."""

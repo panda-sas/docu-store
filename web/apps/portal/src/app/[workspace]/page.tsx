@@ -28,9 +28,11 @@ import {
 } from "@/hooks/use-activity";
 import { useSession } from "@/lib/auth";
 import { ARTIFACT_TYPE_LABELS } from "@/lib/constants";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 export default function DashboardPage() {
   const { workspace } = useParams<{ workspace: string }>();
+  const { trackEvent } = useAnalytics();
   const { stats, recentArtifacts, isLoading } = useDashboard();
   const { data: recentSearches } = useRecentSearches(5);
   const { data: recentDocs } = useRecentDocuments(5);
@@ -197,6 +199,7 @@ export default function DashboardPage() {
             <div className="space-y-3">
               <Link
                 href={`/${workspace}/documents/upload`}
+                onClick={() => trackEvent("dashboard_action", { action: "upload" })}
                 className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-light">
@@ -214,6 +217,7 @@ export default function DashboardPage() {
 
               <Link
                 href={`/${workspace}/search`}
+                onClick={() => trackEvent("dashboard_action", { action: "search" })}
                 className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-feature-search/10">
@@ -231,6 +235,7 @@ export default function DashboardPage() {
 
               <Link
                 href={`/${workspace}/compounds`}
+                onClick={() => trackEvent("dashboard_action", { action: "compounds" })}
                 className="group flex items-center gap-4 rounded-xl border border-border-default bg-surface-elevated p-4 transition-all hover:shadow-ds hover:border-accent/30"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-feature-compounds/10">

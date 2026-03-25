@@ -53,7 +53,7 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
         </span>
       </div>
 
-      {devMode && data.rerank_info && console.log("[rerank]", data.rerank_info)}
+      {devMode && data.rerank_info && void console.log("[rerank]", data.rerank_info)}
 
       <div className="space-y-3">
         {data.results.map((r, index) => {
@@ -71,6 +71,9 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
                 label: "View document",
                 href: `/${workspace}/documents/${r.artifact_id}`,
               }}
+              rank={index}
+              searchType="pages"
+              artifactId={r.artifact_id}
             >
               {(r.artifact_details?.authors?.length || r.artifact_details?.presentation_date) && (
                 <div className="mt-1 text-xs text-text-muted">

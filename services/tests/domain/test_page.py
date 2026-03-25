@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 
 from domain.aggregates.page import Page
@@ -493,3 +495,92 @@ class TestPageInvariants:
 
         page.delete()
         assert page.version == initial_version + 3
+
+
+class TestPageEventEnrichment:
+    """Test that Page events carry artifact_id and workspace_id."""
+
+    def test_text_mention_updated_carries_artifact_id(self) -> None:
+        artifact_id = uuid4()
+        workspace_id = uuid4()
+        page = Page.create(
+            name="Test", artifact_id=artifact_id, workspace_id=workspace_id,
+        )
+        list(page.collect_events())  # drain Created
+
+        page.update_text_mention(TextMention(text="Hello"))
+        events = list(page.collect_events())
+        assert len(events) == 1
+        assert events[0].artifact_id == artifact_id
+        assert events[0].workspace_id == workspace_id
+
+    def test_summary_candidate_updated_carries_artifact_id(self) -> None:
+        artifact_id = uuid4()
+        page = Page.create(name="Test", artifact_id=artifact_id)
+        list(page.collect_events())
+
+        page.update_summary_candidate(SummaryCandidate(summary="Sum"))
+        events = list(page.collect_events())
+        assert events[0].artifact_id == artifact_id
+
+    def test_compound_mentions_updated_carries_context(self) -> None:
+        artifact_id = uuid4()
+        workspace_id = uuid4()
+        page = Page.create(
+            name="Test", artifact_id=artifact_id, workspace_id=workspace_id,
+        )
+        list(page.collect_events())
+
+        page.update_compound_mentions([CompoundMention(smiles="C", extracted_id="cmp")])
+        events = list(page.collect_events())
+        assert events[0].artifact_id == artifact_id
+        assert events[0].workspace_id == workspace_id
+
+    def test_tag_mentions_updated_carries_workspace_id(self) -> None:
+        workspace_id = uuid4()
+        page = Page.create(
+            name="Test", artifact_id=uuid4(), workspace_id=workspace_id,
+        )
+        list(page.collect_events())
+
+        page.update_tag_mentions([TagMention(tag="test")])
+        events = list(page.collect_events())
+        assert events[0].workspace_id == workspace_id
+
+    def test_deleted_event_carries_artifact_id(self) -> None:
+        artifact_id = uuid4()
+        page = Page.create(name="Test", artifact_id=artifact_id)
+        list(page.collect_events())
+
+        page.delete()
+        events = list(page.collect_events())
+        assert events[0].artifact_id == artifact_id
+
+    def test_events_carry_none_workspace_when_not_set(self) -> None:
+        page = Page.create(name="Test", artifact_id=uuid4())
+        list(page.collect_events())
+
+        page.update_text_mention(TextMention(text="Hi"))
+        events = list(page.collect_events())
+        assert events[0].workspace_id is None
+
+
+class TestPageIsLockedSummary:
+    """Test that the aggregate enforces is_locked on summary candidates."""
+
+    def test_cannot_overwrite_locked_summary(self) -> None:
+        page = Page.create(name="Test", artifact_id=uuid4())
+        locked = SummaryCandidate(summary="Final", is_locked=True)
+        page.update_summary_candidate(locked)
+
+        with pytest.raises(ValueError, match="locked"):
+            page.update_summary_candidate(SummaryCandidate(summary="Override"))
+
+    def test_can_update_unlocked_summary(self) -> None:
+        page = Page.create(name="Test", artifact_id=uuid4())
+        unlocked = SummaryCandidate(summary="Draft", is_locked=False)
+        page.update_summary_candidate(unlocked)
+
+        new_summary = SummaryCandidate(summary="Better draft")
+        page.update_summary_candidate(new_summary)
+        assert page.summary_candidate == new_summary

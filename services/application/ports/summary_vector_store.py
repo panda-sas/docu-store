@@ -9,7 +9,7 @@ from domain.value_objects.text_embedding import TextEmbedding
 class SummarySearchResult:
     """Result from a summary similarity search."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         point_id: str,
         entity_type: Literal["page", "artifact"],
@@ -42,7 +42,7 @@ class SummaryVectorStore(Protocol):
         """Ensure the collection exists with proper schema. Idempotent."""
         ...
 
-    async def upsert_page_summary_embedding(  # noqa: PLR0913
+    async def upsert_page_summary_embedding(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -60,7 +60,7 @@ class SummaryVectorStore(Protocol):
         """
         ...
 
-    async def upsert_artifact_summary_embedding(  # noqa: PLR0913
+    async def upsert_artifact_summary_embedding(
         self,
         artifact_id: UUID,
         embedding: TextEmbedding,
@@ -85,7 +85,7 @@ class SummaryVectorStore(Protocol):
         """Delete the artifact summary point. Idempotent — no error if missing."""
         ...
 
-    async def search_summaries(  # noqa: PLR0913
+    async def search_summaries(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,

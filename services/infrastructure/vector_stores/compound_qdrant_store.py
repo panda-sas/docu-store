@@ -104,7 +104,7 @@ class CompoundQdrantStore(CompoundVectorStore):
             )
             raise
 
-    async def upsert_compound_embeddings(  # noqa: PLR0913
+    async def upsert_compound_embeddings(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -188,14 +188,14 @@ class CompoundQdrantStore(CompoundVectorStore):
                 ),
             )
             logger.info("compound_embeddings_deleted_for_page", page_id=str(page_id))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "failed_to_delete_compound_embeddings",
                 page_id=str(page_id),
                 error=str(e),
             )
 
-    async def search_similar_compounds(  # noqa: PLR0913
+    async def search_similar_compounds(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,

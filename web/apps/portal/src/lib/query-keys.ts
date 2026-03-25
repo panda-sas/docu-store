@@ -1,3 +1,17 @@
+import type { WorkflowMap } from "@docu-store/types";
+
+/**
+ * Polls every 3s while any workflow is RUNNING; stops once all settle.
+ * Shared between useArtifactWorkflows and usePageWorkflows.
+ */
+export function workflowPollingInterval(query: { state: { data: unknown } }): number | false {
+  const workflows = (query.state.data as WorkflowMap | undefined)?.workflows;
+  const hasRunning = workflows
+    ? Object.values(workflows).some((w) => w.status === "RUNNING")
+    : false;
+  return hasRunning ? 3000 : false;
+}
+
 /**
  * Centralized TanStack Query key factory.
  *
@@ -33,10 +47,13 @@ export const queryKeys = {
       ["plugins", plugin, "enrichments", pageId] as const,
   },
   search: {
-    text: (query: string) => ["search", "text", query] as const,
-    summary: (query: string) => ["search", "summary", query] as const,
-    hierarchical: (query: string) =>
-      ["search", "hierarchical", query] as const,
+    all: ["search"] as const,
+    text: (query: string, tags?: string[], tagMatchMode?: string) =>
+      ["search", "text", query, tags, tagMatchMode] as const,
+    summary: (query: string, tags?: string[], tagMatchMode?: string) =>
+      ["search", "summary", query, tags, tagMatchMode] as const,
+    hierarchical: (query: string, tags?: string[], tagMatchMode?: string) =>
+      ["search", "hierarchical", query, tags, tagMatchMode] as const,
     compound: (smiles: string) => ["search", "compound", smiles] as const,
   },
   dashboard: {
@@ -48,6 +65,12 @@ export const queryKeys = {
     workflows: () => [...queryKeys.stats.all, "workflows"] as const,
     pipeline: () => [...queryKeys.stats.all, "pipeline"] as const,
     vectors: () => [...queryKeys.stats.all, "vectors"] as const,
+    tokenUsage: (period: string) => [...queryKeys.stats.all, "token-usage", period] as const,
+    chatLatency: (period: string) => [...queryKeys.stats.all, "chat-latency", period] as const,
+    searchQuality: (period: string) => [...queryKeys.stats.all, "search-quality", period] as const,
+    grounding: (period: string) => [...queryKeys.stats.all, "grounding", period] as const,
+    knowledgeGaps: (period: string) => [...queryKeys.stats.all, "knowledge-gaps", period] as const,
+    citationFrequency: (period: string) => [...queryKeys.stats.all, "citation-frequency", period] as const,
   },
   user: {
     all: ["user"] as const,
@@ -56,6 +79,14 @@ export const queryKeys = {
       searches: () => [...queryKeys.user.all, "activity", "searches"] as const,
       documents: () => [...queryKeys.user.all, "activity", "documents"] as const,
     },
+  },
+  chat: {
+    all: ["chat"] as const,
+    list: () => [...queryKeys.chat.all, "list"] as const,
+    detail: (conversationId: string) =>
+      [...queryKeys.chat.all, conversationId] as const,
+    messages: (conversationId: string) =>
+      [...queryKeys.chat.all, conversationId, "messages"] as const,
   },
   browse: {
     all: ["browse"] as const,

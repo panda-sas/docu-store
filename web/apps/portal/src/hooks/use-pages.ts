@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@docu-store/api-client";
 import type { WorkflowMap } from "@docu-store/types";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, workflowPollingInterval } from "@/lib/query-keys";
 import { throwApiError } from "@/lib/api-error";
 
 export function usePage(pageId: string) {
@@ -83,15 +83,7 @@ export function usePageWorkflows(pageId: string) {
       return result;
     },
     enabled: !!pageId,
-    // Poll every 3 s while any workflow is RUNNING; same strategy as useArtifactWorkflows.
-    refetchInterval: (query) => {
-      const workflows = (query.state.data as WorkflowMap | undefined)
-        ?.workflows;
-      const hasRunning = workflows
-        ? Object.values(workflows).some((w) => w.status === "RUNNING")
-        : false;
-      return hasRunning ? 3000 : false;
-    },
+    refetchInterval: workflowPollingInterval,
   });
 }
 

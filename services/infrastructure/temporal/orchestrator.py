@@ -207,7 +207,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "PageSummarizationWorkflow",
                 str(page_id),
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
             )
             logger.info("page_summarization_workflow_started", page_id=str(page_id))
         except Exception as e:
@@ -228,7 +228,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
         """
         await self._ensure_client()
 
-        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+        from temporalio.common import WorkflowIDReusePolicy
 
         workflow_id = f"artifact-summarization-{artifact_id}"
 
@@ -237,7 +237,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "ArtifactSummarizationWorkflow",
                 str(artifact_id),
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
             logger.info("artifact_summarization_workflow_started", artifact_id=str(artifact_id))
@@ -279,7 +279,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
         """Start the artifact summary embedding workflow."""
         await self._ensure_client()
 
-        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+        from temporalio.common import WorkflowIDReusePolicy
 
         workflow_id = f"artifact-summary-embedding-{artifact_id}"
 
@@ -307,7 +307,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
         """Start the document metadata extraction workflow."""
         await self._ensure_client()
 
-        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+        from temporalio.common import WorkflowIDReusePolicy
 
         workflow_id = f"doc-metadata-{artifact_id}"
 
@@ -316,7 +316,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "DocumentMetadataExtractionWorkflow",
                 args=[str(artifact_id), str(page_id)],
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
             logger.info(
@@ -336,7 +336,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
         """Start the NER entity extraction workflow for a page."""
         await self._ensure_client()
 
-        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+        from temporalio.common import WorkflowIDReusePolicy
 
         workflow_id = f"ner-extraction-{page_id}"
 
@@ -345,7 +345,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                 "NERExtractionWorkflow",
                 str(page_id),
                 id=workflow_id,
-                task_queue="artifact_processing",
+                task_queue=settings.temporal_llm_task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
             logger.info("ner_extraction_workflow_started", page_id=str(page_id))
@@ -360,7 +360,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
         """Aggregate NER tags from all pages of an artifact."""
         await self._ensure_client()
 
-        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+        from temporalio.common import WorkflowIDReusePolicy
 
         workflow_id = f"artifact-tag-aggregation-{artifact_id}"
 
@@ -387,7 +387,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
         """Start the batch re-embed workflow for an artifact."""
         await self._ensure_client()
 
-        from temporalio.common import WorkflowIDReusePolicy  # noqa: PLC0415
+        from temporalio.common import WorkflowIDReusePolicy
 
         workflow_id = f"batch-reembed-{artifact_id}"
 
@@ -462,7 +462,7 @@ class TemporalWorkflowOrchestrator(WorkflowOrchestrator):
                     workflow_id=wf_id,
                     status="NOT_FOUND",
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(
                     "failed_to_query_workflow_status",
                     workflow_id=wf_id,

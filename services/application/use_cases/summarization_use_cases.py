@@ -42,7 +42,7 @@ class SummarizePageUseCase:
     Skips pages whose summary_candidate.is_locked is True (human correction present).
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         page_repository: PageRepository,
         artifact_repository: ArtifactRepository,
@@ -181,7 +181,7 @@ class SummarizeArtifactUseCase:
     Returns Failure("not_ready") if no page summaries exist yet.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         artifact_repository: ArtifactRepository,
         page_repository: PageRepository,

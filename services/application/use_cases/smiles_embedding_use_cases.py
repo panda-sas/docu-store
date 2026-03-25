@@ -8,7 +8,7 @@ from returns.result import Failure, Result, Success
 from application.dtos.errors import AppError
 from application.dtos.smiles_embedding_dtos import SmilesEmbeddingDTO
 from domain.exceptions import AggregateNotFoundError
-from domain.value_objects.embedding_metadata import EmbeddingMetadata
+from domain.value_objects.embedding_metadata import EmbeddingMetadata, EmbeddingType
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -119,7 +119,7 @@ class EmbedCompoundSmilesUseCase:
                 model_name=first.model_name,
                 dimensions=first.dimensions,
                 generated_at=first.generated_at,
-                embedding_type="smiles",
+                embedding_type=EmbeddingType.SMILES,
             )
             page.update_smiles_embedding_metadata(smiles_embedding_metadata)
 

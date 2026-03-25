@@ -9,7 +9,7 @@ import { FilterMatchMode } from "primereact/api";
 
 import type { ArtifactResponse } from "@docu-store/types";
 import { ARTIFACT_TYPE_LABELS } from "@/lib/constants";
-import { TableThumbnail } from "@/components/ui/TableThumbnail";
+import { AuthThumbnail } from "@/components/ui/TableThumbnail";
 
 type ArtifactWithSearch = ArtifactResponse & { _search: string };
 
@@ -59,7 +59,7 @@ export function DocumentsTableView({
     const authors = row.author_mentions;
     return (
       <div className="flex items-center gap-3">
-        <TableThumbnail artifactId={row.artifact_id} href={href} size="md" />
+        <AuthThumbnail artifactId={row.artifact_id} href={href} size="md" />
         <div className="min-w-0">
           <Link
             href={href}

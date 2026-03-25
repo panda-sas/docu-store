@@ -441,8 +441,13 @@ class MockPromptRepository:
 class MockPageReadModel:
     """Mock implementation of PageReadModel."""
 
-    def __init__(self, pages: dict[UUID, Any] | None = None) -> None:
+    def __init__(
+        self,
+        pages: dict[UUID, Any] | None = None,
+        summary_count: int = 0,
+    ) -> None:
         self._pages = pages or {}
+        self._summary_count = summary_count
 
     async def get_page_by_id(self, page_id: UUID, workspace_id: UUID | None = None) -> Any:
         return self._pages.get(page_id)
@@ -454,6 +459,8 @@ class MockPageReadModel:
         return list(self._pages.values())
 
     async def count_pages_with_summaries(self, artifact_id: UUID) -> int:
+        if self._summary_count > 0:
+            return self._summary_count
         return sum(
             1 for p in self._pages.values()
             if getattr(p, "artifact_id", None) == str(artifact_id)
@@ -512,6 +519,12 @@ class MockWorkflowOrchestrator:
         self.compound_extraction_calls: list[UUID] = []
         self.smiles_embedding_calls: list[UUID] = []
         self.page_summarization_calls: list[UUID] = []
+        self.artifact_summarization_calls: list[UUID] = []
+        self.artifact_tag_aggregation_calls: list[UUID] = []
+        self.doc_metadata_calls: list[dict] = []
+        self.ner_extraction_calls: list[UUID] = []
+        self.page_summary_embedding_calls: list[UUID] = []
+        self.artifact_summary_embedding_calls: list[UUID] = []
 
     async def start_artifact_processing_workflow(
         self, artifact_id: UUID, storage_location: str
@@ -541,6 +554,38 @@ class MockWorkflowOrchestrator:
         if self.raise_on_call:
             raise self.raise_on_call
         self.page_summarization_calls.append(page_id)
+
+    async def start_artifact_summarization_workflow(self, artifact_id: UUID) -> None:
+        if self.raise_on_call:
+            raise self.raise_on_call
+        self.artifact_summarization_calls.append(artifact_id)
+
+    async def start_artifact_tag_aggregation_workflow(self, artifact_id: UUID) -> None:
+        if self.raise_on_call:
+            raise self.raise_on_call
+        self.artifact_tag_aggregation_calls.append(artifact_id)
+
+    async def start_doc_metadata_extraction_workflow(
+        self, artifact_id: UUID, page_id: UUID,
+    ) -> None:
+        if self.raise_on_call:
+            raise self.raise_on_call
+        self.doc_metadata_calls.append({"artifact_id": artifact_id, "page_id": page_id})
+
+    async def start_ner_extraction_workflow(self, page_id: UUID) -> None:
+        if self.raise_on_call:
+            raise self.raise_on_call
+        self.ner_extraction_calls.append(page_id)
+
+    async def start_page_summary_embedding_workflow(self, page_id: UUID) -> None:
+        if self.raise_on_call:
+            raise self.raise_on_call
+        self.page_summary_embedding_calls.append(page_id)
+
+    async def start_artifact_summary_embedding_workflow(self, artifact_id: UUID) -> None:
+        if self.raise_on_call:
+            raise self.raise_on_call
+        self.artifact_summary_embedding_calls.append(artifact_id)
 
     async def start_batch_reembed_workflow(self, artifact_id: UUID) -> None:
         if self.raise_on_call:

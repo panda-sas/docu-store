@@ -5,21 +5,27 @@ from datetime import datetime
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from lagom import Container
-from motor.motor_asyncio import AsyncIOMotorClient
 from sentinel_auth import RequestAuth
 from temporalio.client import Client
 
 from application.dtos.stats_dtos import (
     ActiveWorkflow,
+    ChatLatencyStatsResponse,
+    CitationFrequencyResponse,
     CollectionStats,
     FailedWorkflow,
+    GroundingStatsResponse,
+    KnowledgeGapsResponse,
     PipelineStatsResponse,
+    SearchQualityStatsResponse,
+    TokenUsageStatsResponse,
     VectorStatsResponse,
     WorkflowStatsResponse,
     WorkflowTypeStats,
 )
+from application.ports.analytics_read_model import AnalyticsReadModel
 from application.ports.compound_vector_store import CompoundVectorStore
 from application.ports.embedding_generator import EmbeddingGenerator
 from application.ports.reranker import Reranker
@@ -69,7 +75,7 @@ async def get_workflow_stats(
                 min_duration_seconds=round(durations[0], 3),
                 max_duration_seconds=round(durations[-1], 3),
                 p95_duration_seconds=round(durations[p95_idx], 3),
-            )
+            ),
         )
 
     # --- Running workflows: count by type ---
@@ -92,7 +98,7 @@ async def get_workflow_stats(
             desc = await handle.describe()
             if hasattr(desc, "failure") and desc.failure:
                 failure_message = str(desc.failure)
-        except Exception:  # noqa: BLE001
+        except Exception:
             failure_message = None
 
         all_failures.append(
@@ -102,7 +108,7 @@ async def get_workflow_stats(
                 started_at=wf.start_time,
                 closed_at=wf.close_time,
                 failure_message=failure_message,
-            )
+            ),
         )
 
     # Sort by start time descending, take last 10
@@ -128,6 +134,7 @@ async def get_workflow_stats(
 
 @router.get("/pipeline", status_code=status.HTTP_200_OK)
 async def get_pipeline_stats(
+    container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> PipelineStatsResponse:
     """Get document pipeline processing statistics (admin only)."""
@@ -139,7 +146,9 @@ async def get_pipeline_stats(
 
     logger.info("pipeline_stats_requested")
 
-    mongo_client = AsyncIOMotorClient(settings.mongo_uri)
+    from motor.motor_asyncio import AsyncIOMotorClient as _MongoClient
+
+    mongo_client = container[_MongoClient]
     db = mongo_client[settings.mongo_db]
     pages = db[settings.mongo_pages_collection]
     artifacts = db[settings.mongo_artifacts_collection]
@@ -156,12 +165,12 @@ async def get_pipeline_stats(
                                 "$and": [
                                     {"$ne": ["$text_mention", None]},
                                     {"$ne": ["$text_mention", ""]},
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
                 "with_summary": {
                     "$sum": {
@@ -175,35 +184,31 @@ async def get_pipeline_stats(
                                                 "$ifNull": [
                                                     "$summary_candidate.summary",
                                                     "",
-                                                ]
+                                                ],
                                             },
                                             "",
-                                        ]
+                                        ],
                                     },
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
                 "with_compounds": {
                     "$sum": {
                         "$cond": [
                             {
                                 "$gt": [
-                                    {
-                                        "$size": {
-                                            "$ifNull": ["$compound_mentions", []]
-                                        }
-                                    },
+                                    {"$size": {"$ifNull": ["$compound_mentions", []]}},
                                     0,
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
                 "with_tags": {
                     "$sum": {
@@ -212,15 +217,15 @@ async def get_pipeline_stats(
                                 "$gt": [
                                     {"$size": {"$ifNull": ["$tag_mentions", []]}},
                                     0,
-                                ]
+                                ],
                             },
                             1,
                             0,
-                        ]
-                    }
+                        ],
+                    },
                 },
-            }
-        }
+            },
+        },
     ]
 
     cursor = pages.aggregate(pipeline)
@@ -307,7 +312,7 @@ async def get_vector_stats(
                 "model_name": getattr(reranker, "model_name", "unknown"),
                 "device": getattr(reranker, "device", "unknown"),
             }
-    except Exception:  # noqa: BLE001
+    except Exception:
         reranker_info = None
 
     logger.info("vector_stats_collected", collections=len(collections))
@@ -316,4 +321,103 @@ async def get_vector_stats(
         collections=collections,
         embedding_model=embedding_model_info,
         reranker=reranker_info,
+    )
+
+
+# ── Analytics Aggregation Endpoints ────────────────────────────────────────
+
+
+def _period_to_days(period: str) -> int:
+    return {"day": 1, "week": 7, "month": 30}.get(period, 7)
+
+
+@router.get("/token-usage", status_code=status.HTTP_200_OK)
+async def get_token_usage_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> TokenUsageStatsResponse:
+    """Aggregate token usage from chat messages (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_token_usage(_period_to_days(period), workspace_id=auth.workspace_id)
+
+
+@router.get("/chat-latency", status_code=status.HTTP_200_OK)
+async def get_chat_latency_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> ChatLatencyStatsResponse:
+    """Aggregate pipeline step latency from chat agent traces (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_chat_latency(_period_to_days(period), workspace_id=auth.workspace_id)
+
+
+@router.get("/search-quality", status_code=status.HTTP_200_OK)
+async def get_search_quality_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> SearchQualityStatsResponse:
+    """Aggregate search quality metrics from user activity (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_search_quality(
+        _period_to_days(period), workspace_id=auth.workspace_id,
+    )
+
+
+@router.get("/grounding", status_code=status.HTTP_200_OK)
+async def get_grounding_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> GroundingStatsResponse:
+    """Aggregate grounding score distribution from chat messages (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_grounding_stats(
+        _period_to_days(period), workspace_id=auth.workspace_id,
+    )
+
+
+@router.get("/knowledge-gaps", status_code=status.HTTP_200_OK)
+async def get_knowledge_gaps(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> KnowledgeGapsResponse:
+    """Entities detected in chat queries that the corpus couldn't ground (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_knowledge_gaps(
+        _period_to_days(period), workspace_id=auth.workspace_id,
+    )
+
+
+@router.get("/citation-frequency", status_code=status.HTTP_200_OK)
+async def get_citation_frequency(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> CitationFrequencyResponse:
+    """Document citation frequency from chat answers (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_citation_frequency(
+        _period_to_days(period), workspace_id=auth.workspace_id,
     )

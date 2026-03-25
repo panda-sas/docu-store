@@ -152,7 +152,10 @@ export function TagFilter({
           value={inputValue}
           suggestions={suggestions}
           completeMethod={searchTags}
-          onChange={(e) => setInputValue(e.value ?? "")}
+          onChange={(e) => {
+            const v = e.value;
+            setInputValue(typeof v === "string" ? v : (v?.tag ?? ""));
+          }}
           onSelect={handleSelect}
           onKeyDown={handleKeyDown}
           field="tag"

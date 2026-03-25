@@ -22,7 +22,7 @@ from application.ports.sparse_embedding_generator import SparseEmbeddingGenerato
 from application.ports.text_chunker import TextChunker
 from application.ports.vector_store import VectorStore
 from domain.exceptions import AggregateNotFoundError
-from domain.value_objects.embedding_metadata import EmbeddingMetadata
+from domain.value_objects.embedding_metadata import EmbeddingMetadata, EmbeddingType
 
 logger = structlog.get_logger()
 
@@ -38,7 +38,7 @@ class GeneratePageEmbeddingUseCase:
     5. Updates the domain aggregate with embedding metadata
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         page_repository: PageRepository,
         embedding_generator: EmbeddingGenerator,
@@ -223,7 +223,7 @@ class GeneratePageEmbeddingUseCase:
                 model_name=first_embedding.model_name,
                 dimensions=first_embedding.dimensions,
                 generated_at=first_embedding.generated_at,
-                embedding_type="text",
+                embedding_type=EmbeddingType.TEXT,
             )
             page.update_text_embedding_metadata(embedding_metadata)
 
@@ -449,7 +449,8 @@ class SearchSimilarPagesUseCase:
                         if artifact.author_mentions
                         else [],
                         presentation_date=artifact.presentation_date.date.isoformat()
-                        if artifact.presentation_date and hasattr(artifact.presentation_date.date, "isoformat")
+                        if artifact.presentation_date
+                        and hasattr(artifact.presentation_date.date, "isoformat")
                         else str(artifact.presentation_date.date)
                         if artifact.presentation_date
                         else None,

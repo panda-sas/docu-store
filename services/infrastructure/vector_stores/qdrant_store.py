@@ -106,7 +106,8 @@ class QdrantStore(VectorStore):
                 if e.status_code == 409:
                     # Race condition: another process created it between check and create
                     logger.info(
-                        "collection_created_by_another_process", collection=self.collection_name,
+                        "collection_created_by_another_process",
+                        collection=self.collection_name,
                     )
                     return
                 raise
@@ -208,7 +209,7 @@ class QdrantStore(VectorStore):
             )
             raise
 
-    async def upsert_page_chunk_embeddings(  # noqa: PLR0913
+    async def upsert_page_chunk_embeddings(
         self,
         page_id: UUID,
         artifact_id: UUID,
@@ -336,7 +337,7 @@ class QdrantStore(VectorStore):
 
             logger.info("embedding_deleted", page_id=str(page_id))
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "failed_to_delete_embedding",
                 page_id=str(page_id),
@@ -348,13 +349,27 @@ class QdrantStore(VectorStore):
         self,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[models.Condition]:
-        """Build Qdrant filter conditions for tag-based filtering."""
+        """Build Qdrant filter conditions for tag-based filtering.
+
+        Modes:
+            any — match page-level OR artifact-level tags (broad)
+            all — require ALL tags, each matching page OR artifact level
+            page_any — match page-level tags only (strict, for compound queries)
+        """
         conditions: list[models.Condition] = []
         if tags:
             normalized = [t.lower() for t in tags]
-            if tag_match_mode == "any":
+            if tag_match_mode == "page_any":
+                # Strict: only match page-level tags, not artifact-level
+                conditions.append(
+                    models.FieldCondition(
+                        key="tag_normalized",
+                        match=models.MatchAny(any=normalized),
+                    ),
+                )
+            elif tag_match_mode == "any":
                 conditions.append(
                     models.Filter(
                         should=[
@@ -394,14 +409,14 @@ class QdrantStore(VectorStore):
             )
         return conditions
 
-    def _build_filter(  # noqa: PLR0913
+    def _build_filter(
         self,
         artifact_id_filter: UUID | None = None,
         allowed_artifact_ids: list[UUID] | None = None,
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> models.Filter | None:
         """Build a combined Qdrant filter from all filter parameters."""
         must_conditions: list[models.Condition] = []
@@ -429,7 +444,7 @@ class QdrantStore(VectorStore):
         must_conditions.extend(self._build_tag_conditions(tags, entity_types, tag_match_mode))
         return models.Filter(must=must_conditions) if must_conditions else None
 
-    async def search_similar_pages(  # noqa: PLR0913
+    async def search_similar_pages(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
@@ -439,7 +454,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[PageSearchResult]:
         """Find pages similar to the query embedding using cosine similarity.
 
@@ -485,7 +500,7 @@ class QdrantStore(VectorStore):
             )
             return results
 
-    async def search_pages_grouped(  # noqa: PLR0913
+    async def search_pages_grouped(
         self,
         query_embedding: TextEmbedding,
         limit: int = 10,
@@ -495,7 +510,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
         group_size: int = 1,
     ) -> list[PageSearchResult]:
         """Search with server-side deduplication by page_id.
@@ -569,7 +584,7 @@ class QdrantStore(VectorStore):
             for p in points
         ]
 
-    async def search_hybrid(  # noqa: PLR0913
+    async def search_hybrid(
         self,
         dense_query: TextEmbedding,
         sparse_query: SparseEmbedding,
@@ -581,7 +596,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
     ) -> list[PageSearchResult]:
         """Hybrid search: dense + sparse, fused with Reciprocal Rank Fusion."""
         client = await self._get_client()
@@ -632,7 +647,7 @@ class QdrantStore(VectorStore):
             )
             return results
 
-    async def search_hybrid_grouped(  # noqa: PLR0913
+    async def search_hybrid_grouped(
         self,
         dense_query: TextEmbedding,
         sparse_query: SparseEmbedding,
@@ -644,7 +659,7 @@ class QdrantStore(VectorStore):
         workspace_id: UUID | None = None,
         tags: list[str] | None = None,
         entity_types: list[str] | None = None,
-        tag_match_mode: Literal["any", "all"] = "any",
+        tag_match_mode: Literal["any", "all", "page_any"] = "any",
         group_size: int = 1,
     ) -> list[PageSearchResult]:
         """Hybrid search with server-side dedup by page_id via RRF fusion."""
@@ -758,7 +773,7 @@ class QdrantStore(VectorStore):
                 ),
             )
             logger.info("page_payload_updated", page_id=str(page_id), fields=list(payload.keys()))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("failed_to_set_page_payload", page_id=str(page_id), error=str(e))
 
     async def set_artifact_payload(
@@ -783,9 +798,15 @@ class QdrantStore(VectorStore):
                     ),
                 ),
             )
-            logger.info("artifact_payload_updated", artifact_id=str(artifact_id), fields=list(payload.keys()))
-        except Exception as e:  # noqa: BLE001
-            logger.warning("failed_to_set_artifact_payload", artifact_id=str(artifact_id), error=str(e))
+            logger.info(
+                "artifact_payload_updated",
+                artifact_id=str(artifact_id),
+                fields=list(payload.keys()),
+            )
+        except Exception as e:
+            logger.warning(
+                "failed_to_set_artifact_payload", artifact_id=str(artifact_id), error=str(e),
+            )
 
     async def close(self) -> None:
         """Close the Qdrant client connection."""

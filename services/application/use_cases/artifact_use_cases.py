@@ -287,7 +287,7 @@ class DeleteArtifactUseCase:
     logged but never fail the overall operation.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         artifact_repository: ArtifactRepository,
         page_repository: PageRepository,
@@ -423,5 +423,5 @@ async def _safe_cleanup(
         result = getattr(store, method_name)(*args)
         if not is_sync:
             await result
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("cleanup_%s_failed", label, exc_info=True, **log_kwargs)
