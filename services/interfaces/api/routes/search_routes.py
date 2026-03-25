@@ -1,10 +1,12 @@
 """Search routes for vector similarity search."""
 
+import time
 from typing import Annotated
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from returns.result import Success
 from lagom import Container
 from sentinel_auth import RequestAuth
 
@@ -73,11 +75,22 @@ async def search_pages(
     allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
 
     use_case = container[SearchSimilarPagesUseCase]
-    return await use_case.execute(
+    t0 = time.monotonic()
+    result = await use_case.execute(
         request,
         workspace_id=auth.workspace_id,
         allowed_artifact_ids=allowed_artifact_ids,
     )
+    latency_ms = round((time.monotonic() - t0) * 1000, 2)
+    result_count = len(result.unwrap().results) if isinstance(result, Success) and result.unwrap().results else 0
+    logger.info(
+        "search.latency",
+        search_type="pages",
+        query_length=len(request.query_text),
+        result_count=result_count,
+        search_latency_ms=latency_ms,
+    )
+    return result
 
 
 @router.post("/pages/{page_id}/generate-embedding", status_code=status.HTTP_202_ACCEPTED)
@@ -157,11 +170,22 @@ async def search_compounds(
     allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
 
     use_case = container[SearchSimilarCompoundsUseCase]
-    return await use_case.execute(
+    t0 = time.monotonic()
+    result = await use_case.execute(
         request,
         workspace_id=auth.workspace_id,
         allowed_artifact_ids=allowed_artifact_ids,
     )
+    latency_ms = round((time.monotonic() - t0) * 1000, 2)
+    result_count = len(result.unwrap().results) if isinstance(result, Success) and result.unwrap().results else 0
+    logger.info(
+        "search.latency",
+        search_type="compounds",
+        query_length=len(request.query_smiles),
+        result_count=result_count,
+        search_latency_ms=latency_ms,
+    )
+    return result
 
 
 @router.post("/summaries", status_code=status.HTTP_200_OK)
@@ -193,11 +217,22 @@ async def search_summaries(
     allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
 
     use_case = container[SearchSummariesUseCase]
-    return await use_case.execute(
+    t0 = time.monotonic()
+    result = await use_case.execute(
         request=request,
         workspace_id=auth.workspace_id,
         allowed_artifact_ids=allowed_artifact_ids,
     )
+    latency_ms = round((time.monotonic() - t0) * 1000, 2)
+    result_count = len(result.unwrap().results) if isinstance(result, Success) and result.unwrap().results else 0
+    logger.info(
+        "search.latency",
+        search_type="summaries",
+        query_length=len(request.query_text),
+        result_count=result_count,
+        search_latency_ms=latency_ms,
+    )
+    return result
 
 
 @router.post("/hierarchical", status_code=status.HTTP_200_OK)
@@ -236,13 +271,30 @@ async def hierarchical_search(
     allowed_artifact_ids = await _get_allowed_artifact_ids(auth)
 
     use_case = container[HierarchicalSearchUseCase]
+    t0 = time.monotonic()
     result = await use_case.execute(
         request=request,
         workspace_id=auth.workspace_id,
         allowed_artifact_ids=allowed_artifact_ids,
     )
-
-    return result.unwrap()
+    latency_ms = round((time.monotonic() - t0) * 1000, 2)
+    if isinstance(result, Success):
+        unwrapped = result.unwrap()
+        result_count = (
+            (len(unwrapped.summary_hits) if unwrapped.summary_hits else 0)
+            + (len(unwrapped.chunk_hits) if unwrapped.chunk_hits else 0)
+        )
+    else:
+        unwrapped = result
+        result_count = 0
+    logger.info(
+        "search.latency",
+        search_type="hierarchical",
+        query_length=len(request.query_text),
+        result_count=result_count,
+        search_latency_ms=latency_ms,
+    )
+    return unwrapped
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)

@@ -81,7 +81,12 @@ export const useChatStore = create<ChatState>((set) => ({
   rawEvents: [],
   doneEvent: null,
 
-  setChatMode: (mode) => set({ chatMode: mode }),
+  setChatMode: (mode) => {
+    if (typeof window !== "undefined" && window.umami) {
+      window.umami.track("chat_mode_changed", { mode });
+    }
+    set({ chatMode: mode });
+  },
 
   highlightCitation: (index, messageId) => {
     set({
@@ -164,7 +169,23 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setDoneEvent: (event) => set({ doneEvent: event }),
 
-  finishStreaming: () => set({ isStreaming: false }),
+  finishStreaming: () =>
+    set((state) => {
+      const doneEvent = state.doneEvent;
+      if (typeof window !== "undefined" && window.umami && doneEvent) {
+        const totalDuration =
+          (doneEvent as unknown as Record<string, unknown>).duration_ms as number | undefined;
+        const firstStep = state.stepTimings[0];
+        const ttft = firstStep?.durationMs ?? undefined;
+        window.umami.track("chat_pipeline_completed", {
+          total_duration_ms: totalDuration ?? 0,
+          time_to_first_step_ms: ttft ?? 0,
+          mode: state.chatMode,
+          step_count: state.streamingSteps.length,
+        });
+      }
+      return { isStreaming: false };
+    }),
 
   reset: () =>
     set({

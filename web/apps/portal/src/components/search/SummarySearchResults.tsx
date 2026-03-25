@@ -41,9 +41,12 @@ export function SummarySearchResults({
       </div>
 
       <div className="space-y-3">
-        {data.results.map((r) => (
+        {data.results.map((r, index) => (
           <SearchResultCard
             key={`${r.entity_id}-${r.similarity_score}`}
+            rank={index}
+            searchType="summaries"
+            artifactId={r.artifact_id}
             title={
               r.entity_type === "page" && r.artifact_title
                 ? `${r.artifact_title} | Page ${(r.page_index ?? 0) + 1}`

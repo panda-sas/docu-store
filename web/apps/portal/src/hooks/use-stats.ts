@@ -82,6 +82,105 @@ export function useVectorStats() {
   });
 }
 
+// ---------- Analytics aggregation types ----------
+
+interface TokenUsageBucket {
+  date: string;
+  mode: string;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  message_count: number;
+}
+
+interface TokenUsageStatsResponse {
+  buckets: TokenUsageBucket[];
+  total_tokens: number;
+  total_messages: number;
+}
+
+interface StepLatencyStats {
+  step_name: string;
+  count: number;
+  avg_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  max_ms: number;
+}
+
+interface ChatLatencyStatsResponse {
+  steps: StepLatencyStats[];
+  overall_avg_ms: number;
+  overall_p95_ms: number;
+}
+
+interface SearchQualityStats {
+  search_mode: string;
+  total_searches: number;
+  zero_result_count: number;
+  zero_result_rate: number;
+  avg_result_count: number;
+}
+
+interface SearchQualityStatsResponse {
+  modes: SearchQualityStats[];
+  total_searches: number;
+  overall_zero_result_rate: number;
+}
+
+interface GroundingBucket {
+  mode: string;
+  total_messages: number;
+  grounded_count: number;
+  not_grounded_count: number;
+  grounded_rate: number;
+  avg_confidence: number;
+}
+
+interface GroundingStatsResponse {
+  modes: GroundingBucket[];
+  overall_grounded_rate: number;
+  overall_avg_confidence: number;
+}
+
+// ---------- Analytics aggregation hooks ----------
+
+export function useTokenUsageStats(period = "week") {
+  return useQuery({
+    queryKey: queryKeys.stats.tokenUsage(period),
+    queryFn: () =>
+      authFetchJson<TokenUsageStatsResponse>(`/stats/token-usage?period=${period}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useChatLatencyStats(period = "week") {
+  return useQuery({
+    queryKey: queryKeys.stats.chatLatency(period),
+    queryFn: () =>
+      authFetchJson<ChatLatencyStatsResponse>(`/stats/chat-latency?period=${period}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useSearchQualityStats(period = "week") {
+  return useQuery({
+    queryKey: queryKeys.stats.searchQuality(period),
+    queryFn: () =>
+      authFetchJson<SearchQualityStatsResponse>(`/stats/search-quality?period=${period}`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useGroundingStats(period = "week") {
+  return useQuery({
+    queryKey: queryKeys.stats.grounding(period),
+    queryFn: () =>
+      authFetchJson<GroundingStatsResponse>(`/stats/grounding?period=${period}`),
+    refetchInterval: 60_000,
+  });
+}
+
 // ---------- Re-exports for page consumption ----------
 
 export type {
@@ -92,4 +191,12 @@ export type {
   PipelineStatsResponse,
   CollectionStats,
   VectorStatsResponse,
+  TokenUsageBucket,
+  TokenUsageStatsResponse,
+  StepLatencyStats,
+  ChatLatencyStatsResponse,
+  SearchQualityStats,
+  SearchQualityStatsResponse,
+  GroundingBucket,
+  GroundingStatsResponse,
 };

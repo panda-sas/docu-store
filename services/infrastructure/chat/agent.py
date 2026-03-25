@@ -12,6 +12,7 @@ import structlog
 from application.dtos.chat_dtos import AgentEvent
 from infrastructure.chat.utils import CITATION_RE, extract_cited_indices
 from infrastructure.config import settings
+from infrastructure.llm.token_counter import TokenCounter
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -62,6 +63,7 @@ class ChatAgent:
         total_tokens = 0
         citations: list[SourceCitationDTO] = []
         _debug = settings.chat_debug
+        token_counter = TokenCounter()
 
         if _debug:
             log.info(
@@ -72,6 +74,7 @@ class ChatAgent:
                 max_retries=self._max_retries,
             )
 
+        token_counter.__enter__()
         try:
             # ── Step 1: Question Analysis ──
             t1 = time.monotonic()
@@ -311,12 +314,15 @@ class ChatAgent:
                 cited_indices=sorted(cited_indices),
                 used=len(used_citations),
             )
+            api_tokens = token_counter.total_tokens
             yield AgentEvent(
                 type="done",
                 message_id=message_id,
-                total_tokens=total_tokens,
+                total_tokens=api_tokens if api_tokens > 0 else total_tokens,
                 duration_ms=elapsed_ms,
                 sources=used_citations,
+                prompt_tokens=token_counter.prompt_tokens,
+                completion_tokens=token_counter.completion_tokens,
             )
 
         except Exception as exc:
@@ -325,6 +331,8 @@ class ChatAgent:
                 type="error",
                 error_message=f"An error occurred: {exc!s}",
             )
+        finally:
+            token_counter.__exit__(None, None, None)
 
 
 

@@ -14,12 +14,14 @@ from application.dtos.chat_dtos import (
     AgentEvent,
     AgentStepDTO,
     AgentTraceDTO,
+    ChatFeedbackDTO,
     ChatMessageDTO,
     ConversationDetailDTO,
     ConversationDTO,
     QueryContextDTO,
     SourceCitationDTO,
     ThinkingBlockDTO,
+    TokenUsageDTO,
 )
 from application.dtos.errors import AppError
 
@@ -311,6 +313,15 @@ class SendMessageUseCase:
                 grounding_confidence=grounding_confidence,
             )
 
+            # Build token usage from agent's done event
+            token_usage = None
+            if final_event and final_event.total_tokens and final_event.total_tokens > 0:
+                token_usage = TokenUsageDTO(
+                    prompt=final_event.prompt_tokens or 0,
+                    completion=final_event.completion_tokens or 0,
+                    total=final_event.total_tokens,
+                )
+
             assistant_msg = ChatMessageDTO(
                 conversation_id=conversation_id,
                 message_id=final_event.message_id if final_event else uuid4(),
@@ -318,7 +329,37 @@ class SendMessageUseCase:
                 content=draft_answer,
                 sources=final_sources,
                 agent_trace=agent_trace,
+                token_usage=token_usage,
                 query_context=query_context,
                 created_at=datetime.now(UTC),
             )
             await self._repo.append_message(assistant_msg)
+
+
+class RecordFeedbackUseCase:
+    """Record thumbs-up/thumbs-down feedback on a chat message.
+
+    Validates that the conversation exists and belongs to the caller's workspace.
+    """
+
+    def __init__(self, chat_repository: ChatRepository) -> None:
+        self._repo = chat_repository
+
+    async def execute(
+        self,
+        feedback: ChatFeedbackDTO,
+    ) -> Result[None, AppError]:
+        try:
+            # Verify conversation exists and belongs to the workspace
+            conversation = await self._repo.get_conversation(
+                feedback.conversation_id,
+                workspace_id=feedback.workspace_id,
+            )
+            if conversation is None:
+                return Failure(AppError("not_found", "Conversation not found"))
+
+            await self._repo.record_feedback(feedback)
+            return Success(None)
+        except Exception as e:
+            log.exception("chat.feedback.record_failed", error=str(e))
+            return Failure(AppError("internal_error", f"Failed to record feedback: {e!s}"))

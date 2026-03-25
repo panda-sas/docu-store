@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 interface MarkdownRendererProps {
   content: string;
@@ -12,6 +13,7 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, messageId }: MarkdownRendererProps) {
   const highlightCitation = useChatStore((s) => s.highlightCitation);
+  const { trackEvent } = useAnalytics();
 
   if (!content) return null;
 
@@ -59,8 +61,8 @@ export function MarkdownRenderer({ content, messageId }: MarkdownRendererProps) 
             {children}
           </a>
         ),
-        p: ({ children }) => <p>{styleCitations(children, messageId, highlightCitation)}</p>,
-        li: ({ children }) => <li>{styleCitations(children, messageId, highlightCitation)}</li>,
+        p: ({ children }) => <p>{styleCitations(children, messageId, highlightCitation, trackEvent)}</p>,
+        li: ({ children }) => <li>{styleCitations(children, messageId, highlightCitation, trackEvent)}</li>,
       }}
     >
       {content}
@@ -71,18 +73,19 @@ export function MarkdownRenderer({ content, messageId }: MarkdownRendererProps) 
 const CITATION_PATTERN = /\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\]/g;
 
 type HighlightFn = (index: number, messageId?: string) => void;
+type TrackFn = (name: string, data?: Record<string, string | number>) => void;
 
-function styleCitations(children: ReactNode, messageId: string | undefined, onHighlight: HighlightFn): ReactNode {
+function styleCitations(children: ReactNode, messageId: string | undefined, onHighlight: HighlightFn, trackEvent: TrackFn): ReactNode {
   if (!children) return children;
 
   if (typeof children === "string") {
-    return replaceCitationsInText(children, messageId, onHighlight);
+    return replaceCitationsInText(children, messageId, onHighlight, trackEvent);
   }
 
   if (Array.isArray(children)) {
     return children.map((child, i) => {
       if (typeof child === "string") {
-        return <span key={i}>{replaceCitationsInText(child, messageId, onHighlight)}</span>;
+        return <span key={i}>{replaceCitationsInText(child, messageId, onHighlight, trackEvent)}</span>;
       }
       return child;
     });
@@ -91,7 +94,7 @@ function styleCitations(children: ReactNode, messageId: string | undefined, onHi
   return children;
 }
 
-function replaceCitationsInText(text: string, messageId: string | undefined, onHighlight: HighlightFn): ReactNode {
+function replaceCitationsInText(text: string, messageId: string | undefined, onHighlight: HighlightFn, trackEvent: TrackFn): ReactNode {
   const parts: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -108,7 +111,10 @@ function replaceCitationsInText(text: string, messageId: string | undefined, onH
         <button
           key={`c${match.index}-${num}`}
           type="button"
-          onClick={() => onHighlight(citationNum, messageId)}
+          onClick={() => {
+            onHighlight(citationNum, messageId);
+            trackEvent("citation_clicked", { citation_index: citationNum, source: "inline" });
+          }}
           className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 mx-0.5 rounded bg-accent-light text-accent-text text-[10px] font-semibold align-baseline cursor-pointer hover:bg-accent-muted transition-colors"
         >
           {num}

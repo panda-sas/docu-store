@@ -1,25 +1,29 @@
 """Pipeline stats routes for admin monitoring."""
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from lagom import Container
-from motor.motor_asyncio import AsyncIOMotorClient
 from sentinel_auth import RequestAuth
 from temporalio.client import Client
 
 from application.dtos.stats_dtos import (
     ActiveWorkflow,
+    ChatLatencyStatsResponse,
     CollectionStats,
     FailedWorkflow,
+    GroundingStatsResponse,
     PipelineStatsResponse,
+    SearchQualityStatsResponse,
+    TokenUsageStatsResponse,
     VectorStatsResponse,
     WorkflowStatsResponse,
     WorkflowTypeStats,
 )
+from application.ports.analytics_read_model import AnalyticsReadModel
 from application.ports.compound_vector_store import CompoundVectorStore
 from application.ports.embedding_generator import EmbeddingGenerator
 from application.ports.reranker import Reranker
@@ -128,6 +132,7 @@ async def get_workflow_stats(
 
 @router.get("/pipeline", status_code=status.HTTP_200_OK)
 async def get_pipeline_stats(
+    container: Annotated[Container, Depends(get_container)],
     auth: Annotated[RequestAuth, Depends(get_auth)],
 ) -> PipelineStatsResponse:
     """Get document pipeline processing statistics (admin only)."""
@@ -139,7 +144,9 @@ async def get_pipeline_stats(
 
     logger.info("pipeline_stats_requested")
 
-    mongo_client = AsyncIOMotorClient(settings.mongo_uri)
+    from motor.motor_asyncio import AsyncIOMotorClient as _MongoClient  # noqa: PLC0415
+
+    mongo_client = container[_MongoClient]
     db = mongo_client[settings.mongo_db]
     pages = db[settings.mongo_pages_collection]
     artifacts = db[settings.mongo_artifacts_collection]
@@ -317,3 +324,66 @@ async def get_vector_stats(
         embedding_model=embedding_model_info,
         reranker=reranker_info,
     )
+
+
+# ── Analytics Aggregation Endpoints ────────────────────────────────────────
+
+
+def _period_to_days(period: str) -> int:
+    return {"day": 1, "week": 7, "month": 30}.get(period, 7)
+
+
+@router.get("/token-usage", status_code=status.HTTP_200_OK)
+async def get_token_usage_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> TokenUsageStatsResponse:
+    """Aggregate token usage from chat messages (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_token_usage(_period_to_days(period))
+
+
+@router.get("/chat-latency", status_code=status.HTTP_200_OK)
+async def get_chat_latency_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> ChatLatencyStatsResponse:
+    """Aggregate pipeline step latency from chat agent traces (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_chat_latency(_period_to_days(period))
+
+
+@router.get("/search-quality", status_code=status.HTTP_200_OK)
+async def get_search_quality_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> SearchQualityStatsResponse:
+    """Aggregate search quality metrics from user activity (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_search_quality(_period_to_days(period))
+
+
+@router.get("/grounding", status_code=status.HTTP_200_OK)
+async def get_grounding_stats(
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+    period: str = Query("week", pattern="^(day|week|month)$"),
+) -> GroundingStatsResponse:
+    """Aggregate grounding score distribution from chat messages (admin only)."""
+    if not auth.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    analytics = container[AnalyticsReadModel]
+    return await analytics.get_grounding_stats(_period_to_days(period))

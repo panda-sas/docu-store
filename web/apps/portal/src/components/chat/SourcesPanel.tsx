@@ -11,6 +11,7 @@ import { AuthThumbnail } from "@/components/ui/TableThumbnail";
 import { useAuthBlobUrl } from "@/hooks/use-auth-blob-url";
 import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useAnalytics } from "@/hooks/use-analytics";
 import { API_URL } from "@/lib/constants";
 
 interface SourcesPanelProps {
@@ -191,6 +192,7 @@ function SourcePageRow({
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const highlightedCitation = useChatStore((s) => s.highlightedCitation);
+  const { trackEvent } = useAnalytics();
   const rowRef = useRef<HTMLDivElement>(null);
   const flashCount = useRef(0);
   const isHighlighted = highlightedCitation === citation.citation_index;
@@ -220,7 +222,17 @@ function SourcePageRow({
       <div
         key={flashCount.current}
         ref={rowRef}
-        onClick={() => previewSrc && setPreviewOpen(!previewOpen)}
+        onClick={() => {
+          if (previewSrc) {
+            if (!previewOpen) {
+              trackEvent("source_preview_opened", {
+                artifact_id: citation.artifact_id,
+                citation_index: citation.citation_index,
+              });
+            }
+            setPreviewOpen(!previewOpen);
+          }
+        }}
         className={`group flex items-start gap-2 px-3 py-2 hover:bg-surface-hover transition-colors border-t border-border-subtle rounded-sm ${previewSrc ? "cursor-pointer" : ""} ${isHighlighted ? "citation-highlight" : ""}`}
       >
         <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-accent-light text-accent-text font-semibold text-[10px] flex-shrink-0 mt-0.5">
@@ -230,7 +242,14 @@ function SourcePageRow({
         <div className="min-w-0 flex-1">
           <Link
             href={pageHref}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              trackEvent("citation_clicked", {
+                citation_index: citation.citation_index,
+                artifact_id: citation.artifact_id,
+                source: "panel",
+              });
+            }}
             className="text-xs font-medium text-accent-text hover:underline"
           >
             {pageLabel}

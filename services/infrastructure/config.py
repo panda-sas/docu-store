@@ -425,6 +425,16 @@ class Settings(BaseSettings):
         description="Max concurrent Temporal activities for all plugin workers.",
     )
 
+    # Request Timing
+    enable_request_timing: bool = Field(
+        default=True,
+        validation_alias="ENABLE_REQUEST_TIMING",
+    )
+    slow_request_threshold_ms: int = Field(
+        default=1000,
+        validation_alias="SLOW_REQUEST_THRESHOLD_MS",
+    )
+
     # Prompt management
     prompt_repository_type: Literal["langfuse", "yaml"] = Field(
         default="langfuse",

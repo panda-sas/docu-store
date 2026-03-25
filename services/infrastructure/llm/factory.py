@@ -66,6 +66,7 @@ def create_llm_client(settings: Settings) -> LLMClientPort:
             model_name=settings.llm_model_name,
             api_key=settings.llm_api_key or settings.openai_api_key,
             temperature=settings.llm_temperature,
+            langfuse_handler=_make_langfuse_callback_handler(settings),
         )
 
     msg = f"Unsupported LLM_PROVIDER: {provider!r}. Valid options: ollama, openai"
@@ -111,6 +112,7 @@ def create_chat_llm_client(settings: Settings) -> LLMClientPort:
             model_name=effective_model,
             api_key=api_key,
             temperature=effective_temperature,
+            langfuse_handler=_make_langfuse_callback_handler(settings),
         )
 
     msg = f"Unsupported CHAT_LLM_PROVIDER: {effective_provider!r}. Valid options: ollama, openai"

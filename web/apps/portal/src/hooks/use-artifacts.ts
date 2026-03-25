@@ -8,6 +8,7 @@ import { getAuthzClient } from "@/lib/authz-client";
 import { API_URL } from "@/lib/constants";
 import { authFetch } from "@/lib/auth-fetch";
 import { ApiError, throwApiError } from "@/lib/api-error";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 export function useArtifacts(
   skip = 0,
@@ -28,6 +29,7 @@ export function useArtifacts(
 }
 
 export function useArtifact(id: string) {
+  const { trackEvent } = useAnalytics();
   return useQuery({
     queryKey: queryKeys.artifacts.detail(id),
     queryFn: async () => {
@@ -36,6 +38,7 @@ export function useArtifact(id: string) {
         { params: { path: { artifact_id: id } } },
       );
       if (error) throwApiError("Failed to fetch artifact", error, response.status);
+      trackEvent("document_viewed", { artifact_id: id });
       // The OpenAPI schema is missing author_mentions, presentation_date, compound_mentions
       // fields. The hand-typed ArtifactResponse includes them.
       return data as ArtifactResponse;
@@ -99,6 +102,7 @@ export function useArtifactSummary(id: string) {
 
 export function useUploadArtifact() {
   const queryClient = useQueryClient();
+  const { trackEvent } = useAnalytics();
 
   return useMutation({
     mutationFn: async ({
@@ -134,8 +138,21 @@ export function useUploadArtifact() {
 
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      const ext = variables.file.name.split(".").pop()?.toLowerCase() ?? "unknown";
+      trackEvent("document_uploaded", {
+        file_count: 1,
+        file_type: ext,
+        file_size_kb: Math.round(variables.file.size / 1024),
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.artifacts.all });
+    },
+    onError: (_error, variables) => {
+      const ext = variables.file.name.split(".").pop()?.toLowerCase() ?? "unknown";
+      trackEvent("upload_failed", {
+        file_type: ext,
+        file_size_kb: Math.round(variables.file.size / 1024),
+      });
     },
   });
 }

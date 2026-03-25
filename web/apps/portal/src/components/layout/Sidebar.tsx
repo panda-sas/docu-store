@@ -20,6 +20,7 @@ import { useAuthzHasRole } from "@sentinel-auth/react";
 
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useSidebarStore } from "@/lib/stores/sidebar-store";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 import { SidebarNavItem } from "./SidebarNavItem";
 
@@ -44,6 +45,7 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
   const { theme, toggleTheme } = useThemeStore();
   const { collapsed, toggleCollapsed } = useSidebarStore();
   const isAdmin = useAuthzHasRole("admin");
+  const { trackEvent } = useAnalytics();
 
   const isActive = (href: string) => {
     const fullHref = `/${workspaceSlug}${href}`;
@@ -66,7 +68,7 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
         {!collapsed && (
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-wide text-white">
-              DOCU.STORE
+              DocuStore.io
             </span>
             <span className="text-xs uppercase tracking-widest text-sidebar-text opacity-60">
               {workspaceSlug}
@@ -84,14 +86,15 @@ export function Sidebar({ workspaceSlug }: { workspaceSlug: string }) {
         )}
         <div className="flex flex-col gap-0.5">
           {mainNav.filter((item) => !item.requireAdmin || isAdmin).map((item) => (
-            <SidebarNavItem
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              href={`/${workspaceSlug}${item.href}`}
-              isActive={isActive(item.href)}
-              collapsed={collapsed}
-            />
+            <div key={item.label} onClick={() => trackEvent("nav_clicked", { section: item.label.toLowerCase() })}>
+              <SidebarNavItem
+                icon={item.icon}
+                label={item.label}
+                href={`/${workspaceSlug}${item.href}`}
+                isActive={isActive(item.href)}
+                collapsed={collapsed}
+              />
+            </div>
           ))}
         </div>
       </nav>

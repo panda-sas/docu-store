@@ -120,6 +120,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Request timing middleware — wraps every request with duration headers + logging
+    from interfaces.api.middleware.timing_middleware import TimingMiddleware  # noqa: PLC0415
+
+    app.add_middleware(TimingMiddleware)
+
     # Sentinel auth middleware — protects all routes except excluded paths
     # NOTE: Starlette middleware is LIFO — last added runs first.
     # Sentinel must be added BEFORE CORS so that CORS runs first and adds

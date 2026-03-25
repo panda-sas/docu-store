@@ -18,7 +18,13 @@ export const useThemeStore = create<ThemeState>()(
     (set) => ({
       theme: "light",
       toggleTheme: () =>
-        set((state) => ({ theme: state.theme === "light" ? "dark" : "light" })),
+        set((state) => {
+          const newTheme = state.theme === "light" ? "dark" : "light";
+          if (typeof window !== "undefined" && window.umami) {
+            window.umami.track("theme_toggled", { new_theme: newTheme });
+          }
+          return { theme: newTheme };
+        }),
       setTheme: (theme) => set({ theme }),
     }),
     {

@@ -65,6 +65,10 @@ export const queryKeys = {
     workflows: () => [...queryKeys.stats.all, "workflows"] as const,
     pipeline: () => [...queryKeys.stats.all, "pipeline"] as const,
     vectors: () => [...queryKeys.stats.all, "vectors"] as const,
+    tokenUsage: (period: string) => [...queryKeys.stats.all, "token-usage", period] as const,
+    chatLatency: (period: string) => [...queryKeys.stats.all, "chat-latency", period] as const,
+    searchQuality: (period: string) => [...queryKeys.stats.all, "search-quality", period] as const,
+    grounding: (period: string) => [...queryKeys.stats.all, "grounding", period] as const,
   },
   user: {
     all: ["user"] as const,

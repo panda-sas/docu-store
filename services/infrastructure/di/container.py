@@ -69,6 +69,7 @@ from application.use_cases.chat_use_cases import (
     DeleteConversationUseCase,
     GetConversationUseCase,
     ListConversationsUseCase,
+    RecordFeedbackUseCase,
     SendMessageUseCase,
 )
 from application.use_cases.search_use_cases import HierarchicalSearchUseCase, SearchSummariesUseCase
@@ -283,6 +284,14 @@ def create_container() -> Container:  # noqa: PLR0915
 
     container[UserPreferencesStore] = user_store_factory
     container[UserActivityStore] = user_store_factory
+
+    from application.ports.analytics_read_model import AnalyticsReadModel  # noqa: PLC0415
+    from infrastructure.read_repositories.mongo_analytics_store import MongoAnalyticsStore  # noqa: PLC0415
+
+    container[AnalyticsReadModel] = lambda c: MongoAnalyticsStore(
+        client=c[AsyncIOMotorClient],
+        db_name=settings.mongo_db,
+    )
 
     # Register Pipeline Orchestrator (Temporal)
     container[WorkflowOrchestrator] = lambda _: TemporalWorkflowOrchestrator()
@@ -802,6 +811,9 @@ def create_container() -> Container:  # noqa: PLR0915
     container[SendMessageUseCase] = lambda c: SendMessageUseCase(
         chat_repository=c[ChatRepository],
         chat_agent=c[ChatAgentPort],
+    )
+    container[RecordFeedbackUseCase] = lambda c: RecordFeedbackUseCase(
+        chat_repository=c[ChatRepository],
     )
 
     return container

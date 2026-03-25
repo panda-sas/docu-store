@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { type ReactNode } from "react";
 
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { EntityTypeBadge } from "@/components/ui/EntityTypeBadge";
 import { AuthThumbnail } from "@/components/ui/TableThumbnail";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 interface SearchResultCardProps {
   title: string;
@@ -15,6 +18,12 @@ interface SearchResultCardProps {
   /** URL to a page thumbnail image (lazy-loaded with auth) */
   thumbnailSrc?: string;
   children?: ReactNode;
+  /** Result rank (0-based) for click tracking */
+  rank?: number;
+  /** Search type for click tracking */
+  searchType?: string;
+  /** Artifact ID for click tracking */
+  artifactId?: string;
 }
 
 export function SearchResultCard({
@@ -26,7 +35,21 @@ export function SearchResultCard({
   secondaryLink,
   thumbnailSrc,
   children,
+  rank,
+  searchType,
+  artifactId,
 }: SearchResultCardProps) {
+  const { trackEvent } = useAnalytics();
+
+  const handleResultClick = () => {
+    trackEvent("search_result_clicked", {
+      ...(searchType ? { search_type: searchType } : {}),
+      ...(rank != null ? { result_rank: rank } : {}),
+      ...(artifactId ? { artifact_id: artifactId } : {}),
+      score: Math.round(score * 1000) / 1000,
+    });
+  };
+
   return (
     <div className="rounded-xl border border-border-default bg-surface-elevated p-4 transition-shadow hover:shadow-ds">
       <div className="flex items-start gap-4">
@@ -41,6 +64,7 @@ export function SearchResultCard({
             {entityType && <EntityTypeBadge type={entityType} />}
             <Link
               href={href}
+              onClick={handleResultClick}
               className="text-sm font-medium text-accent-text hover:underline"
             >
               {title}

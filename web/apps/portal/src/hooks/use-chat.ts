@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import { authFetch, authFetchJson } from "@/lib/auth-fetch";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useAnalytics } from "@/hooks/use-analytics";
 import type {
   Conversation,
   ChatMessage,
@@ -69,22 +70,70 @@ export function useDeleteConversation() {
   });
 }
 
+// ── Chat Feedback ─────────────────────────────────────────────────────────
+
+export function useChatFeedback(conversationId: string | undefined) {
+  const { trackEvent } = useAnalytics();
+
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      feedback,
+      mode,
+    }: {
+      messageId: string;
+      feedback: "positive" | "negative";
+      mode: string;
+    }) => {
+      if (!conversationId) throw new Error("No conversation");
+      const res = await authFetch(
+        `/chat/${conversationId}/messages/${messageId}/feedback`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ feedback }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to record feedback");
+      trackEvent("chat_feedback", { message_id: messageId, feedback, mode });
+    },
+  });
+}
+
 // ── SSE Message Streaming ──────────────────────────────────────────────────
 
 export function useSendMessage(conversationId: string | undefined) {
   const queryClient = useQueryClient();
   const store = useChatStore();
+  const { trackEvent } = useAnalytics();
 
   return useMutation({
     mutationFn: async (message: string) => {
       if (!conversationId) throw new Error("No conversation selected");
 
+      const mode = store.chatMode;
+      trackEvent("chat_message_sent", { mode, message_length: message.length });
+
+      // Track follow-up depth: check if conversation already has messages
+      const cached = queryClient.getQueryData<{ messages?: unknown[] }>(
+        queryKeys.chat.detail(conversationId),
+      );
+      const existingCount = cached?.messages?.length ?? 0;
+      if (existingCount > 0) {
+        trackEvent("chat_follow_up_sent", {
+          conversation_id: conversationId,
+          message_count: existingCount + 1,
+          mode,
+        });
+      }
+
       store.startStreaming(message);
 
+      const streamStart = performance.now();
       const res = await authFetch(`/chat/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, mode: store.chatMode }),
+        body: JSON.stringify({ message, mode }),
       });
 
       if (!res.ok) {
@@ -92,8 +141,15 @@ export function useSendMessage(conversationId: string | undefined) {
         throw new Error(`Chat failed: ${res.statusText}`);
       }
 
-      await processSSEStream(res, store);
+      await processSSEStream(res, store, trackEvent);
       store.finishStreaming();
+
+      const durationMs = Math.round(performance.now() - streamStart);
+      trackEvent("chat_response_received", {
+        duration_ms: durationMs,
+        mode,
+        step_count: store.streamingSteps.length,
+      });
     },
     onSuccess: () => {
       // Refresh conversation detail to get persisted messages
@@ -104,8 +160,12 @@ export function useSendMessage(conversationId: string | undefined) {
         queryClient.invalidateQueries({ queryKey: queryKeys.chat.list() });
       }
     },
-    onError: () => {
+    onError: (error) => {
       store.finishStreaming();
+      trackEvent("chat_error", {
+        mode: store.chatMode,
+        error_type: error instanceof Error ? error.message.slice(0, 100) : "unknown",
+      });
     },
   });
 }
@@ -124,9 +184,12 @@ interface ChatStoreActions {
   setDoneEvent: (event: AgentEvent) => void;
 }
 
+type TrackEventFn = (name: string, data?: Record<string, string | number>) => void;
+
 async function processSSEStream(
   response: Response,
   store: ChatStoreActions,
+  trackEvent?: TrackEventFn,
 ): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) return;
@@ -152,7 +215,7 @@ async function processSSEStream(
         try {
           const event = JSON.parse(jsonStr) as AgentEvent;
           store.recordEvent(event);
-          handleAgentEvent(event, currentEventType, store);
+          handleAgentEvent(event, currentEventType, store, trackEvent);
         } catch {
           // skip malformed events
         }
@@ -166,6 +229,7 @@ function handleAgentEvent(
   event: AgentEvent,
   _sseType: string,
   store: ChatStoreActions,
+  trackEvent?: TrackEventFn,
 ): void {
   switch (event.type) {
     case "step_started":
@@ -228,6 +292,9 @@ function handleAgentEvent(
       store.appendToken(
         `\n\n**Error:** ${event.error_message ?? "Unknown error"}`,
       );
+      trackEvent?.("chat_stream_error", {
+        error_type: (event.error_message ?? "unknown").slice(0, 100),
+      });
       break;
   }
 }

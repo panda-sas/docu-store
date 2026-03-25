@@ -36,6 +36,8 @@ class AgentEvent(BaseModel):
     block: ContentBlockDTO | None = None
     message_id: UUID | None = None
     total_tokens: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
     duration_ms: int | None = None
     error_message: str | None = None
     # Grounding verification result (emitted as grounding_result event)
@@ -169,3 +171,16 @@ class ConversationDetailDTO(ConversationDTO):
     """Conversation with its messages."""
 
     messages: list[ChatMessageDTO] = Field(default_factory=list)
+
+
+# --- Feedback ---
+
+class ChatFeedbackDTO(BaseModel):
+    """User feedback on a chat message."""
+
+    conversation_id: UUID
+    message_id: UUID
+    workspace_id: UUID
+    user_id: UUID
+    feedback: Literal["positive", "negative"]
+    created_at: datetime

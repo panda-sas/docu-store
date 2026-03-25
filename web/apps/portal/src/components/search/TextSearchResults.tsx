@@ -71,6 +71,9 @@ export function TextSearchResults({ data, workspace }: TextSearchResultsProps) {
                 label: "View document",
                 href: `/${workspace}/documents/${r.artifact_id}`,
               }}
+              rank={index}
+              searchType="pages"
+              artifactId={r.artifact_id}
             >
               {(r.artifact_details?.authors?.length || r.artifact_details?.presentation_date) && (
                 <div className="mt-1 text-xs text-text-muted">

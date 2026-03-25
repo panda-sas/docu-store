@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import time
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -14,6 +16,7 @@ from pydantic import BaseModel, Field
 from sentinel_auth import RequestAuth
 
 from application.dtos.chat_dtos import (
+    ChatFeedbackDTO,
     ConversationDetailDTO,
     ConversationDTO,
 )
@@ -22,6 +25,7 @@ from application.use_cases.chat_use_cases import (
     DeleteConversationUseCase,
     GetConversationUseCase,
     ListConversationsUseCase,
+    RecordFeedbackUseCase,
     SendMessageUseCase,
 )
 from interfaces.api.middleware import handle_use_case_errors
@@ -47,6 +51,12 @@ class SendMessageRequest(BaseModel):
         default=None,
         description="Pipeline mode. 'quick' = 4-step, 'thinking' = 5-stage, 'deep_thinking' = thinking + page images. None = server default.",
     )
+
+
+class FeedbackRequest(BaseModel):
+    """Request to record feedback on a message."""
+
+    feedback: Literal["positive", "negative"]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -141,6 +151,9 @@ async def send_message(
     use_case = container[SendMessageUseCase]
 
     async def event_stream():
+        t0 = time.monotonic()
+        step_count = 0
+        effective_mode = request.mode or "thinking"
         try:
             async for event in use_case.execute(
                 conversation_id=conversation_id,
@@ -150,6 +163,8 @@ async def send_message(
                 allowed_artifact_ids=allowed_artifact_ids,
                 mode=request.mode,
             ):
+                if event.type == "step_started":
+                    step_count += 1
                 event_type = _map_event_type(event.type)
                 data = event.model_dump(mode="json", exclude_none=True)
                 yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
@@ -157,6 +172,15 @@ async def send_message(
             logger.exception("chat.stream.error", error=str(exc))
             error_data = {"type": "error", "error_message": str(exc)}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        finally:
+            duration_ms = round((time.monotonic() - t0) * 1000, 2)
+            logger.info(
+                "chat.response_completed",
+                duration_ms=duration_ms,
+                mode=effective_mode,
+                step_count=step_count,
+                conversation_id=str(conversation_id),
+            )
 
     return StreamingResponse(
         event_stream(),
@@ -167,6 +191,31 @@ async def send_message(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post(
+    "/{conversation_id}/messages/{message_id}/feedback",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@handle_use_case_errors
+async def record_feedback(
+    conversation_id: UUID,
+    message_id: UUID,
+    request: FeedbackRequest,
+    container: Annotated[Container, Depends(get_container)],
+    auth: Annotated[RequestAuth, Depends(get_auth)],
+) -> None:
+    """Record thumbs-up/thumbs-down feedback on a chat message."""
+    use_case = container[RecordFeedbackUseCase]
+    feedback = ChatFeedbackDTO(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        workspace_id=auth.workspace_id,
+        user_id=auth.user_id,
+        feedback=request.feedback,
+        created_at=datetime.now(UTC),
+    )
+    return await use_case.execute(feedback)
 
 
 def _map_event_type(event_type: str) -> str:

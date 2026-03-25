@@ -27,6 +27,7 @@ import { useArtifactPermissions } from "@/hooks/use-permissions";
 import { useSession } from "@/lib/auth";
 import { authFetch } from "@/lib/auth-fetch";
 import { getErrorMessage } from "@/lib/api-error";
+import { useAnalytics } from "@/hooks/use-analytics";
 
 export default function ArtifactDetailPage() {
   const { workspace, id } = useParams<{ workspace: string; id: string }>();
@@ -38,8 +39,11 @@ export default function ArtifactDetailPage() {
   const tabParam = searchParams.get("tab");
   const activeTab = Math.max(0, TAB_KEYS.indexOf(tabParam as typeof TAB_KEYS[number]));
 
+  const { trackEvent } = useAnalytics();
+
   const handleTabChange = (index: number) => {
     const key = TAB_KEYS[index] ?? "overview";
+    trackEvent("document_tab_viewed", { tab: key, artifact_id: id });
     const sp = new URLSearchParams(searchParams.toString());
     if (key === "overview") {
       sp.delete("tab");

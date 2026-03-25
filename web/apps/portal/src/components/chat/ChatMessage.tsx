@@ -1,9 +1,11 @@
 "use client";
 
-import { User, Bot, Loader2 } from "lucide-react";
+import { useState, useCallback } from "react";
+import { User, Bot, Loader2, ThumbsUp, ThumbsDown, Copy, Check } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@docu-store/types";
 import { useDevModeStore } from "@/lib/stores/dev-mode-store";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useAnalytics } from "@/hooks/use-analytics";
 import { AgentThinkingPanel } from "./AgentThinkingPanel";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
@@ -11,15 +13,37 @@ interface ChatMessageProps {
   message: ChatMessageType;
   workspace: string;
   isStreaming?: boolean;
+  onFeedback?: (messageId: string, feedback: "positive" | "negative") => void;
 }
 
-export function ChatMessage({ message, workspace, isStreaming }: ChatMessageProps) {
+export function ChatMessage({ message, workspace, isStreaming, onFeedback }: ChatMessageProps) {
   const isUser = message.role === "user";
   const devMode = useDevModeStore((s) => s.enabled);
   const { rawEvents, groundingResult } = useChatStore();
+  const { trackEvent } = useAnalytics();
+  const [feedbackGiven, setFeedbackGiven] = useState<"positive" | "negative" | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleFeedback = useCallback(
+    (fb: "positive" | "negative") => {
+      setFeedbackGiven(fb);
+      onFeedback?.(message.message_id, fb);
+    },
+    [message.message_id, onFeedback],
+  );
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    trackEvent("chat_answer_copied", {
+      message_id: message.message_id,
+      content_length: message.content.length,
+    });
+    setTimeout(() => setCopied(false), 2000);
+  }, [message.content, message.message_id, trackEvent]);
 
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`group/msg flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       {/* Avatar */}
       <div
         className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -73,6 +97,38 @@ export function ChatMessage({ message, workspace, isStreaming }: ChatMessageProp
             </>
           )}
         </div>
+
+        {/* Action bar: feedback + copy (assistant messages, not streaming) */}
+        {!isUser && !isStreaming && message.content && onFeedback && (
+          <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={() => handleFeedback("positive")}
+              disabled={feedbackGiven != null}
+              className={`p-1 rounded hover:bg-surface-hover transition-colors ${feedbackGiven === "positive" ? "text-ds-success" : "text-text-muted"}`}
+              aria-label="Thumbs up"
+            >
+              <ThumbsUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFeedback("negative")}
+              disabled={feedbackGiven != null}
+              className={`p-1 rounded hover:bg-surface-hover transition-colors ${feedbackGiven === "negative" ? "text-ds-error" : "text-text-muted"}`}
+              aria-label="Thumbs down"
+            >
+              <ThumbsDown className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="p-1 rounded hover:bg-surface-hover transition-colors text-text-muted"
+              aria-label="Copy answer"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-ds-success" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        )}
 
         {/* Dev-mode diagnostics */}
         {devMode && !isUser && !isStreaming && message.content && (

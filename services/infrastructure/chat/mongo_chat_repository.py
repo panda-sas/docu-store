@@ -10,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from application.dtos.chat_dtos import (
     AgentTraceDTO,
+    ChatFeedbackDTO,
     ChatMessageDTO,
     ContentBlockDTO,
     ConversationDTO,
@@ -23,6 +24,7 @@ log = structlog.get_logger(__name__)
 _CONVERSATIONS = "conversations"
 _MESSAGES = "chat_messages"
 _SUMMARIES = "conversation_summaries"
+_FEEDBACK = "chat_feedback"
 
 
 class MongoChatRepository:
@@ -43,6 +45,7 @@ class MongoChatRepository:
         self._conversations = self._db[_CONVERSATIONS]
         self._messages = self._db[_MESSAGES]
         self._summaries = self._db[_SUMMARIES]
+        self._feedback = self._db[_FEEDBACK]
 
     # --- Conversations ---
 
@@ -208,6 +211,55 @@ class MongoChatRepository:
             upsert=True,
         )
 
+    # --- Feedback ---
+
+    async def record_feedback(
+        self,
+        feedback: ChatFeedbackDTO,
+    ) -> None:
+        doc = {
+            "conversation_id": str(feedback.conversation_id),
+            "message_id": str(feedback.message_id),
+            "workspace_id": str(feedback.workspace_id),
+            "user_id": str(feedback.user_id),
+            "feedback": feedback.feedback,
+            "created_at": feedback.created_at,
+        }
+        await self._feedback.update_one(
+            {
+                "conversation_id": doc["conversation_id"],
+                "message_id": doc["message_id"],
+                "user_id": doc["user_id"],
+            },
+            {"$set": doc},
+            upsert=True,
+        )
+        log.info(
+            "chat.feedback.recorded",
+            message_id=doc["message_id"],
+            feedback=feedback.feedback,
+        )
+
+    async def get_feedback(
+        self,
+        conversation_id: UUID,
+        message_id: UUID,
+    ) -> ChatFeedbackDTO | None:
+        doc = await self._feedback.find_one({
+            "conversation_id": str(conversation_id),
+            "message_id": str(message_id),
+        })
+        if doc is None:
+            return None
+        return ChatFeedbackDTO(
+            conversation_id=UUID(doc["conversation_id"]),
+            message_id=UUID(doc["message_id"]),
+            workspace_id=UUID(doc["workspace_id"]),
+            user_id=UUID(doc["user_id"]),
+            feedback=doc["feedback"],
+            created_at=doc["created_at"],
+        )
+
     # --- Indexes ---
 
     async def ensure_indexes(self) -> None:
@@ -228,6 +280,15 @@ class MongoChatRepository:
             "conversation_id",
             unique=True,
             name="idx_summary_conv_id",
+        )
+        await self._feedback.create_index(
+            [("conversation_id", 1), ("message_id", 1), ("user_id", 1)],
+            unique=True,
+            name="idx_feedback_unique",
+        )
+        await self._feedback.create_index(
+            [("workspace_id", 1), ("feedback", 1), ("created_at", -1)],
+            name="idx_feedback_workspace",
         )
         log.info("chat.repo.indexes_created")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
-from application.dtos.chat_dtos import ChatMessageDTO, ConversationDTO
+from application.dtos.chat_dtos import ChatFeedbackDTO, ChatMessageDTO, ConversationDTO
 
 
 class ChatRepository(Protocol):
@@ -79,5 +79,16 @@ class ChatRepository(Protocol):
         conversation_id: UUID,
         summary: str,
     ) -> None: ...
+
+    async def record_feedback(
+        self,
+        feedback: ChatFeedbackDTO,
+    ) -> None: ...
+
+    async def get_feedback(
+        self,
+        conversation_id: UUID,
+        message_id: UUID,
+    ) -> ChatFeedbackDTO | None: ...
 
     async def ensure_indexes(self) -> None: ...
