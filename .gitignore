@@ -13,6 +13,7 @@ wheels/
 # IDE and Editor files
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
