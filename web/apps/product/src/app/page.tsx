@@ -343,7 +343,7 @@ export default function ProductPage() {
           <div className="flex items-center gap-1.5">
             <FlaskConical className="h-3 w-3" style={{ color: "#484f58" }} />
             <span className="text-xs" style={{ color: "#484f58" }}>
-              DocuStore · DAIKON
+              DocuStore
             </span>
           </div>
           <p className="text-[11px]" style={{ color: "#30363d" }}>
