@@ -352,7 +352,7 @@
     border-color: transparent;
   }
 
-  /* ── App-wide PrimeReact sizing baseline ──
+  /* App-wide PrimeReact sizing baseline
    * Data-heavy apps need compact controls. Instead of scattering size="small"
    * and !important overrides across every page, set the baseline once here.
    * Individual components can still opt into larger sizes when needed.
@@ -423,6 +423,19 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Animated gradient shift — used on sign-in card accent line */
+  @keyframes gradient-shift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Blinking cursor — used in search mockup */
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
   }
 
   /* Search command animations */

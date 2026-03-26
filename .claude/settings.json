@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(kill -9 92550 92558)",
+      "Read(//Users/saswatipanda/Downloads/**)"
+    ]
+  }
+}
